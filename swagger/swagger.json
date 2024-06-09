@@ -1,0 +1,562 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Swagger Caffesa - OpenAPI 3.1",
+    "version": "0.0.1"
+  },
+  "tags": [
+    {
+      "name": "Purchases",
+      "description": "Purchases API"
+    },
+    {
+      "name": "Stores",
+      "description": "Stores API"
+    },
+    {
+      "name": "Catalogue",
+      "description": "Products catalogue API"
+    },
+    {
+      "name": "Customers",
+      "description": "Customers API"
+    },
+    {
+      "name": "Loyalty",
+      "description": "Loyalty API"
+    }
+  ],
+  "paths": {
+    "/purchases": {
+      "post": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Add a purchase record",
+        "description": "Add a new purchase",
+        "operationId": "createPurchase",
+        "requestBody": {
+          "description": "Create a new purchase in the store",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "store_id",
+                  "products_to_purchase",
+                  "payment_mean",
+                  "customer_id"
+                ],
+                "properties": {
+                  "store_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "products_to_purchase": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "purchased_at"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "purchased_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  },
+                  "payment_mean": {
+                    "type": "object",
+                    "schema": {
+                      "$ref": "#/components/schemas/PaymentMeanDTO"
+                    }
+                  },
+                  "customer_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "employee_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/stores": {
+      "post": {
+        "tags": [
+          "Stores"
+        ],
+        "summary": "Register store",
+        "description": "Register a new store",
+        "operationId": "registerStore",
+        "requestBody": {
+          "description": "Register a new store",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "currency",
+                  "type"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 3,
+                    "example": "Caffesa Store"
+                  },
+                  "location": {
+                    "type": "string",
+                    "minLength": 10,
+                    "example": "Via Roma, 1, 20100 Milano MI"
+                  },
+                  "currency": {
+                    "$ref": "#/components/schemas/Currency"
+                  },
+                  "type": {
+                    "$ref": "#/components/schemas/StoreType"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreDTO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/customers": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Register customer",
+        "description": "Register a new customer",
+        "operationId": "registerCustomer",
+        "requestBody": {
+          "description": "Register a new customer",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "login",
+                  "first_name",
+                  "last_name",
+                  "identity_provider"
+                ],
+                "properties": {
+                  "login": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "Customer login, either email or phone number",
+                    "example": "customer@somehost.com"
+                  },
+                  "first_name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "example": "John"
+                  },
+                  "last_name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "example": "Doe"
+                  },
+                  "identity_provider": {
+                    "$ref": "#/components/schemas/IdentityProvider"
+                  },
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "some_alphanumeric_string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "security": []
+      }
+    },
+    "/customers/login": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Login customer",
+        "description": "Login existing customer",
+        "operationId": "loginCustomer",
+        "requestBody": {
+          "description": "Login existing customer",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "identity_provider",
+                  "token"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "Customer login, either email or phone number",
+                    "example": "customer@somehost.com"
+                  },
+                  "identity_provider": {
+                    "$ref": "#/components/schemas/IdentityProvider"
+                  },
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Customer password or token provided by 3rd party identity provider",
+                    "example": "some_alphanumeric_string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDTO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "security": []
+      }
+    },
+    "/customers/refresh": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Refresh customer access token",
+        "description": "Refresh customer access token",
+        "operationId": "refreshCustomer",
+        "requestBody": {
+          "description": "Refresh customer access token",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "access_token",
+                  "refresh_token"
+                ],
+                "properties": {
+                  "access_token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Customer access token",
+                    "example": "some_alphanumeric_string"
+                  },
+                  "refresh_token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Customer refresh token",
+                    "example": "some_alphanumeric_string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDTO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "schemas": {
+      "ID": {
+        "type": "string",
+        "format": "uuid",
+        "example": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "IdentityProvider": {
+        "type": "string",
+        "enum": [
+          "GOOGLE",
+          "FACEBOOK",
+          "LOCAL"
+        ],
+        "example": "LOCAL"
+      },
+      "Currency": {
+        "type": "string",
+        "enum": [
+          "EUR",
+          "USD",
+          "GBP",
+          "UAH"
+        ],
+        "example": "EUR"
+      },
+      "StoreType": {
+        "type": "string",
+        "enum": [
+          "ONLINE",
+          "OFFLINE"
+        ],
+        "example": "ONLINE"
+      },
+      "PurchasedProductDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "purchased_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "purchased_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentMeanDTO": {
+        "type": "object",
+        "required": [
+          "method",
+          "token"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "CASH",
+              "CREDIT_CARD",
+              "LOYALTY_CARD"
+            ]
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "PurchaseDTO": {
+        "type": "object",
+        "required": [
+          "store_id",
+          "products_to_purchase",
+          "payment_mean",
+          "customer_id"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "products_to_purchase": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "purchased_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "purchased_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "payment_mean": {
+            "type": "object",
+            "schema": {
+              "$ref": "#/components/schemas/PaymentMeanDTO"
+            }
+          },
+          "customer_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Purchase": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "StoreDTO": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "currency",
+          "type"
+        ],
+        "properties": {
+          "id": {
+            "ref": "#/components/schemas/ID"
+          },
+          "name": {
+            "type": "string",
+            "example": "Caffesa Store"
+          },
+          "location": {
+            "type": "string",
+            "example": "Via Roma, 1, 20100 Milano MI"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "type": {
+            "$ref": "#/components/schemas/StoreType"
+          }
+        }
+      },
+      "LoginResponseDTO": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "issued_at",
+          "expires_at"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            "description": "access token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            "description": "refresh token"
+          },
+          "issued_at": {
+            "type": "number",
+            "example": 1619430000,
+            "description": "token issue timestamp"
+          },
+          "expires_at": {
+            "type": "number",
+            "example": 1619430000,
+            "description": "token expiration timestamp"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

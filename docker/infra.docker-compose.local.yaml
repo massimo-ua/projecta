@@ -1,0 +1,21 @@
+name: projecta_infra
+services:
+  projecta_db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: projecta
+      POSTGRES_PASSWORD: projecta
+      POSTGRES_DB: projecta
+    ports:
+        - 5433:5432
+  projecta_amqp:
+    image: rabbitmq:3.12-management-alpine
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: projecta
+      RABBITMQ_DEFAULT_PASS: projecta
+    ports:
+      - 5673:5672
+      - 15673:15672
+

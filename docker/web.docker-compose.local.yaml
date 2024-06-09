@@ -1,0 +1,17 @@
+include:
+  - ./infra.docker-compose.local.yaml
+services:
+  web:
+    build:
+        context: ../.
+        dockerfile: ./docker/web.dockerfile
+    restart: always
+    environment:
+        - DB_URI=postgres://projecta:projecta@projecta_db:5432/projecta
+        - AMQP_URI=amqp://projecta:projecta@projecta_amqp:5672
+        - HTTP_URI=127.0.0.1:8000
+    depends_on:
+      - db
+      - amqp
+    ports:
+      - 8001:8000
