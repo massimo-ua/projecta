@@ -1,5 +1,9 @@
 package core
 
+const (
+	DEFAULT_LIMIT = 10
+)
+
 type Order string
 
 const (
