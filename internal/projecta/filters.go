@@ -39,3 +39,9 @@ type TypeCollectionFilter struct {
 	ProjectID uuid.UUID
 	Name      string
 }
+
+type CategoryCollectionFilter struct {
+	core.Pagination
+	ProjectID uuid.UUID
+	Name      string
+}

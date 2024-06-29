@@ -77,6 +77,7 @@ type ProjectEndpoints struct {
 	CreateExpense  endpoint.Endpoint
 	ListProjects   endpoint.Endpoint
 	ListTypes      endpoint.Endpoint
+	ListCategories endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -312,7 +313,7 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 
 		projects, err := svc.Find(ctx, filter)
 
-		var list []ProjectDTO
+		var list []ProjectDTO = make([]ProjectDTO, 0)
 
 		for _, p := range projects {
 			list = append(list, ProjectDTO{
@@ -328,8 +329,10 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 
 		return ListProjectsResponse{
 			Projects: list,
-			Limit:    filter.Limit,
-			Offset:   filter.Offset,
+			PaginationDTO: PaginationDTO{
+				Limit:  filter.Limit,
+				Offset: filter.Offset,
+			},
 		}, err
 	}
 }
@@ -340,7 +343,7 @@ func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 
 		projects, err := svc.Find(ctx, filter)
 
-		var list []TypeDTO
+		var list []TypeDTO = make([]TypeDTO, 0)
 
 		for _, p := range projects {
 			list = append(list, TypeDTO{
@@ -351,9 +354,37 @@ func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 		}
 
 		return ListTypesResponse{
-			Types:  list,
-			Limit:  filter.Limit,
-			Offset: filter.Offset,
+			Types: list,
+			PaginationDTO: PaginationDTO{
+				Limit:  filter.Limit,
+				Offset: filter.Offset,
+			},
+		}, err
+	}
+}
+
+func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		filter := request.(projecta.CategoryCollectionFilter)
+
+		categories, err := svc.Find(ctx, filter)
+
+		var list []CategoryDTO = make([]CategoryDTO, 0)
+
+		for _, c := range categories {
+			list = append(list, CategoryDTO{
+				CategoryID:  c.ID.String(),
+				Name:        c.Name,
+				Description: c.Description,
+			})
+		}
+
+		return ListCategoriesResponse{
+			Categories: list,
+			PaginationDTO: PaginationDTO{
+				Limit:  filter.Limit,
+				Offset: filter.Offset,
+			},
 		}, err
 	}
 }
@@ -371,5 +402,6 @@ func MakeProjectEndpoints(
 		CreateExpense:  makeCreateExpenseEndpoint(expenseService),
 		ListProjects:   makeListProjectsEndpoint(projectService),
 		ListTypes:      makeListProjectTypesEndpoint(typeService),
+		ListCategories: makeListCategoriesEndpoint(categoryService),
 	}, nil
 }

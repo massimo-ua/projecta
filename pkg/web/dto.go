@@ -1,5 +1,10 @@
 package web
 
+type PaginationDTO struct {
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
 type LoginDTO struct {
 	ID               string `json:"id"`
 	IdentityProvider string `json:"identity_provider"`
@@ -13,12 +18,15 @@ type RefreshTokenDTO struct {
 
 type ListProjectsResponse struct {
 	Projects []ProjectDTO `json:"projects"`
-	Limit    int          `json:"limit"`
-	Offset   int          `json:"offset"`
+	PaginationDTO
 }
 
 type ListTypesResponse struct {
-	Types  []TypeDTO `json:"types"`
-	Limit  int       `json:"limit"`
-	Offset int       `json:"offset"`
+	Types []TypeDTO `json:"types"`
+	PaginationDTO
+}
+
+type ListCategoriesResponse struct {
+	Categories []CategoryDTO `json:"categories"`
+	PaginationDTO
 }

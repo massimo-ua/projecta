@@ -123,7 +123,7 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 		qb.Where(qb.Like("projecta_cost_types.name", fmt.Sprintf("%s%%", filter.Name)))
 	}
 
-	var costTypes []*projecta.CostType
+	var costTypes []*projecta.CostType = make([]*projecta.CostType, 0)
 
 	sql, args := qb.Build()
 
@@ -131,10 +131,6 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 
 	if err != nil {
 		return nil, err
-	}
-
-	if rows == nil {
-		return costTypes, nil
 	}
 
 	defer rows.Close()

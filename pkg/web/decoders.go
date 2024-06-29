@@ -122,3 +122,57 @@ func decodeListTypesRequest(_ context.Context, r *http.Request) (any, error) {
 
 	return filter, nil
 }
+
+func decodeListCategoriesRequest(_ context.Context, r *http.Request) (any, error) {
+	var err error
+	var limit, offset int
+	vars := mux.Vars(r)
+
+	projectID, ok := vars["project_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("missing project_id", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project_id", err)
+	}
+
+	offsetStr := r.URL.Query().Get("offset")
+	limitStr := r.URL.Query().Get("limit")
+	name := r.URL.Query().Get("name")
+
+	if limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid limit", err)
+		}
+	} else {
+		limit = core.DEFAULT_LIMIT
+	}
+
+	if offsetStr != "" {
+		offset, err = strconv.Atoi(offsetStr)
+
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid offset", err)
+		}
+	}
+
+	filter := projecta.CategoryCollectionFilter{
+		Pagination: core.Pagination{
+			Limit:  limit,
+			Offset: offset,
+		},
+		ProjectID: projectUUID,
+	}
+
+	if name != "" {
+		filter.Name = name
+	}
+
+	return filter, nil
+}

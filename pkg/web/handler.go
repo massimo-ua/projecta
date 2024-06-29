@@ -124,6 +124,13 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodGet).Path("/projects/{project_id}/categories").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.ListCategories),
+		decodeListCategoriesRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/types").Handler(ht.NewServer(
 		loggedInOnly(projectEndpoints.CreateType),
 		DecodeCreateTypeRequest,
