@@ -1,52 +1,56 @@
 package projecta
 
 import (
-    "context"
-    "gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"context"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 const (
-    failedToCreateCostType = "failed to create cost type"
+	failedToCreateCostType = "failed to create cost type"
 )
 
 type TypeServiceImpl struct {
-    repository TypeRepository
+	repository TypeRepository
 }
 
 func (s *TypeServiceImpl) FindOne(ctx context.Context, filter TypeFilter) (*CostType, error) {
-    return s.repository.FindOne(ctx, filter)
+	return s.repository.FindOne(ctx, filter)
+}
+
+func (s *TypeServiceImpl) Find(ctx context.Context, filter TypeCollectionFilter) ([]*CostType, error) {
+	return s.repository.Find(ctx, filter)
 }
 
 func NewTypeService(repository TypeRepository) *TypeServiceImpl {
-    return &TypeServiceImpl{repository: repository}
+	return &TypeServiceImpl{repository: repository}
 }
 
 func (s *TypeServiceImpl) Create(ctx context.Context, command CreateTypeCommand) (*CostType, error) {
-    t, err := NewCostType(
-        command.ProjectID,
-        command.Name,
-        command.Description,
-    )
+	t, err := NewCostType(
+		command.ProjectID,
+		command.Name,
+		command.Description,
+	)
 
-    if err != nil {
-        return nil, exceptions.NewValidationException(failedToCreateCostType, err)
-    }
+	if err != nil {
+		return nil, exceptions.NewValidationException(failedToCreateCostType, err)
+	}
 
-    err = s.repository.Save(ctx, t)
+	err = s.repository.Save(ctx, t)
 
-    if err != nil {
-        return nil, exceptions.NewInternalException(failedToCreateCostType, err)
-    }
+	if err != nil {
+		return nil, exceptions.NewInternalException(failedToCreateCostType, err)
+	}
 
-    return t, nil
+	return t, nil
 }
 
 func (s *TypeServiceImpl) Remove(ctx context.Context, command RemoveTypeCommand) error {
-    //TODO implement me
-    panic("implement me")
+	//TODO implement me
+	panic("implement me")
 }
 
 func (s *TypeServiceImpl) Update(ctx context.Context, command UpdateTypeCommand) error {
-    //TODO implement me
-    panic("implement me")
+	//TODO implement me
+	panic("implement me")
 }

@@ -33,3 +33,9 @@ type ExpenseFilter struct {
 	CategoryID uuid.UUID
 	TypeID     uuid.UUID
 }
+
+type TypeCollectionFilter struct {
+	core.Pagination
+	ProjectID uuid.UUID
+	Name      string
+}

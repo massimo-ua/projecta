@@ -76,6 +76,7 @@ type ProjectEndpoints struct {
 	CreateType     endpoint.Endpoint
 	CreateExpense  endpoint.Endpoint
 	ListProjects   endpoint.Endpoint
+	ListTypes      endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -333,6 +334,30 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 	}
 }
 
+func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		filter := request.(projecta.TypeCollectionFilter)
+
+		projects, err := svc.Find(ctx, filter)
+
+		var list []TypeDTO
+
+		for _, p := range projects {
+			list = append(list, TypeDTO{
+				TypeID:      p.ID.String(),
+				Name:        p.Name,
+				Description: p.Description,
+			})
+		}
+
+		return ListTypesResponse{
+			Types:  list,
+			Limit:  filter.Limit,
+			Offset: filter.Offset,
+		}, err
+	}
+}
+
 func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
@@ -345,5 +370,6 @@ func MakeProjectEndpoints(
 		CreateType:     makeCreateTypeEndpoint(typeService),
 		CreateExpense:  makeCreateExpenseEndpoint(expenseService),
 		ListProjects:   makeListProjectsEndpoint(projectService),
+		ListTypes:      makeListProjectTypesEndpoint(typeService),
 	}, nil
 }

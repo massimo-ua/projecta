@@ -16,3 +16,9 @@ type ListProjectsResponse struct {
 	Limit    int          `json:"limit"`
 	Offset   int          `json:"offset"`
 }
+
+type ListTypesResponse struct {
+	Types  []TypeDTO `json:"types"`
+	Limit  int       `json:"limit"`
+	Offset int       `json:"offset"`
+}
