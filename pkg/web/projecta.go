@@ -78,6 +78,7 @@ type ProjectEndpoints struct {
 	ListProjects   endpoint.Endpoint
 	ListTypes      endpoint.Endpoint
 	ListCategories endpoint.Endpoint
+	ListExpenses   endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -389,6 +390,57 @@ func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint 
 	}
 }
 
+func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		filter := request.(projecta.ExpenseCollectionFilter)
+
+		expenses, err := svc.Find(ctx, filter)
+
+		var list []ExpenseDTO = make([]ExpenseDTO, 0)
+
+		for _, e := range expenses {
+			list = append(list, ExpenseDTO{
+				ExpenseID: e.ID.String(),
+				Project: ProjectDTO{
+					ProjectID:   e.Project.ProjectID.String(),
+					Name:        e.Project.Name,
+					Description: e.Project.Description,
+					Owner: OwnerDTO{
+						PersonID:    e.Owner.PersonID.String(),
+						DisplayName: e.Owner.DisplayName,
+					},
+				},
+				Owner: OwnerDTO{
+					PersonID:    e.Owner.PersonID.String(),
+					DisplayName: e.Owner.DisplayName,
+				},
+				Type: TypeDTO{
+					TypeID:      e.Type.ID.String(),
+					Name:        e.Type.Name,
+					Description: e.Type.Description,
+				},
+				Category: CategoryDTO{
+					CategoryID:  e.Category.ID.String(),
+					Name:        e.Category.Name,
+					Description: e.Category.Description,
+				},
+				Description: e.Description,
+				Amount:      e.Amount.Amount(),
+				Currency:    e.Amount.Currency().Code,
+				ExpenseDate: e.Date.Format(time.RFC3339),
+			})
+		}
+
+		return ListExpensesResponse{
+			Expenses: list,
+			PaginationDTO: PaginationDTO{
+				Limit:  filter.Limit,
+				Offset: filter.Offset,
+			},
+		}, err
+	}
+}
+
 func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
@@ -403,5 +455,6 @@ func MakeProjectEndpoints(
 		ListProjects:   makeListProjectsEndpoint(projectService),
 		ListTypes:      makeListProjectTypesEndpoint(typeService),
 		ListCategories: makeListCategoriesEndpoint(categoryService),
+		ListExpenses:   makeListExpensesEndpoint(expenseService),
 	}, nil
 }

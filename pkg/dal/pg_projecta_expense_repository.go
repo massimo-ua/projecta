@@ -2,10 +2,14 @@ package dal
 
 import (
 	"context"
+	"fmt"
+	"github.com/Rhymond/go-money"
+	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"time"
 )
 
 type PgProjectaExpenseRepository struct {
@@ -132,4 +136,195 @@ func (r *PgProjectaExpenseRepository) Remove(ctx context.Context, expense *proje
 	_, err = r.db.Exec(ctx, sql, args...)
 
 	return err
+}
+
+func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.ExpenseCollectionFilter) ([]*projecta.Expense, error) {
+	personID, err := core.AuthGuard(ctx)
+
+	if err != nil {
+		return nil, core.FailedToIdentifyRequester
+	}
+
+	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	qb.From("projecta_expenses")
+	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_expenses.project_id")
+	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_expenses.category_id")
+	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_expenses.type_id")
+	qb.Join("people", "people.person_id = projecta_expenses.owner_id")
+
+	qb.Select(
+		"projecta_expenses.expense_id",
+		"projecta_expenses.project_id",
+		"projecta_projects.name as project_name",
+		"projecta_cost_categories.category_id",
+		"projecta_cost_categories.name as category_name",
+		"projecta_cost_types.type_id",
+		"projecta_cost_types.name as type_name",
+		"projecta_expenses.amount",
+		"projecta_expenses.currency",
+		"projecta_expenses.description",
+		"projecta_expenses.owner_id",
+		"people.first_name",
+		"COALESCE(people.display_name, '') display_name",
+		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
+	)
+
+	qb.Where(qb.Equal("projecta_expenses.owner_id", personID.String()))
+	qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
+
+	if filter.CategoryID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_expenses.category_id", filter.CategoryID.String()))
+	}
+
+	if filter.TypeID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_expenses.type_id", filter.TypeID.String()))
+	}
+
+	if filter.Limit == 0 {
+		filter.Limit = core.DefaultLimit
+	}
+
+	qb.Limit(filter.Limit)
+	qb.Offset(filter.Offset)
+
+	if filter.OrderBy != "" && filter.Order != "" {
+		qb.OrderBy(fmt.Sprintf("projecta_expenses.%s %s", filter.OrderBy, filter.Order.String()))
+	} else {
+		qb.OrderBy("projecta_expenses.expense_date DESC")
+	}
+
+	sql, args := qb.Build()
+
+	rows, err := r.db.Query(ctx, sql, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	expenses := make([]*projecta.Expense, 0)
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			expenseID    string
+			projectID    string
+			projectName  string
+			categoryID   string
+			categoryName string
+			typeID       string
+			typeName     string
+			amount       int64
+			currency     string
+			description  string
+			ownerID      string
+			firstName    string
+			displayName  string
+			expenseDate  time.Time
+		)
+		err := rows.Scan(
+			&expenseID,
+			&projectID,
+			&projectName,
+			&categoryID,
+			&categoryName,
+			&typeID,
+			&typeName,
+			&amount,
+			&currency,
+			&description,
+			&ownerID,
+			&firstName,
+			&displayName,
+			&expenseDate,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		expense := toExpense(
+			expenseID,
+			projectID,
+			projectName,
+			categoryID,
+			categoryName,
+			typeID,
+			typeName,
+			amount,
+			currency,
+			description,
+			ownerID,
+			firstName,
+			displayName,
+			expenseDate,
+		)
+
+		expenses = append(expenses, expense)
+	}
+
+	return expenses, nil
+}
+
+func toExpense(
+	expenseID string,
+	projectID string,
+	projectName string,
+	categoryID string,
+	categoryName string,
+	typeID string,
+	typeName string,
+	amount int64,
+	currency string,
+	description string,
+	ownerID string,
+	firstName string,
+	displayName string,
+	expenseDate time.Time,
+) *projecta.Expense {
+	projectUUID := uuid.MustParse(projectID)
+	person := &projecta.Owner{
+		PersonID:    uuid.MustParse(ownerID),
+		FirstName:   firstName,
+		DisplayName: displayName,
+	}
+
+	project, _ := projecta.NewProject(
+		projectUUID,
+		projectName,
+		"",
+		person,
+		time.Time{},
+		time.Time{})
+
+	category, _ := projecta.NewCostCategory(
+		uuid.MustParse(categoryID),
+		projectUUID,
+		categoryName,
+		"",
+	)
+
+	costType := &projecta.CostType{
+		ID:          uuid.MustParse(typeID),
+		ProjectID:   projectUUID,
+		Name:        typeName,
+		Description: "",
+	}
+
+	amountMoney := money.New(amount, currency)
+
+	expenseUUID := uuid.MustParse(expenseID)
+
+	expense := projecta.NewExpense(
+		expenseUUID,
+		project,
+		person,
+		costType,
+		category,
+		description,
+		amountMoney,
+		expenseDate,
+	)
+
+	return expense
 }

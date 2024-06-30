@@ -45,3 +45,11 @@ type CategoryCollectionFilter struct {
 	ProjectID uuid.UUID
 	Name      string
 }
+
+type ExpenseCollectionFilter struct {
+	core.Pagination
+	core.Sorting
+	ProjectID  uuid.UUID
+	CategoryID uuid.UUID
+	TypeID     uuid.UUID
+}

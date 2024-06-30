@@ -30,3 +30,8 @@ type ListCategoriesResponse struct {
 	Categories []CategoryDTO `json:"categories"`
 	PaginationDTO
 }
+
+type ListExpensesResponse struct {
+	Expenses []ExpenseDTO `json:"expenses"`
+	PaginationDTO
+}

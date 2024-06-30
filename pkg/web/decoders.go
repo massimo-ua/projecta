@@ -44,7 +44,7 @@ func decodeListProjectsRequest(_ context.Context, r *http.Request) (any, error) 
 			return nil, exceptions.NewValidationException("invalid limit", err)
 		}
 	} else {
-		limit = core.DEFAULT_LIMIT
+		limit = core.DefaultLimit
 	}
 
 	if offsetStr != "" {
@@ -97,7 +97,7 @@ func decodeListTypesRequest(_ context.Context, r *http.Request) (any, error) {
 			return nil, exceptions.NewValidationException("invalid limit", err)
 		}
 	} else {
-		limit = core.DEFAULT_LIMIT
+		limit = core.DefaultLimit
 	}
 
 	if offsetStr != "" {
@@ -151,7 +151,7 @@ func decodeListCategoriesRequest(_ context.Context, r *http.Request) (any, error
 			return nil, exceptions.NewValidationException("invalid limit", err)
 		}
 	} else {
-		limit = core.DEFAULT_LIMIT
+		limit = core.DefaultLimit
 	}
 
 	if offsetStr != "" {
@@ -172,6 +172,84 @@ func decodeListCategoriesRequest(_ context.Context, r *http.Request) (any, error
 
 	if name != "" {
 		filter.Name = name
+	}
+
+	return filter, nil
+}
+
+func decodeListExpensesRequest(_ context.Context, r *http.Request) (any, error) {
+	var err error
+	var limit, offset int
+	vars := mux.Vars(r)
+
+	projectID, ok := vars["project_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("missing project_id", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project_id", err)
+	}
+
+	offsetStr := r.URL.Query().Get("offset")
+	limitStr := r.URL.Query().Get("limit")
+	categoryIDStr := r.URL.Query().Get("category_id")
+	typeIDStr := r.URL.Query().Get("type_id")
+	sortBy := r.URL.Query().Get("order_by")
+	order := core.ToOrder(r.URL.Query().Get("order"))
+
+	if limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid limit", err)
+		}
+	} else {
+		limit = core.DefaultLimit
+	}
+
+	if offsetStr != "" {
+		offset, err = strconv.Atoi(offsetStr)
+
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid offset", err)
+		}
+	}
+
+	var categoryID uuid.UUID
+	var typeID uuid.UUID
+
+	if categoryIDStr != "" {
+		categoryID, err = uuid.Parse(categoryIDStr)
+
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid category_id", err)
+		}
+	}
+
+	if typeIDStr != "" {
+		typeID, err = uuid.Parse(typeIDStr)
+
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid type_id", err)
+		}
+	}
+
+	filter := projecta.ExpenseCollectionFilter{
+		Pagination: core.Pagination{
+			Limit:  limit,
+			Offset: offset,
+		},
+		Sorting: core.Sorting{
+			OrderBy: sortBy,
+			Order:   order,
+		},
+		ProjectID:  projectUUID,
+		CategoryID: categoryID,
+		TypeID:     typeID,
 	}
 
 	return filter, nil
