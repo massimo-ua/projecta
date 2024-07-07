@@ -31,6 +31,7 @@ var AuthTokenGenerationFailed = errors.New("auth token generation failed")
 type AuthTokenProvider interface {
 	GenerateTokenRing(data AuthTokenPayload) (*AuthResponse, error)
 	ValidateToken(token string) (*AuthTokenClaims, error)
+	DecodeToken(token string) (*AuthTokenClaims, error)
 	ValidateRefreshToken(tokenID uuid.UUID, refreshToken string) bool
 }
 

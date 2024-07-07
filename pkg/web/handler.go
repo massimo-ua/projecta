@@ -145,6 +145,13 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodGet).Path("/projects/{project_id}/totals").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.ShowProjectTotals),
+		decodeProjectTotalsRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/expenses").Handler(ht.NewServer(
 		loggedInOnly(projectEndpoints.CreateExpense),
 		DecodeCreateExpenseRequest,

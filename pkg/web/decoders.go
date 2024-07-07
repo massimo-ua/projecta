@@ -254,3 +254,22 @@ func decodeListExpensesRequest(_ context.Context, r *http.Request) (any, error) 
 
 	return filter, nil
 }
+
+func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error) {
+	var err error
+	vars := mux.Vars(r)
+
+	projectID, ok := vars["project_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("missing project_id", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project_id", err)
+	}
+
+	return projectUUID, nil
+}

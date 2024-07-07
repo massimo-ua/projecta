@@ -71,14 +71,15 @@ type ExpenseDTO struct {
 }
 
 type ProjectEndpoints struct {
-	CreateProject  endpoint.Endpoint
-	CreateCategory endpoint.Endpoint
-	CreateType     endpoint.Endpoint
-	CreateExpense  endpoint.Endpoint
-	ListProjects   endpoint.Endpoint
-	ListTypes      endpoint.Endpoint
-	ListCategories endpoint.Endpoint
-	ListExpenses   endpoint.Endpoint
+	CreateProject     endpoint.Endpoint
+	CreateCategory    endpoint.Endpoint
+	CreateType        endpoint.Endpoint
+	CreateExpense     endpoint.Endpoint
+	ListProjects      endpoint.Endpoint
+	ListTypes         endpoint.Endpoint
+	ListCategories    endpoint.Endpoint
+	ListExpenses      endpoint.Endpoint
+	ShowProjectTotals endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -441,6 +442,63 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 	}
 }
 
+func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		projectID := request.(uuid.UUID)
+
+		offset := 0
+		limit := 100
+		next := true
+		var total *money.Money
+
+		for next {
+			rows, err := svc.Find(ctx, projecta.ExpenseCollectionFilter{
+				ProjectID: projectID,
+				Pagination: core.Pagination{
+					Limit:  limit,
+					Offset: offset,
+				},
+			})
+
+			if err != nil {
+				return nil, err
+			}
+
+			for _, e := range rows {
+				if total == nil {
+					total = e.Amount
+				} else {
+					if total.Currency() != e.Amount.Currency() {
+						return nil, exceptions.NewInternalException("project expenses currencies mismatch", nil)
+					}
+
+					total, err = total.Add(e.Amount)
+
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+
+			if len(rows) < limit {
+				next = false
+			}
+
+			offset += limit
+		}
+
+		return ProjectTotalsDTO{
+			Totals: []TotalDTO{
+				{
+					Title:    "Total Expenses",
+					Amount:   total.Amount(),
+					Currency: total.Currency().Code,
+				},
+			},
+		}, nil
+	}
+}
+
 func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
@@ -448,13 +506,14 @@ func MakeProjectEndpoints(
 	expenseService projecta.ExpenseService,
 ) (ProjectEndpoints, error) {
 	return ProjectEndpoints{
-		CreateProject:  makeCreateProjectEndpoint(projectService),
-		CreateCategory: makeCreateCategoryEndpoint(categoryService),
-		CreateType:     makeCreateTypeEndpoint(typeService),
-		CreateExpense:  makeCreateExpenseEndpoint(expenseService),
-		ListProjects:   makeListProjectsEndpoint(projectService),
-		ListTypes:      makeListProjectTypesEndpoint(typeService),
-		ListCategories: makeListCategoriesEndpoint(categoryService),
-		ListExpenses:   makeListExpensesEndpoint(expenseService),
+		CreateProject:     makeCreateProjectEndpoint(projectService),
+		CreateCategory:    makeCreateCategoryEndpoint(categoryService),
+		CreateType:        makeCreateTypeEndpoint(typeService),
+		CreateExpense:     makeCreateExpenseEndpoint(expenseService),
+		ListProjects:      makeListProjectsEndpoint(projectService),
+		ListTypes:         makeListProjectTypesEndpoint(typeService),
+		ListCategories:    makeListCategoriesEndpoint(categoryService),
+		ListExpenses:      makeListExpensesEndpoint(expenseService),
+		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService),
 	}, nil
 }

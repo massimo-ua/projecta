@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useTypes } from '../../hooks/types.js';
 import { Skeleton, Table } from 'antd';
+
+import useTypes from '../../hooks/types';
 
 const columns = [
   {
@@ -21,11 +22,9 @@ const columns = [
   },
 ];
 
-export function Types() {
-  const { projectId} = useParams();
+export default function Types() {
+  const { projectId } = useParams();
   const [loading, types, setFilter] = useTypes();
-
-  const onChange = console.log.bind('TypesTable.onChange');
 
   useEffect(() => {
     setFilter({
@@ -33,13 +32,15 @@ export function Types() {
       limit: 10,
       offset: 0,
     });
-  }, []);
-  return loading ? <Skeleton active /> : <Table
-    dataSource={types}
-    columns={columns}
-    onChange={onChange}
-    showSorterTooltip={{
-      target: 'sorter-icon',
-    }}
-  />;
+  }, [projectId, setFilter]);
+
+  return loading ? <Skeleton active /> : (
+    <Table
+      dataSource={types}
+      columns={columns}
+      showSorterTooltip={{
+        target: 'sorter-icon',
+      }}
+    />
+  );
 }

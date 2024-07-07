@@ -1,6 +1,8 @@
 export class Request {
   #baseUrl;
+
   #authProvider;
+
   constructor(baseUrl, authProvider) {
     this.#baseUrl = baseUrl;
     this.#authProvider = authProvider;

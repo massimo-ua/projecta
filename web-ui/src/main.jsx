@@ -1,9 +1,10 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { HomeLayout } from './Layout.jsx'
-import './index.css'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
-import { router } from './router';
+
+import HomeLayout from './Layout';
+import './index.css';
+import router from './router';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -11,4 +12,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <HomeLayout />
     </RouterProvider>
   </React.StrictMode>,
-)
+);

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { categoriesRepository } from '../api';
+import { expensesRepository } from '../api';
 
-export default function useCategories() {
+export default function useExpenses() {
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [filter, setFilter] = useState();
 
   useEffect(() => {
@@ -18,12 +18,12 @@ export default function useCategories() {
     } = filter;
 
     setLoading(true);
-    categoriesRepository.getCategories(projectId, limit, offset)
+    expensesRepository.getExpenses(projectId, limit, offset)
       .then((data) => {
-        setCategories(data);
+        setExpenses(data);
       })
       .finally(() => setLoading(false));
   }, [filter]);
 
-  return [loading, categories, setFilter];
+  return [loading, expenses, setFilter];
 }

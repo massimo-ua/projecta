@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect } from 'react';
 import { Skeleton, Table } from 'antd';
-import { useCategories } from '../../hooks/categories.js';
+import useCategories from '../../hooks/categories.js';
 
 const columns = [
   {
@@ -22,7 +22,7 @@ const columns = [
 ];
 
 export function Categories() {
-  const { projectId} = useParams();
+  const { projectId } = useParams();
   const [loading, categories, setFilter] = useCategories();
 
   const onChange = console.log.bind('CategoriesTable.onChange');
@@ -34,12 +34,14 @@ export function Categories() {
       offset: 0,
     });
   }, []);
-  return loading ? <Skeleton active /> : <Table
-    dataSource={categories}
-    columns={columns}
-    onChange={onChange}
-    showSorterTooltip={{
-      target: 'sorter-icon',
-    }}
-  />;
+  return loading ? <Skeleton active /> : (
+    <Table
+      dataSource={categories}
+      columns={columns}
+      onChange={onChange}
+      showSorterTooltip={{
+        target: 'sorter-icon',
+      }}
+    />
+  );
 }

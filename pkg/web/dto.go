@@ -35,3 +35,13 @@ type ListExpensesResponse struct {
 	Expenses []ExpenseDTO `json:"expenses"`
 	PaginationDTO
 }
+
+type TotalDTO struct {
+	Title    string `json:"title"`
+	Amount   int64  `json:"amount"`
+	Currency string `json:"currency"`
+}
+
+type ProjectTotalsDTO struct {
+	Totals []TotalDTO `json:"totals"`
+}

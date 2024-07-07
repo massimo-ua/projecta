@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { typesRepository } from '../api';
 
-export function useTypes() {
+export default function useTypes() {
   const [loading, setLoading] = useState(false);
   const [types, setTypes] = useState([]);
   const [filter, setFilter] = useState();
@@ -19,8 +19,8 @@ export function useTypes() {
 
     setLoading(true);
     typesRepository.getTypes(projectId, limit, offset)
-      .then((types) => {
-        setTypes(types);
+      .then((data) => {
+        setTypes(data);
       })
       .finally(() => setLoading(false));
   }, [filter]);

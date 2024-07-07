@@ -1,8 +1,13 @@
 import React from 'react';
-import { HomeLayout } from '../../Layout.jsx';
-import { BuildOutlined, PieChartOutlined, TransactionOutlined } from '@ant-design/icons';
+import {
+  BuildOutlined,
+  DollarOutlined,
+  FileTextOutlined,
+  PieChartOutlined,
+} from '@ant-design/icons';
 import { Layout, Menu } from 'antd';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import HomeLayout from '../../Layout.jsx';
 
 const { Sider, Content } = Layout;
 
@@ -28,16 +33,21 @@ const navigation = [{
   type: 'group',
   children: [
     {
+      key: 'total',
+      label: 'Total',
+      icon: <FileTextOutlined />,
+    },
+    {
       key: 'expenses',
       label: 'Expenses',
-      icon: <TransactionOutlined />,
+      icon: <DollarOutlined />,
     },
   ],
 }];
 
 export function ProjectDetails() {
   const navigate = useNavigate();
-  const { projectId} = useParams();
+  const { projectId } = useParams();
 
   const onClick = (e) => {
     const { key } = e;
@@ -47,7 +57,7 @@ export function ProjectDetails() {
   return (
     <HomeLayout>
       <Layout>
-        <Sider width="300">
+        <Sider width="12vw">
           <Menu
             onClick={onClick}
             style={{ height: '80vh' }}

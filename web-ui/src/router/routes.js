@@ -1,23 +1,40 @@
-import { Projects, ProjectDetails, Types, Categories, Expenses } from '../components';
+import {
+  Projects,
+  ProjectDetails,
+  Types,
+  Categories,
+  Expenses,
+  Total,
+  Login,
+  AuthenticatedOnly,
+} from '../components';
 
-export const routes = [ {
+const routes = [{
   path: '/',
-  Component: Projects
+  Component: AuthenticatedOnly(Projects),
 }, {
   path: '/projects',
-  Component: Projects,
+  Component: AuthenticatedOnly(Projects),
   exact: true,
 }, {
+  path: '/login',
+  Component: Login,
+}, {
   path: '/projects/:projectId',
-  Component: ProjectDetails,
+  Component: AuthenticatedOnly(ProjectDetails),
   children: [{
     path: 'types',
-    Component: Types,
+    Component: AuthenticatedOnly(Types),
   }, {
     path: 'categories',
-    Component: Categories,
+    Component: AuthenticatedOnly(Categories),
   }, {
     path: 'expenses',
-    Component: Expenses,
+    Component: AuthenticatedOnly(Expenses),
+  }, {
+    path: 'total',
+    Component: AuthenticatedOnly(Total),
   }],
 }];
+
+export default routes;

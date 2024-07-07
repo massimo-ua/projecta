@@ -1,11 +1,12 @@
 export class CategoriesRepository {
   #request;
+
   constructor(request) {
     this.#request = request;
   }
 
-  async getCategories(projectId, limit = 10, offset = 0 ) {
-    const query = new URLSearchParams({limit: String(limit), offset: String(offset)}).toString();
+  async getCategories(projectId, limit = 10, offset = 0) {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) }).toString();
     const resourceUrl = `/projects/${projectId}/categories`;
     const url = query ? `${resourceUrl}?${query}` : resourceUrl;
     const response = await this.#request.get(url);
