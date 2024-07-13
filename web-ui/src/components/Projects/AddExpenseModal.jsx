@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Button, Form, Modal, Select, Input, InputNumber, DatePicker } from 'antd';
-import useCategories from '../../hooks/categories';
 import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
 import { expensesRepository } from '../../api';
@@ -12,13 +11,11 @@ export default function AddExpenseModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
 
-  const [, categories, setCategoriesFilter] = useCategories();
   const [, types, setTypesFilter] = useTypes();
   const [form] = useForm();
 
   const handleAdd = () => {
     const {
-      categoryId,
       typeId,
       amount,
       currency,
@@ -26,7 +23,6 @@ export default function AddExpenseModal(props) {
       description,
     } = form.getFieldsValue();
     expensesRepository.addExpense(projectId, {
-      categoryId,
       typeId,
       amount,
       currency,
@@ -42,11 +38,6 @@ export default function AddExpenseModal(props) {
   const handleCancel = () => onCancel();
 
   useEffect(() => {
-    setCategoriesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
     setTypesFilter({
       projectId,
       limit: 100,
@@ -84,20 +75,11 @@ export default function AddExpenseModal(props) {
             currency: 'UAH',
           }}
         >
-          <Form.Item label="Category" name="categoryId">
-            <Select>
-              {categories.map((category) => (
-                <Select.Option key={category.key} value={category.id}>
-                  {category.name}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
           <Form.Item label="Type" name="typeId">
             <Select>
               {types.map((type) => (
                 <Select.Option key={type.key} value={type.id}>
-                  {type.name}
+                  {`${type.name} [${type.category}]`}
                 </Select.Option>
               ))}
             </Select>

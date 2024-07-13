@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
-import { Button, Skeleton, Table } from 'antd';
+import { Button, Skeleton, Table, Tag } from 'antd';
 import useExpenses from '../../hooks/expenses';
 import { DollarOutlined } from '@ant-design/icons';
 import AddExpenseModal from './AddExpenseModal';
@@ -25,6 +25,7 @@ const columns = [
     title: 'Category',
     dataIndex: 'category',
     key: 'category',
+    render: (_, expense) => (<Tag>{expense.category}</Tag>),
   },
   {
     title: 'Type',

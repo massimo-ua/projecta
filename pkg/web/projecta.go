@@ -26,7 +26,6 @@ type CreateCategoryDTO struct {
 
 type CreateExpenseDTO struct {
 	ProjectID   string `json:"project_id"`
-	CategoryID  string `json:"category_id"`
 	TypeID      string `json:"type_id"`
 	Description string `json:"description"`
 	Amount      int64  `json:"amount"`
@@ -52,10 +51,16 @@ type CategoryDTO struct {
 	Description string `json:"description"`
 }
 
+type TypeCategoryDTO struct {
+	CategoryID string `json:"category_id"`
+	Name       string `json:"name"`
+}
+
 type TypeDTO struct {
-	TypeID      string `json:"type_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	TypeID      string          `json:"type_id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Category    TypeCategoryDTO `json:"category"`
 }
 
 type ExpenseDTO struct {
@@ -154,17 +159,28 @@ func DecodeCreateTypeRequest(_ context.Context, r *http.Request) (any, error) {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	var req TypeDTO
+	var req CreateTypeDTO
 	err = json.NewDecoder(r.Body).Decode(&req)
 
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
+	if req.Name == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+
+	categoryUUID, err := uuid.Parse(req.CategoryID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid category id", err)
+	}
+
 	return projecta.CreateTypeCommand{
 		ProjectID:   projectUUID,
 		Name:        req.Name,
 		Description: req.Description,
+		CategoryID:  categoryUUID,
 	}, err
 }
 
@@ -198,10 +214,15 @@ func DecodeCreateExpenseRequest(_ context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewValidationException("invalid date", err)
 	}
 
+	typeUUID, err := uuid.Parse(req.TypeID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid type id", err)
+	}
+
 	return projecta.CreateExpenseCommand{
 		ProjectID:   projectUUID,
-		CategoryID:  uuid.MustParse(req.CategoryID),
-		TypeID:      uuid.MustParse(req.TypeID),
+		TypeID:      typeUUID,
 		Description: req.Description,
 		Amount:      amount,
 		ExpenseDate: date,
@@ -297,9 +318,9 @@ func makeCreateExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 				Description: expense.Type.Description,
 			},
 			Category: CategoryDTO{
-				CategoryID:  expense.Category.ID.String(),
-				Name:        expense.Category.Name,
-				Description: expense.Category.Description,
+				CategoryID:  expense.Type.Category.ID.String(),
+				Name:        expense.Type.Category.Name,
+				Description: expense.Type.Category.Description,
 			},
 			Description: expense.Description,
 			Amount:      expense.Amount.Amount(),
@@ -352,6 +373,10 @@ func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 				TypeID:      p.ID.String(),
 				Name:        p.Name,
 				Description: p.Description,
+				Category: TypeCategoryDTO{
+					CategoryID: p.Category.ID.String(),
+					Name:       p.Category.Name,
+				},
 			})
 		}
 
@@ -421,9 +446,9 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 					Description: e.Type.Description,
 				},
 				Category: CategoryDTO{
-					CategoryID:  e.Category.ID.String(),
-					Name:        e.Category.Name,
-					Description: e.Category.Description,
+					CategoryID:  e.Type.Category.ID.String(),
+					Name:        e.Type.Category.Name,
+					Description: e.Type.Category.Description,
 				},
 				Description: e.Description,
 				Amount:      e.Amount.Amount(),

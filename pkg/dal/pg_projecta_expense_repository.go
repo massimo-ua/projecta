@@ -38,7 +38,6 @@ func (r *PgProjectaExpenseRepository) Save(ctx context.Context, expense *project
 	qb.Select(
 		"expense_id",
 		"project_id",
-		"category_id",
 		"type_id",
 		"amount",
 		"currency",
@@ -71,23 +70,23 @@ func (r *PgProjectaExpenseRepository) create(ctx context.Context, expense *proje
 	qb.Cols(
 		"expense_id",
 		"project_id",
-		"category_id",
 		"type_id",
 		"amount",
 		"currency",
 		"description",
 		"owner_id",
+		"expense_date",
 	)
 
 	qb.Values(
 		expense.ID.String(),
 		expense.Project.ProjectID.String(),
-		expense.Category.ID.String(),
 		expense.Type.ID.String(),
 		expense.Amount.Amount(),
 		expense.Amount.Currency().Code,
 		expense.Description,
 		expense.Owner.PersonID.String(),
+		expense.Date,
 	)
 
 	sql, args := qb.Build()
@@ -102,11 +101,11 @@ func (r *PgProjectaExpenseRepository) update(ctx context.Context, expense *proje
 	qb.Update("projecta_expenses")
 	qb.Set(
 		qb.Assign("project_id", expense.Project.ProjectID.String()),
-		qb.Assign("category_id", expense.Category.ID.String()),
 		qb.Assign("type_id", expense.Type.ID.String()),
 		qb.Assign("amount", expense.Amount.Amount()),
 		qb.Assign("currency", expense.Amount.Currency().Code),
 		qb.Assign("description", expense.Description),
+		qb.Assign("expense_date", expense.Date),
 	)
 
 	qb.Where(qb.Equal("expense_id", expense.ID.String()))
@@ -148,9 +147,9 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_expenses")
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_expenses.project_id")
-	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_expenses.category_id")
 	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_expenses.type_id")
 	qb.Join("people", "people.person_id = projecta_expenses.owner_id")
+	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 
 	qb.Select(
 		"projecta_expenses.expense_id",
@@ -307,6 +306,7 @@ func toExpense(
 	costType := &projecta.CostType{
 		ID:          uuid.MustParse(typeID),
 		ProjectID:   projectUUID,
+		Category:    category,
 		Name:        typeName,
 		Description: "",
 	}
@@ -320,7 +320,6 @@ func toExpense(
 		project,
 		person,
 		costType,
-		category,
 		description,
 		amountMoney,
 		expenseDate,

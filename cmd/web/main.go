@@ -57,10 +57,9 @@ func main() {
 	peopleService := projecta.NewPeopleService(peopleRepository)
 	projectService := projecta.NewProjectService(projectRepository, peopleService)
 	categoryService := projecta.NewCategoryService(categoryRepository, projectService)
-	typeService := projecta.NewTypeService(typeRepository)
+	typeService := projecta.NewTypeService(typeRepository, categoryRepository, projectRepository)
 	expenseService := projecta.NewExpenseService(
 		expenseRepository,
-		categoryRepository,
 		typeRepository,
 		projectRepository,
 		peopleService,

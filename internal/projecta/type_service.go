@@ -10,24 +10,43 @@ const (
 )
 
 type TypeServiceImpl struct {
-	repository TypeRepository
+	types      TypeRepository
+	categories CategoryRepository
+	projects   ProjectRepository
 }
 
 func (s *TypeServiceImpl) FindOne(ctx context.Context, filter TypeFilter) (*CostType, error) {
-	return s.repository.FindOne(ctx, filter)
+	return s.types.FindOne(ctx, filter)
 }
 
 func (s *TypeServiceImpl) Find(ctx context.Context, filter TypeCollectionFilter) ([]*CostType, error) {
-	return s.repository.Find(ctx, filter)
+	return s.types.Find(ctx, filter)
 }
 
-func NewTypeService(repository TypeRepository) *TypeServiceImpl {
-	return &TypeServiceImpl{repository: repository}
+func NewTypeService(types TypeRepository, categories CategoryRepository, projects ProjectRepository) *TypeServiceImpl {
+	return &TypeServiceImpl{
+		types:      types,
+		categories: categories,
+		projects:   projects,
+	}
 }
 
 func (s *TypeServiceImpl) Create(ctx context.Context, command CreateTypeCommand) (*CostType, error) {
+	project, err := s.projects.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID})
+
+	if err != nil {
+		return nil, exceptions.NewValidationException(failedToCreateCostType, err)
+	}
+
+	category, err := s.categories.FindOne(ctx, CategoryFilter{CategoryID: command.CategoryID})
+
+	if err != nil {
+		return nil, exceptions.NewValidationException(failedToCreateCostType, err)
+	}
+
 	t, err := NewCostType(
-		command.ProjectID,
+		project.ProjectID,
+		category,
 		command.Name,
 		command.Description,
 	)
@@ -36,7 +55,7 @@ func (s *TypeServiceImpl) Create(ctx context.Context, command CreateTypeCommand)
 		return nil, exceptions.NewValidationException(failedToCreateCostType, err)
 	}
 
-	err = s.repository.Save(ctx, t)
+	err = s.types.Save(ctx, t)
 
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateCostType, err)

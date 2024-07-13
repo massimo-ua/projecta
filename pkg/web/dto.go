@@ -45,3 +45,9 @@ type TotalDTO struct {
 type ProjectTotalsDTO struct {
 	Totals []TotalDTO `json:"totals"`
 }
+
+type CreateTypeDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	CategoryID  string `json:"category_id"`
+}

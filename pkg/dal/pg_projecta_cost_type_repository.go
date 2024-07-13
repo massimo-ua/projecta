@@ -29,7 +29,8 @@ func (r *PgProjectaCostTypeRepository) FindOne(ctx context.Context, filter proje
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_types")
-	qb.Select("type_id", "project_id", "name", "description")
+	qb.Select("type_id", "projecta_cost_types.project_id", "projecta_cost_types.category_id", "projecta_cost_types.name", "projecta_cost_types.description", "projecta_cost_categories.name as category_name")
+	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 	qb.Limit(1)
 
 	if filter.TypeID != uuid.Nil {
@@ -37,20 +38,26 @@ func (r *PgProjectaCostTypeRepository) FindOne(ctx context.Context, filter proje
 	}
 
 	if filter.ProjectID != uuid.Nil {
-		qb.Where(qb.Equal("project_id", filter.ProjectID.String()))
+		qb.Where(qb.Equal("projecta_cost_types.project_id", filter.ProjectID.String()))
+	}
+
+	if filter.CategoryID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_cost_types.category_id", filter.CategoryID.String()))
 	}
 
 	if filter.Name != "" {
-		qb.Where(qb.Equal("name", filter.Name))
+		qb.Where(qb.Equal("projecta_cost_types.name", filter.Name))
 	}
 
 	sql, args := qb.Build()
 
 	var (
-		typeID      string
-		projectID   string
-		name        string
-		description string
+		typeID       string
+		projectID    string
+		categoryID   string
+		name         string
+		description  string
+		categoryName string
 	)
 
 	if err := r.db.QueryRow(
@@ -60,22 +67,25 @@ func (r *PgProjectaCostTypeRepository) FindOne(ctx context.Context, filter proje
 	).Scan(
 		&typeID,
 		&projectID,
+		&categoryID,
 		&name,
 		&description,
+		&categoryName,
 	); err != nil {
 		return nil, err
 	}
 
-	return toCostType(typeID, projectID, name, description)
+	return toCostType(typeID, projectID, name, description, categoryID, categoryName)
 }
 
 func (r *PgProjectaCostTypeRepository) Save(ctx context.Context, costType *projecta.CostType) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_cost_types")
-	qb.Cols("type_id", "project_id", "name", "description")
+	qb.Cols("type_id", "project_id", "category_id", "name", "description")
 	qb.Values(
 		costType.ID.String(),
 		costType.ProjectID.String(),
+		costType.Category.ID.String(),
 		costType.Name,
 		costType.Description,
 	)
@@ -109,8 +119,16 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_types")
-	qb.Select("type_id", "projecta_projects.project_id", "projecta_cost_types.name", "projecta_cost_types.description")
+	qb.Select(
+		"type_id",
+		"projecta_projects.project_id",
+		"projecta_cost_types.category_id",
+		"projecta_cost_categories.name as category_name",
+		"projecta_cost_types.name",
+		"projecta_cost_types.description",
+	)
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_cost_types.project_id")
+	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
 	qb.Limit(filter.Limit)
 	qb.Offset(filter.Offset)
@@ -121,6 +139,10 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 
 	if filter.Name != "" {
 		qb.Where(qb.Like("projecta_cost_types.name", fmt.Sprintf("%s%%", filter.Name)))
+	}
+
+	if filter.CategoryID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_cost_types.category_id", filter.CategoryID.String()))
 	}
 
 	var costTypes []*projecta.CostType = make([]*projecta.CostType, 0)
@@ -137,22 +159,26 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 
 	for rows.Next() {
 		var (
-			typeID      string
-			projectID   string
-			name        string
-			description string
+			typeID       string
+			projectID    string
+			categoryID   string
+			categoryName string
+			name         string
+			description  string
 		)
 
 		if err := rows.Scan(
 			&typeID,
 			&projectID,
+			&categoryID,
+			&categoryName,
 			&name,
 			&description,
 		); err != nil {
 			return nil, err
 		}
 
-		costType, err := toCostType(typeID, projectID, name, description)
+		costType, err := toCostType(typeID, projectID, name, description, categoryID, categoryName)
 
 		if err != nil {
 			return nil, err
@@ -164,10 +190,14 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 	return costTypes, nil
 }
 
-func toCostType(typeID, projectID, name, description string) (*projecta.CostType, error) {
+func toCostType(typeID, projectID, name, description, categoryID, categoryName string) (*projecta.CostType, error) {
 	return &projecta.CostType{
-		ID:          uuid.MustParse(typeID),
-		ProjectID:   uuid.MustParse(projectID),
+		ID:        uuid.MustParse(typeID),
+		ProjectID: uuid.MustParse(projectID),
+		Category: &projecta.CostCategory{
+			ID:   uuid.MustParse(categoryID),
+			Name: categoryName,
+		},
 		Name:        name,
 		Description: description,
 	}, nil

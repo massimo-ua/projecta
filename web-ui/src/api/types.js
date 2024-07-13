@@ -12,13 +12,12 @@ export class TypesRepository {
     const response = await this.#request.get(url);
 
     const { types } = response;
-    return types.map(({ type_id, name, description }) => ({
-      key: type_id, id: type_id, name, description,
-    }));
+    return types.map((type) => this.toType(type));
   }
 
-  async addType(projectId, { name, description }) {
+  async addType(projectId, { categoryId, name, description }) {
     const response = await this.#request.post(`/projects/${projectId}/types`, {
+      category_id: categoryId,
       name,
       description,
     });
@@ -29,8 +28,16 @@ export class TypesRepository {
 
     const json = await response.json();
 
+    return this.toType(json);
+  }
+
+  toType({ type_id, name, description, category }) {
     return {
-      key: json.type_id, id: json.type_id, name: json.name, description: json.description,
+      key: type_id,
+      id: type_id,
+      name,
+      description,
+      category: category.name,
     };
   }
 }

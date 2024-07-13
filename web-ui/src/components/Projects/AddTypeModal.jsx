@@ -1,6 +1,8 @@
-import { Button, Form, Modal, Input } from 'antd';
+import { Button, Form, Modal, Input, Select } from 'antd';
 import { useParams } from 'react-router-dom';
 import { typesRepository } from '../../api';
+import useCategories from '../../hooks/categories.js';
+import { useEffect } from 'react';
 
 const { TextArea } = Input;
 const { useForm } = Form;
@@ -9,13 +11,16 @@ export default function AddTypeModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
   const [form] = useForm();
+  const [, categories, setCategoriesFilter] = useCategories();
 
   const handleAdd = () => {
     const {
+      categoryId,
       name,
       description,
     } = form.getFieldsValue();
     typesRepository.addType(projectId, {
+      categoryId,
       name,
       description,
     }).then(() => {
@@ -26,6 +31,14 @@ export default function AddTypeModal(props) {
   };
 
   const handleCancel = () => onCancel();
+
+  useEffect(() => {
+    setCategoriesFilter({
+      projectId,
+      limit: 100,
+      offset: 0,
+    });
+  }, []);
 
   return (
     <Modal
@@ -54,6 +67,15 @@ export default function AddTypeModal(props) {
           }}
           autoComplete="off"
         >
+          <Form.Item label="Category" name="categoryId">
+            <Select>
+              {categories.map((category) => (
+                <Select.Option key={category.key} value={category.id}>
+                  {category.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item label="Name" name="name">
             <Input />
           </Form.Item>

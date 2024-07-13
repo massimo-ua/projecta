@@ -1,5 +1,6 @@
 import TypesComponent from './Projects/Types';
 import TotalComponent from './Projects/Total';
+import FooterComponent from './Footer';
 
 export * from './Projects/Projects';
 export * from './Logo';
@@ -12,3 +13,4 @@ export * from './AuthGuard';
 
 export const Types = TypesComponent;
 export const Total = TotalComponent;
+export const AppFooter = FooterComponent;

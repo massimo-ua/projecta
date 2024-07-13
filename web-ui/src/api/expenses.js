@@ -13,8 +13,7 @@ const toDomain = ({
   expenseDate: format(parseISO(expense_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
 });
 
-const toAddExpenseDTO = ({ categoryId, typeId, amount, currency, expenseDate, description }) => ({
-  category_id: categoryId,
+const toAddExpenseDTO = ({ typeId, amount, currency, expenseDate, description }) => ({
   type_id: typeId,
   amount: amount * 100,
   currency,

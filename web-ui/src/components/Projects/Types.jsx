@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Skeleton, Table } from 'antd';
+import { Button, Skeleton, Table, Tag } from 'antd';
 
 import useTypes from '../../hooks/types';
 import { BuildOutlined } from '@ant-design/icons';
@@ -11,6 +11,12 @@ const columns = [
     title: 'ID',
     dataIndex: 'id',
     key: 'ID',
+  },
+  {
+    title: 'Category',
+    dataIndex: 'category',
+    key: 'category',
+    render: (_, type) => (<Tag>{type.category}</Tag>),
   },
   {
     title: 'Name',

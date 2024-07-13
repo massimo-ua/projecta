@@ -33,17 +33,15 @@ func (s *ExpenseServiceImpl) Remove(ctx context.Context, command RemoveExpenseCo
 
 func NewExpenseService(
 	expenses ExpenseRepository,
-	categories CategoryRepository,
 	types TypeRepository,
 	projects ProjectRepository,
 	people PeopleService,
 ) *ExpenseServiceImpl {
 	return &ExpenseServiceImpl{
-		expenses:   expenses,
-		categories: categories,
-		types:      types,
-		projects:   projects,
-		people:     people,
+		expenses: expenses,
+		types:    types,
+		projects: projects,
+		people:   people,
 	}
 }
 
@@ -55,12 +53,6 @@ func (s *ExpenseServiceImpl) Create(ctx context.Context, command CreateExpenseCo
 	}
 
 	owner, err := s.people.FindOwner(ctx, personID)
-
-	category, err := s.categories.FindOne(ctx, CategoryFilter{CategoryID: command.CategoryID, ProjectID: command.ProjectID})
-
-	if err != nil {
-		return nil, exceptions.NewValidationException(FailedToCreateExpense, err)
-	}
 
 	costType, err := s.types.FindOne(ctx, TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
 
@@ -87,7 +79,6 @@ func (s *ExpenseServiceImpl) Create(ctx context.Context, command CreateExpenseCo
 		project,
 		owner,
 		costType,
-		category,
 		command.Description,
 		command.Amount,
 		expenseDate,

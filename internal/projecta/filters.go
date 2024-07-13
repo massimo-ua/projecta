@@ -22,22 +22,23 @@ type ProjectCollectionFilter struct {
 }
 
 type TypeFilter struct {
-	Name      string
-	TypeID    uuid.UUID
-	ProjectID uuid.UUID
+	Name       string
+	TypeID     uuid.UUID
+	ProjectID  uuid.UUID
+	CategoryID uuid.UUID
 }
 
 type ExpenseFilter struct {
-	ExpenseID  uuid.UUID
-	ProjectID  uuid.UUID
-	CategoryID uuid.UUID
-	TypeID     uuid.UUID
+	ExpenseID uuid.UUID
+	ProjectID uuid.UUID
+	TypeID    uuid.UUID
 }
 
 type TypeCollectionFilter struct {
 	core.Pagination
-	ProjectID uuid.UUID
-	Name      string
+	ProjectID  uuid.UUID
+	CategoryID uuid.UUID
+	Name       string
 }
 
 type CategoryCollectionFilter struct {
