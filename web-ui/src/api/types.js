@@ -16,4 +16,21 @@ export class TypesRepository {
       key: type_id, id: type_id, name, description,
     }));
   }
+
+  async addType(projectId, { name, description }) {
+    const response = await this.#request.post(`/projects/${projectId}/types`, {
+      name,
+      description,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to add type');
+    }
+
+    const json = await response.json();
+
+    return {
+      key: json.type_id, id: json.type_id, name: json.name, description: json.description,
+    };
+  }
 }
