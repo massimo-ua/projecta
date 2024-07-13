@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BuildOutlined,
   DollarOutlined,
@@ -11,43 +11,41 @@ import HomeLayout from '../../Layout.jsx';
 
 const { Sider, Content } = Layout;
 
-const navigation = [{
-  key: 'resources',
-  label: 'Resources',
-  type: 'group',
-  children: [
-    {
-      key: 'categories',
-      label: 'Categories',
-      icon: <PieChartOutlined />,
-    },
-    {
-      key: 'types',
-      label: 'Types',
-      icon: <BuildOutlined />,
-    },
-  ],
-}, {
-  key: 'operations',
-  label: 'Operations',
-  type: 'group',
-  children: [
-    {
-      key: 'total',
-      label: 'Total',
-      icon: <FileTextOutlined />,
-    },
-    {
-      key: 'expenses',
-      label: 'Expenses',
-      icon: <DollarOutlined />,
-    },
-  ],
-}];
-
 export function ProjectDetails() {
   const navigate = useNavigate();
-  const { projectId } = useParams();
+  const [navMenuItems, setNavMenuItems] = useState([{
+    key: 'resources',
+    label: 'Resources',
+    type: 'group',
+    children: [
+      {
+        key: 'categories',
+        label: 'Categories',
+        icon: <PieChartOutlined />,
+      },
+      {
+        key: 'types',
+        label: 'Types',
+        icon: <BuildOutlined />,
+      },
+    ],
+  }, {
+    key: 'operations',
+    label: 'Operations',
+    type: 'group',
+    children: [
+      {
+        key: 'total',
+        label: 'Total',
+        icon: <FileTextOutlined />,
+      },
+      {
+        key: 'expenses',
+        label: 'Expenses',
+        icon: <DollarOutlined />,
+      },
+    ],
+  }]);
 
   const onClick = (e) => {
     const { key } = e;
@@ -63,7 +61,7 @@ export function ProjectDetails() {
             style={{ height: '80vh' }}
             defaultSelectedKeys={['expenses']}
             mode="inline"
-            items={navigation}
+            items={navMenuItems}
           />
         </Sider>
         <Content>

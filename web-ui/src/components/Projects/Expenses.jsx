@@ -63,6 +63,16 @@ export function Expenses() {
     });
   }, []);
 
+  const onCancel = () => setAddModalOpen(false);
+  const onSucces = () => {
+    setAddModalOpen(false);
+    setFilter({
+      projectId,
+      limit: 10,
+      offset: 0,
+    });
+  };
+
   return loading ? <Skeleton active /> : (
     <div>
     <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<DollarOutlined />} type="primary" onClick={onAddExpenseClick}>Add Expense</Button>
@@ -74,7 +84,7 @@ export function Expenses() {
         target: 'sorter-icon',
       }}
     />
-    <AddExpenseModal open={addModalOpened} setOpen={setAddModalOpen} />
+    <AddExpenseModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
     </div>
   );
 }

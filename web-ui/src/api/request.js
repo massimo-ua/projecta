@@ -21,4 +21,17 @@ export class Request {
 
     return response.json();
   }
+
+  async post(url, data, options) {
+    const token = await this.#authProvider.getToken();
+    return await fetch(`${this.#baseUrl}${url}`, {
+      ...options,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+  }
 }

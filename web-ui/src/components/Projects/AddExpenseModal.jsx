@@ -1,21 +1,22 @@
 import { useEffect } from 'react';
 import { Button, Form, Modal, Select, Input, InputNumber, DatePicker } from 'antd';
 import useCategories from '../../hooks/categories';
-import useTypes from '../../hooks/types.js';
+import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
+import { expensesRepository } from '../../api';
 
 const { TextArea } = Input;
 const { useForm } = Form;
 
 export default function AddExpenseModal(props) {
   const { projectId } = useParams();
-  const { open, setOpen } = props;
+  const { open, onSuccess, onCancel } = props;
 
   const [, categories, setCategoriesFilter] = useCategories();
   const [, types, setTypesFilter] = useTypes();
   const [form] = useForm();
 
-  const handleAdd = (e) => {
+  const handleAdd = () => {
     const {
       categoryId,
       typeId,
@@ -24,18 +25,21 @@ export default function AddExpenseModal(props) {
       expenseDate,
       description,
     } = form.getFieldsValue();
-
-    console.log({
+    expensesRepository.addExpense(projectId, {
       categoryId,
       typeId,
       amount,
       currency,
       expenseDate: expenseDate.toDate(),
       description,
+    }).then(() => {
+      onSuccess();
+    }).catch((e) => {
+      console.error('Failed to add expense', e.message);
     });
   };
 
-  const handleCancel = () => setOpen(false);
+  const handleCancel = () => onCancel();
 
   useEffect(() => {
     setCategoriesFilter({
