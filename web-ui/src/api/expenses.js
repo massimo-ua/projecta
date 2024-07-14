@@ -49,4 +49,12 @@ export class ExpensesRepository {
 
     return toDomain(json);
   }
+
+  async removeExpense(projectId, expenseId) {
+    const response = await this.#request.delete(`/projects/${projectId}/expenses/${expenseId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to remove expense');
+    }
+  }
 }

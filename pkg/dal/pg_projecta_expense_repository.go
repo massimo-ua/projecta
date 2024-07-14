@@ -23,7 +23,105 @@ func NewPgProjectaExpenseRepository(pool *pgxpool.Pool) *PgProjectaExpenseReposi
 }
 
 func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projecta.ExpenseFilter) (*projecta.Expense, error) {
-	return nil, nil
+	personID, err := core.AuthGuard(ctx)
+
+	if err != nil {
+		return nil, core.FailedToIdentifyRequester
+	}
+
+	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+
+	qb.From("projecta_expenses")
+	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_expenses.project_id")
+	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_expenses.type_id")
+	qb.Join("people", "people.person_id = projecta_expenses.owner_id")
+	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
+
+	qb.Select(
+		"projecta_expenses.expense_id",
+		"projecta_expenses.project_id",
+		"projecta_projects.name as project_name",
+		"projecta_cost_categories.category_id",
+		"projecta_cost_categories.name as category_name",
+		"projecta_cost_types.type_id",
+		"projecta_cost_types.name as type_name",
+		"projecta_expenses.amount",
+		"projecta_expenses.currency",
+		"projecta_expenses.description",
+		"projecta_expenses.owner_id",
+		"people.first_name",
+		"COALESCE(people.display_name, '') display_name",
+		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
+	)
+
+	if filter.ProjectID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
+	}
+
+	if filter.ExpenseID != uuid.Nil {
+		qb.Where(qb.Equal("expense_id", filter.ExpenseID.String()))
+	}
+
+	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
+
+	sql, args := qb.Build()
+
+	var (
+		expenseID    string
+		projectID    string
+		projectName  string
+		categoryID   string
+		categoryName string
+		typeID       string
+		typeName     string
+		amount       int64
+		currency     string
+		description  string
+		ownerID      string
+		firstName    string
+		displayName  string
+		expenseDate  time.Time
+	)
+
+	if err := r.db.QueryRow(
+		ctx,
+		sql,
+		args...,
+	).Scan(
+		&expenseID,
+		&projectID,
+		&projectName,
+		&categoryID,
+		&categoryName,
+		&typeID,
+		&typeName,
+		&amount,
+		&currency,
+		&description,
+		&ownerID,
+		&firstName,
+		&displayName,
+		&expenseDate,
+	); err != nil {
+		return nil, err
+	}
+
+	return toExpense(
+		expenseID,
+		projectID,
+		projectName,
+		categoryID,
+		categoryName,
+		typeID,
+		typeName,
+		amount,
+		currency,
+		description,
+		ownerID,
+		firstName,
+		displayName,
+		expenseDate,
+	), nil
 }
 
 func (r *PgProjectaExpenseRepository) Save(ctx context.Context, expense *projecta.Expense) error {

@@ -87,7 +87,6 @@ type UpdateExpenseCommand struct {
 
 type RemoveExpenseCommand struct {
 	ProjectID uuid.UUID
-	PersonID  uuid.UUID
 	ID        uuid.UUID
 }
 

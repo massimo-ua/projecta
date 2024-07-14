@@ -2,6 +2,7 @@ package projecta
 
 import (
 	"context"
+	"errors"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -27,8 +28,20 @@ func (s *ExpenseServiceImpl) Update(ctx context.Context, command UpdateExpenseCo
 }
 
 func (s *ExpenseServiceImpl) Remove(ctx context.Context, command RemoveExpenseCommand) error {
-	//TODO implement me
-	panic("implement me")
+	e, err := s.expenses.FindOne(ctx, ExpenseFilter{
+		ExpenseID: command.ID,
+		ProjectID: command.ProjectID,
+	})
+
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return exceptions.NewNotFoundException(FailedToFindExpenses, err)
+		}
+
+		return exceptions.NewInternalException(FailedToFindExpenses, err)
+	}
+
+	return s.expenses.Remove(ctx, e)
 }
 
 func NewExpenseService(

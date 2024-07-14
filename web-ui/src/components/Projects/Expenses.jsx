@@ -4,6 +4,8 @@ import { Button, Skeleton, Table, Tag } from 'antd';
 import useExpenses from '../../hooks/expenses';
 import { DollarOutlined } from '@ant-design/icons';
 import AddExpenseModal from './AddExpenseModal';
+import RemoveExpenseButton from './RemoveExpenseButton';
+import { expensesRepository } from '../../api';
 
 const columns = [
   {
@@ -74,12 +76,32 @@ export function Expenses() {
     });
   };
 
+  const onRemoveButtonClick = (expenseId) => {
+    expensesRepository.removeExpense(projectId, expenseId)
+      .then(() => {
+        setFilter({
+          projectId,
+          limit: 10,
+          offset: 0,
+        });
+      })
+      .catch((error) => {
+        console.error(error);
+      })
+  };
+
   return loading ? <Skeleton active /> : (
     <div>
     <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<DollarOutlined />} type="primary" onClick={onAddExpenseClick}>Add Expense</Button>
     <Table
       dataSource={expenses}
-      columns={columns}
+      columns={[...columns, {
+        title: 'Action',
+        key: 'action',
+        render: (_, expense) => (
+          <RemoveExpenseButton expenseId={expense.id} onClick={onRemoveButtonClick}/>
+        ),
+      }]}
       onChange={onChange}
       showSorterTooltip={{
         target: 'sorter-icon',

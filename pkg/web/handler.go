@@ -173,5 +173,12 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodDelete).Path("/projects/{project_id}/expenses/{expense_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.RemoveExpense),
+		decodeProjectResourceRemoveCommand("project_id", "expense_id"),
+		encodeJSON(http.StatusNoContent),
+		withAuth...,
+	))
+
 	return r, nil
 }

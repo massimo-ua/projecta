@@ -292,7 +292,7 @@ func decodeProjectResourceRemoveCommand(projectIDKey string, resourceIDKey strin
 			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid %s", projectIDKey), err)
 		}
 
-		resourceID, ok := vars["type_id"]
+		resourceID, ok := vars[resourceIDKey]
 
 		if !ok {
 			return nil, exceptions.NewValidationException(fmt.Sprintf("missing %s", resourceIDKey), nil)

@@ -86,6 +86,7 @@ type ProjectEndpoints struct {
 	ListExpenses      endpoint.Endpoint
 	ShowProjectTotals endpoint.Endpoint
 	RemoveType        endpoint.Endpoint
+	RemoveExpense     endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -535,6 +536,23 @@ func makeRemoveTypeEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 	}
 }
 
+func makeRemoveExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		command, ok := request.(projecta.RemoveProjectResourceCommand)
+
+		if !ok {
+			return nil, exceptions.NewValidationException("invalid request", nil)
+		}
+
+		err := svc.Remove(ctx, projecta.RemoveExpenseCommand{
+			ID:        command.ResourceID,
+			ProjectID: command.ProjectID,
+		})
+
+		return nil, err
+	}
+}
+
 func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
@@ -552,5 +570,6 @@ func MakeProjectEndpoints(
 		ListExpenses:      makeListExpensesEndpoint(expenseService),
 		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService),
 		RemoveType:        makeRemoveTypeEndpoint(typeService),
+		RemoveExpense:     makeRemoveExpenseEndpoint(expenseService),
 	}, nil
 }
