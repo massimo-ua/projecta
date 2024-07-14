@@ -28,7 +28,7 @@ type TypeService interface {
 	Find(ctx context.Context, filter TypeCollectionFilter) ([]*CostType, error)
 	FindOne(ctx context.Context, filter TypeFilter) (*CostType, error)
 	Create(ctx context.Context, command CreateTypeCommand) (*CostType, error)
-	Remove(ctx context.Context, command RemoveTypeCommand) error
+	Remove(ctx context.Context, command RemoveProjectResourceCommand) error
 	Update(ctx context.Context, command UpdateTypeCommand) error
 }
 

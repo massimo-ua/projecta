@@ -64,7 +64,6 @@ type UpdateTypeCommand struct {
 
 type RemoveTypeCommand struct {
 	ProjectID uuid.UUID
-	PersonID  uuid.UUID
 	ID        uuid.UUID
 }
 
@@ -90,4 +89,9 @@ type RemoveExpenseCommand struct {
 	ProjectID uuid.UUID
 	PersonID  uuid.UUID
 	ID        uuid.UUID
+}
+
+type RemoveProjectResourceCommand struct {
+	ProjectID  uuid.UUID
+	ResourceID uuid.UUID
 }

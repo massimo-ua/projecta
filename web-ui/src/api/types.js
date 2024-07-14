@@ -31,6 +31,14 @@ export class TypesRepository {
     return this.toType(json);
   }
 
+  async removeType(projectId, typeId) {
+    const response = await this.#request.delete(`/projects/${projectId}/types/${typeId}`);
+
+    if (!response.ok) {
+      throw new Error('Failed to remove type');
+    }
+  }
+
   toType({ type_id, name, description, category }) {
     return {
       key: type_id,

@@ -2,6 +2,7 @@ package projecta
 
 import (
 	"context"
+	"errors"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
@@ -64,9 +65,27 @@ func (s *TypeServiceImpl) Create(ctx context.Context, command CreateTypeCommand)
 	return t, nil
 }
 
-func (s *TypeServiceImpl) Remove(ctx context.Context, command RemoveTypeCommand) error {
-	//TODO implement me
-	panic("implement me")
+func (s *TypeServiceImpl) Remove(ctx context.Context, command RemoveProjectResourceCommand) error {
+	t, err := s.types.FindOne(ctx, TypeFilter{
+		TypeID:    command.ResourceID,
+		ProjectID: command.ProjectID,
+	})
+
+	if errors.Is(err, exceptions.NotFoundError) {
+		return exceptions.NewNotFoundException("failed to remove cost type", err)
+	}
+
+	if err != nil {
+		return exceptions.NewInternalException("failed to remove cost type", err)
+	}
+
+	err = s.types.Remove(ctx, t)
+
+	if err != nil {
+		return exceptions.NewInternalException("failed to remove cost type", err)
+	}
+
+	return nil
 }
 
 func (s *TypeServiceImpl) Update(ctx context.Context, command UpdateTypeCommand) error {

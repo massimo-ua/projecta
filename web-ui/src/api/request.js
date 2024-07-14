@@ -34,4 +34,16 @@ export class Request {
       body: JSON.stringify(data),
     });
   }
+
+  async delete(url, options) {
+    const token = await this.#authProvider.getToken();
+    return await fetch(`${this.#baseUrl}${url}`, {
+      ...options,
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
 }

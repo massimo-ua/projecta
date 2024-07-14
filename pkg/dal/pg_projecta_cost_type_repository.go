@@ -98,6 +98,7 @@ func (r *PgProjectaCostTypeRepository) Save(ctx context.Context, costType *proje
 }
 
 func (r *PgProjectaCostTypeRepository) Remove(ctx context.Context, costType *projecta.CostType) error {
+	// TODO: Verify that the person is the owner of the project that the cost type belongs to
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_cost_types")
 	qb.Where(qb.Equal("type_id", costType.ID.String()))
