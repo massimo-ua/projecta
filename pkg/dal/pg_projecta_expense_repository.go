@@ -235,7 +235,7 @@ func (r *PgProjectaExpenseRepository) Remove(ctx context.Context, expense *proje
 	return err
 }
 
-func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.ExpenseCollectionFilter) ([]*projecta.Expense, error) {
+func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.ExpenseCollectionFilter) (*projecta.ExpenseCollection, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -248,6 +248,42 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_expenses.type_id")
 	qb.Join("people", "people.person_id = projecta_expenses.owner_id")
 	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
+
+	qb.Where(qb.Equal("projecta_expenses.owner_id", personID.String()))
+	qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
+
+	if filter.CategoryID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_expenses.category_id", filter.CategoryID.String()))
+	}
+
+	if filter.TypeID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_expenses.type_id", filter.TypeID.String()))
+	}
+
+	qb.Select(qb.As("COUNT(*)", "total"))
+
+	sql, args := qb.Build()
+
+	var total int
+
+	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	qb.Select() // reset select
+
+	if filter.Limit == 0 {
+		filter.Limit = core.DefaultLimit
+	}
+
+	qb.Limit(filter.Limit)
+	qb.Offset(filter.Offset)
+
+	if filter.OrderBy != "" && filter.Order != "" {
+		qb.OrderBy(fmt.Sprintf("projecta_expenses.%s %s", filter.OrderBy, filter.Order.String()))
+	} else {
+		qb.OrderBy("projecta_expenses.expense_date DESC")
+	}
 
 	qb.Select(
 		"projecta_expenses.expense_id",
@@ -266,31 +302,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
 	)
 
-	qb.Where(qb.Equal("projecta_expenses.owner_id", personID.String()))
-	qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
-
-	if filter.CategoryID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_expenses.category_id", filter.CategoryID.String()))
-	}
-
-	if filter.TypeID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_expenses.type_id", filter.TypeID.String()))
-	}
-
-	if filter.Limit == 0 {
-		filter.Limit = core.DefaultLimit
-	}
-
-	qb.Limit(filter.Limit)
-	qb.Offset(filter.Offset)
-
-	if filter.OrderBy != "" && filter.Order != "" {
-		qb.OrderBy(fmt.Sprintf("projecta_expenses.%s %s", filter.OrderBy, filter.Order.String()))
-	} else {
-		qb.OrderBy("projecta_expenses.expense_date DESC")
-	}
-
-	sql, args := qb.Build()
+	sql, args = qb.Build()
 
 	rows, err := r.db.Query(ctx, sql, args...)
 
@@ -360,7 +372,10 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 		expenses = append(expenses, expense)
 	}
 
-	return expenses, nil
+	return &projecta.ExpenseCollection{
+		Expenses: expenses,
+		Total:    total,
+	}, nil
 }
 
 func toExpense(

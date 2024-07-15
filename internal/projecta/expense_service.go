@@ -106,12 +106,12 @@ func (s *ExpenseServiceImpl) Create(ctx context.Context, command CreateExpenseCo
 	return expense, nil
 }
 
-func (s *ExpenseServiceImpl) Find(ctx context.Context, filter ExpenseCollectionFilter) ([]*Expense, error) {
-	expenses, err := s.expenses.Find(ctx, filter)
+func (s *ExpenseServiceImpl) Find(ctx context.Context, filter ExpenseCollectionFilter) (*ExpenseCollection, error) {
+	collection, err := s.expenses.Find(ctx, filter)
 
 	if err != nil {
 		return nil, exceptions.NewInternalException(FailedToFindExpenses, err)
 	}
 
-	return expenses, nil
+	return collection, nil
 }

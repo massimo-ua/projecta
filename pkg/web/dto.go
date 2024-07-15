@@ -3,6 +3,7 @@ package web
 type PaginationDTO struct {
 	Limit  int `json:"limit"`
 	Offset int `json:"offset"`
+	Total  int `json:"total"`
 }
 
 type LoginDTO struct {

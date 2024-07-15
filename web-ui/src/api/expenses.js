@@ -34,8 +34,8 @@ export class ExpensesRepository {
     const url = query ? `${resourceUrl}?${query}` : resourceUrl;
     const response = await this.#request.get(url);
 
-    const { expenses } = response;
-    return expenses.map(toDomain);
+    const { expenses, total } = response;
+    return [expenses.map(toDomain), total];
   }
 
   async addExpense(projectId, expense) {

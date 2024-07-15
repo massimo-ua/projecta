@@ -27,3 +27,8 @@ func NewExpense(id uuid.UUID, project *Project, person *Owner, costType *CostTyp
 		Date:        date,
 	}
 }
+
+type ExpenseCollection struct {
+	Expenses []*Expense
+	Total    int
+}

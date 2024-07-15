@@ -422,11 +422,15 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(projecta.ExpenseCollectionFilter)
 
-		expenses, err := svc.Find(ctx, filter)
+		collection, err := svc.Find(ctx, filter)
+
+		if err != nil {
+			return nil, err
+		}
 
 		var list []ExpenseDTO = make([]ExpenseDTO, 0)
 
-		for _, e := range expenses {
+		for _, e := range collection.Expenses {
 			list = append(list, ExpenseDTO{
 				ExpenseID: e.ID.String(),
 				Project: ProjectDTO{
@@ -464,6 +468,7 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 			PaginationDTO: PaginationDTO{
 				Limit:  filter.Limit,
 				Offset: filter.Offset,
+				Total:  collection.Total,
 			},
 		}, err
 	}
@@ -479,7 +484,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 		var total *money.Money
 
 		for next {
-			rows, err := svc.Find(ctx, projecta.ExpenseCollectionFilter{
+			page, err := svc.Find(ctx, projecta.ExpenseCollectionFilter{
 				ProjectID: projectID,
 				Pagination: core.Pagination{
 					Limit:  limit,
@@ -491,7 +496,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 				return nil, err
 			}
 
-			for _, e := range rows {
+			for _, e := range page.Expenses {
 				if total == nil {
 					total = e.Amount
 				} else {
@@ -507,7 +512,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 				}
 			}
 
-			if len(rows) < limit {
+			if len(page.Expenses) < limit {
 				next = false
 			}
 

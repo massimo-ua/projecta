@@ -33,7 +33,7 @@ type TypeService interface {
 }
 
 type ExpenseService interface {
-	Find(ctx context.Context, filter ExpenseCollectionFilter) ([]*Expense, error)
+	Find(ctx context.Context, filter ExpenseCollectionFilter) (*ExpenseCollection, error)
 	Create(ctx context.Context, command CreateExpenseCommand) (*Expense, error)
 	Update(ctx context.Context, command UpdateExpenseCommand) error
 	Remove(ctx context.Context, command RemoveExpenseCommand) error
@@ -62,7 +62,7 @@ type TypeRepository interface {
 }
 
 type ExpenseRepository interface {
-	Find(ctx context.Context, filter ExpenseCollectionFilter) ([]*Expense, error)
+	Find(ctx context.Context, filter ExpenseCollectionFilter) (*ExpenseCollection, error)
 	FindOne(ctx context.Context, filter ExpenseFilter) (*Expense, error)
 	Save(ctx context.Context, expense *Expense) error
 	Remove(ctx context.Context, expense *Expense) error

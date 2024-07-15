@@ -7,6 +7,8 @@ import AddExpenseModal from './AddExpenseModal';
 import RemoveExpenseButton from './RemoveExpenseButton';
 import { expensesRepository } from '../../api';
 
+const PAGE_SIZE = 5;
+const DEFAULT_OFFSET = 0;
 const columns = [
   {
     title: 'ID',
@@ -48,10 +50,13 @@ const columns = [
 
 export function Expenses() {
   const { projectId } = useParams();
-  const [loading, expenses, setFilter] = useExpenses();
+  const [loading, expenses, total, setFilter] = useExpenses();
   const [addModalOpened, setAddModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const onChange = (e) => console.log('ExpensesTable.onChange', e);
+  const onPaginationChange = (nextPage) => {
+    setCurrentPage(nextPage);
+  };
   const onAddExpenseClick = () => {
     if (!addModalOpened) {
       setAddModalOpen(true);
@@ -61,18 +66,18 @@ export function Expenses() {
   useEffect(() => {
     setFilter({
       projectId,
-      limit: 10,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset: (currentPage - 1) * PAGE_SIZE,
     });
-  }, []);
+  }, [currentPage]);
 
   const onCancel = () => setAddModalOpen(false);
   const onSucces = () => {
     setAddModalOpen(false);
     setFilter({
       projectId,
-      limit: 10,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
     });
   };
 
@@ -81,8 +86,8 @@ export function Expenses() {
       .then(() => {
         setFilter({
           projectId,
-          limit: 10,
-          offset: 0,
+          limit: PAGE_SIZE,
+          offset: DEFAULT_OFFSET,
         });
       })
       .catch((error) => {
@@ -102,9 +107,15 @@ export function Expenses() {
           <RemoveExpenseButton expenseId={expense.id} onClick={onRemoveButtonClick}/>
         ),
       }]}
-      onChange={onChange}
       showSorterTooltip={{
         target: 'sorter-icon',
+      }}
+      pagination={{
+        total,
+        current: currentPage,
+        pageSize: PAGE_SIZE,
+        position: [PAGE_SIZE < total ? 'bottomRight' : 'none'],
+        onChange: onPaginationChange,
       }}
     />
     <AddExpenseModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
