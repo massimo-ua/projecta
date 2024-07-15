@@ -16,7 +16,7 @@ func NewCategoryService(repository CategoryRepository, projectService ProjectSer
 	return &CategoryServiceImpl{repository: repository, projectService: projectService}
 }
 
-func (s *CategoryServiceImpl) Find(ctx context.Context, filter CategoryCollectionFilter) ([]*CostCategory, error) {
+func (s *CategoryServiceImpl) Find(ctx context.Context, filter CategoryCollectionFilter) (*CostCategoryCollection, error) {
 	categories, err := s.repository.Find(ctx, filter)
 
 	if err != nil {

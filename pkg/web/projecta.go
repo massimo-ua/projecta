@@ -397,11 +397,11 @@ func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint 
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(projecta.CategoryCollectionFilter)
 
-		categories, err := svc.Find(ctx, filter)
+		collection, err := svc.Find(ctx, filter)
 
 		var list []CategoryDTO = make([]CategoryDTO, 0)
 
-		for _, c := range categories {
+		for _, c := range collection.Elements() {
 			list = append(list, CategoryDTO{
 				CategoryID:  c.ID.String(),
 				Name:        c.Name,
@@ -414,6 +414,7 @@ func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint 
 			PaginationDTO: PaginationDTO{
 				Limit:  filter.Limit,
 				Offset: filter.Offset,
+				Total:  collection.Total(),
 			},
 		}, err
 	}

@@ -1,7 +1,8 @@
 import { useParams } from 'react-router-dom';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Skeleton, Table } from 'antd';
-import useCategories from '../../hooks/categories.js';
+import useCategories from '../../hooks/categories';
+import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
 
 const columns = [
   {
@@ -23,24 +24,38 @@ const columns = [
 
 export function Categories() {
   const { projectId } = useParams();
-  const [loading, categories, setFilter] = useCategories();
+  const [loading, categories, total, setFilter] = useCategories();
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const onChange = console.log.bind('CategoriesTable.onChange');
+  const onPaginationChange = (nextPage) => {
+    setCurrentPage(nextPage);
+  };
 
   useEffect(() => {
     setFilter({
       projectId,
-      limit: 10,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset: (currentPage - 1) * PAGE_SIZE,
+    });
+  }, [currentPage]);
+
+  useEffect(() => {
+    setFilter({
+      projectId,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
     });
   }, []);
   return loading ? <Skeleton active /> : (
     <Table
       dataSource={categories}
       columns={columns}
-      onChange={onChange}
-      showSorterTooltip={{
-        target: 'sorter-icon',
+      pagination={{
+        total,
+        current: currentPage,
+        pageSize: PAGE_SIZE,
+        position: [PAGE_SIZE < total ? 'bottomRight' : 'none'],
+        onChange: onPaginationChange,
       }}
     />
   );

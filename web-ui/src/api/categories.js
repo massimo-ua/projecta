@@ -11,12 +11,12 @@ export class CategoriesRepository {
     const url = query ? `${resourceUrl}?${query}` : resourceUrl;
     const response = await this.#request.get(url);
 
-    const { categories } = response;
-    return categories.map(({ category_id, name, description }) => ({
+    const { categories, total } = response;
+    return [categories.map(({ category_id, name, description }) => ({
       key: category_id,
       id: category_id,
       name,
       description,
-    }));
+    })), total];
   }
 }

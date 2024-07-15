@@ -11,7 +11,7 @@ export default function AddTypeModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
   const [form] = useForm();
-  const [, categories, setCategoriesFilter] = useCategories();
+  const [, categories, , setCategoriesFilter] = useCategories();
 
   const handleAdd = () => {
     const {

@@ -5,6 +5,7 @@ export default function useCategories() {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [filter, setFilter] = useState();
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     if (!filter) {
@@ -19,11 +20,12 @@ export default function useCategories() {
 
     setLoading(true);
     categoriesRepository.getCategories(projectId, limit, offset)
-      .then((data) => {
+      .then(([data, total]) => {
         setCategories(data);
+        setTotal(total);
       })
       .finally(() => setLoading(false));
   }, [filter]);
 
-  return [loading, categories, setFilter];
+  return [loading, categories, total, setFilter];
 }

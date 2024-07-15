@@ -22,7 +22,7 @@ func NewPgProjectaCategoryRepository(pool *pgxpool.Pool) *PgProjectaCostCategory
 	}
 }
 
-func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) ([]*projecta.CostCategory, error) {
+func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -31,17 +31,8 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_categories")
-	qb.Select(
-		"projecta_cost_categories.category_id",
-		"projecta_cost_categories.project_id",
-		"projecta_cost_categories.name",
-		"projecta_cost_categories.description",
-	)
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_cost_categories.project_id")
 	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
-	qb.Limit(filter.Limit)
-	qb.Offset(filter.Offset)
-
 	if filter.Name != "" {
 		qb.Where(qb.Like("projecta_cost_categories.name", fmt.Sprintf("%s%%", filter.Name)))
 	}
@@ -50,9 +41,30 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 		qb.Where(qb.Equal("projecta_cost_categories.project_id", filter.ProjectID.String()))
 	}
 
+	qb.Select(qb.As("COUNT(*)", "total"))
+
 	sql, args := qb.Build()
 
-	var categories []*projecta.CostCategory = make([]*projecta.CostCategory, 0)
+	var total int
+
+	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	collection := projecta.NewCategoryCollection(total)
+
+	qb.Select() // reset select
+	qb.Select(
+		"projecta_cost_categories.category_id",
+		"projecta_cost_categories.project_id",
+		"projecta_cost_categories.name",
+		"projecta_cost_categories.description",
+	)
+	qb.Limit(filter.Limit)
+	qb.Offset(filter.Offset)
+	qb.OrderBy("projecta_cost_categories.name ASC")
+
+	sql, args = qb.Build()
 
 	rows, err := r.db.Query(ctx, sql, args...)
 
@@ -70,7 +82,7 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 			description string
 		)
 
-		if err := rows.Scan(&categoryID, &projectID, &name, &description); err != nil {
+		if err = rows.Scan(&categoryID, &projectID, &name, &description); err != nil {
 			return nil, err
 		}
 
@@ -80,10 +92,10 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 			return nil, err
 		}
 
-		categories = append(categories, category)
+		collection.Add(category)
 	}
 
-	return categories, nil
+	return collection, nil
 }
 
 func (r *PgProjectaCostCategoryRepository) FindOne(ctx context.Context, filter projecta.CategoryFilter) (*projecta.CostCategory, error) {

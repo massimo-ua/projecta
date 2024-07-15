@@ -6,7 +6,7 @@ import (
 )
 
 type CategoryService interface {
-	Find(ctx context.Context, filter CategoryCollectionFilter) ([]*CostCategory, error)
+	Find(ctx context.Context, filter CategoryCollectionFilter) (*CostCategoryCollection, error)
 	Create(ctx context.Context, command CreateCategoryCommand) (*CostCategory, error)
 	Update(ctx context.Context, command UpdateCategoryCommand) error
 	Remove(ctx context.Context, command RemoveCategoryCommand) error
@@ -40,7 +40,7 @@ type ExpenseService interface {
 }
 
 type CategoryRepository interface {
-	Find(ctx context.Context, filter CategoryCollectionFilter) ([]*CostCategory, error)
+	Find(ctx context.Context, filter CategoryCollectionFilter) (*CostCategoryCollection, error)
 	FindOne(ctx context.Context, filter CategoryFilter) (*CostCategory, error)
 	Save(ctx context.Context, category *CostCategory) error
 	Remove(ctx context.Context, category *CostCategory) error
