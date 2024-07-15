@@ -111,7 +111,7 @@ func (r *PgProjectaCostTypeRepository) Remove(ctx context.Context, costType *pro
 	return err
 }
 
-func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta.TypeCollectionFilter) ([]*projecta.CostType, error) {
+func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta.TypeCollectionFilter) (*projecta.CostTypeCollection, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -120,19 +120,9 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_types")
-	qb.Select(
-		"type_id",
-		"projecta_projects.project_id",
-		"projecta_cost_types.category_id",
-		"projecta_cost_categories.name as category_name",
-		"projecta_cost_types.name",
-		"projecta_cost_types.description",
-	)
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_cost_types.project_id")
 	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
-	qb.Limit(filter.Limit)
-	qb.Offset(filter.Offset)
 
 	if filter.ProjectID != uuid.Nil {
 		qb.Where(qb.Equal("projecta_cost_types.project_id", filter.ProjectID.String()))
@@ -146,9 +136,37 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 		qb.Where(qb.Equal("projecta_cost_types.category_id", filter.CategoryID.String()))
 	}
 
-	var costTypes []*projecta.CostType = make([]*projecta.CostType, 0)
+	qb.Select(qb.As("count(*)", "total"))
 
 	sql, args := qb.Build()
+
+	var total int
+
+	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	costTypes := projecta.NewCostTypeCollection(total)
+
+	if total == 0 {
+		return costTypes, nil
+	}
+
+	qb.Select() // Reset the select clause
+
+	qb.Select(
+		"type_id",
+		"projecta_projects.project_id",
+		"projecta_cost_types.category_id",
+		"projecta_cost_categories.name as category_name",
+		"projecta_cost_types.name",
+		"projecta_cost_types.description",
+	)
+
+	qb.Limit(filter.Limit)
+	qb.Offset(filter.Offset)
+
+	sql, args = qb.Build()
 
 	rows, err := r.db.Query(ctx, sql, args...)
 
@@ -168,7 +186,7 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 			description  string
 		)
 
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&typeID,
 			&projectID,
 			&categoryID,
@@ -185,7 +203,7 @@ func (r *PgProjectaCostTypeRepository) Find(ctx context.Context, filter projecta
 			return nil, err
 		}
 
-		costTypes = append(costTypes, costType)
+		costTypes.Add(costType)
 	}
 
 	return costTypes, nil

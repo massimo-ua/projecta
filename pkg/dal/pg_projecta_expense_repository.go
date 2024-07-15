@@ -310,7 +310,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 		return nil, err
 	}
 
-	expenses := make([]*projecta.Expense, 0)
+	collection := projecta.NewExpenseCollection(total)
 
 	defer rows.Close()
 
@@ -331,7 +331,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 			displayName  string
 			expenseDate  time.Time
 		)
-		err := rows.Scan(
+		err = rows.Scan(
 			&expenseID,
 			&projectID,
 			&projectName,
@@ -369,13 +369,10 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 			expenseDate,
 		)
 
-		expenses = append(expenses, expense)
+		collection.Add(expense)
 	}
 
-	return &projecta.ExpenseCollection{
-		Expenses: expenses,
-		Total:    total,
-	}, nil
+	return collection, nil
 }
 
 func toExpense(

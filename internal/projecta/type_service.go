@@ -20,7 +20,7 @@ func (s *TypeServiceImpl) FindOne(ctx context.Context, filter TypeFilter) (*Cost
 	return s.types.FindOne(ctx, filter)
 }
 
-func (s *TypeServiceImpl) Find(ctx context.Context, filter TypeCollectionFilter) ([]*CostType, error) {
+func (s *TypeServiceImpl) Find(ctx context.Context, filter TypeCollectionFilter) (*CostTypeCollection, error) {
 	return s.types.Find(ctx, filter)
 }
 

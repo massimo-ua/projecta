@@ -3,6 +3,7 @@ package projecta
 import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"time"
 )
 
@@ -28,7 +29,8 @@ func NewExpense(id uuid.UUID, project *Project, person *Owner, costType *CostTyp
 	}
 }
 
-type ExpenseCollection struct {
-	Expenses []*Expense
-	Total    int
+type ExpenseCollection = core.PaginatedCollection[*Expense]
+
+func NewExpenseCollection(total int) *ExpenseCollection {
+	return core.NewPaginatedCollection[*Expense](total)
 }

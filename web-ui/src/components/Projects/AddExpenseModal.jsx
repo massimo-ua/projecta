@@ -11,7 +11,7 @@ export default function AddExpenseModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
 
-  const [, types, setTypesFilter] = useTypes();
+  const [, types, , setTypesFilter] = useTypes();
   const [form] = useForm();
 
   const handleAdd = () => {

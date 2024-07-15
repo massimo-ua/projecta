@@ -1,6 +1,9 @@
 package projecta
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
+)
 
 type CostType struct {
 	ID          uuid.UUID
@@ -20,4 +23,10 @@ func NewCostType(projectID uuid.UUID, category *CostCategory, name string, descr
 	}
 
 	return t, nil
+}
+
+type CostTypeCollection = core.PaginatedCollection[*CostType]
+
+func NewCostTypeCollection(total int) *CostTypeCollection {
+	return core.NewPaginatedCollection[*CostType](total)
 }

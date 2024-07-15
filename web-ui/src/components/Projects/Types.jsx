@@ -7,6 +7,7 @@ import { BuildOutlined } from '@ant-design/icons';
 import AddTypeModal from './AddTypeModal.jsx';
 import RemoveTypeButton from './RemoveTypeButton.jsx';
 import { typesRepository } from '../../api/index.js';
+import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants.js';
 
 const columns = [
   {
@@ -34,14 +35,27 @@ const columns = [
 
 export default function Types() {
   const { projectId } = useParams();
-  const [loading, types, setFilter] = useTypes();
+  const [loading, types, total, setFilter] = useTypes();
   const [addModalOpened, setAddModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const onPaginationChange = (nextPage) => {
+    setCurrentPage(nextPage);
+  };
 
   useEffect(() => {
     setFilter({
       projectId,
-      limit: 10,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset: (currentPage - 1) * PAGE_SIZE,
+    });
+  }, [currentPage]);
+
+  useEffect(() => {
+    setFilter({
+      projectId,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
     });
   }, [projectId, setFilter]);
 
@@ -55,8 +69,8 @@ export default function Types() {
     setAddModalOpen(false);
     setFilter({
       projectId,
-      limit: 10,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
     });
   };
 
@@ -65,8 +79,8 @@ export default function Types() {
       .then(() => {
         setFilter({
           projectId,
-          limit: 10,
-          offset: 0,
+          limit: PAGE_SIZE,
+          offset: DEFAULT_OFFSET,
         });
       })
       .catch((error) => {
@@ -88,6 +102,13 @@ export default function Types() {
         }]}
         showSorterTooltip={{
           target: 'sorter-icon',
+        }}
+        pagination={{
+          total,
+          current: currentPage,
+          pageSize: PAGE_SIZE,
+          position: [PAGE_SIZE < total ? 'bottomRight' : 'none'],
+          onChange: onPaginationChange,
         }}
       />
       <AddTypeModal open={addModalOpened} onSuccess={onSucces} onCancel={onCancel} />

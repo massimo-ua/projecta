@@ -11,8 +11,8 @@ export class TypesRepository {
     const url = query ? `${resourceUrl}?${query}` : resourceUrl;
     const response = await this.#request.get(url);
 
-    const { types } = response;
-    return types.map((type) => this.toType(type));
+    const { types, total } = response;
+    return [types.map((type) => this.toType(type)), total];
   }
 
   async addType(projectId, { categoryId, name, description }) {

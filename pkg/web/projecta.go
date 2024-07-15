@@ -366,11 +366,11 @@ func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(projecta.TypeCollectionFilter)
 
-		projects, err := svc.Find(ctx, filter)
+		collection, err := svc.Find(ctx, filter)
 
 		var list []TypeDTO = make([]TypeDTO, 0)
 
-		for _, p := range projects {
+		for _, p := range collection.Elements() {
 			list = append(list, TypeDTO{
 				TypeID:      p.ID.String(),
 				Name:        p.Name,
@@ -387,6 +387,7 @@ func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 			PaginationDTO: PaginationDTO{
 				Limit:  filter.Limit,
 				Offset: filter.Offset,
+				Total:  collection.Total(),
 			},
 		}, err
 	}
@@ -430,7 +431,7 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 
 		var list []ExpenseDTO = make([]ExpenseDTO, 0)
 
-		for _, e := range collection.Expenses {
+		for _, e := range collection.Elements() {
 			list = append(list, ExpenseDTO{
 				ExpenseID: e.ID.String(),
 				Project: ProjectDTO{
@@ -468,7 +469,7 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 			PaginationDTO: PaginationDTO{
 				Limit:  filter.Limit,
 				Offset: filter.Offset,
-				Total:  collection.Total,
+				Total:  collection.Total(),
 			},
 		}, err
 	}
@@ -496,7 +497,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 				return nil, err
 			}
 
-			for _, e := range page.Expenses {
+			for _, e := range page.Elements() {
 				if total == nil {
 					total = e.Amount
 				} else {
@@ -512,7 +513,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 				}
 			}
 
-			if len(page.Expenses) < limit {
+			if len(page.Elements()) < limit {
 				next = false
 			}
 

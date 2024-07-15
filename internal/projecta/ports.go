@@ -25,7 +25,7 @@ type ProjectService interface {
 }
 
 type TypeService interface {
-	Find(ctx context.Context, filter TypeCollectionFilter) ([]*CostType, error)
+	Find(ctx context.Context, filter TypeCollectionFilter) (*CostTypeCollection, error)
 	FindOne(ctx context.Context, filter TypeFilter) (*CostType, error)
 	Create(ctx context.Context, command CreateTypeCommand) (*CostType, error)
 	Remove(ctx context.Context, command RemoveProjectResourceCommand) error
@@ -55,7 +55,7 @@ type ProjectRepository interface {
 }
 
 type TypeRepository interface {
-	Find(ctx context.Context, filter TypeCollectionFilter) ([]*CostType, error)
+	Find(ctx context.Context, filter TypeCollectionFilter) (*CostTypeCollection, error)
 	FindOne(ctx context.Context, filter TypeFilter) (*CostType, error)
 	Save(ctx context.Context, costType *CostType) error
 	Remove(ctx context.Context, costType *CostType) error

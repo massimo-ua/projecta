@@ -6,9 +6,8 @@ import { DollarOutlined } from '@ant-design/icons';
 import AddExpenseModal from './AddExpenseModal';
 import RemoveExpenseButton from './RemoveExpenseButton';
 import { expensesRepository } from '../../api';
+import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
 
-const PAGE_SIZE = 5;
-const DEFAULT_OFFSET = 0;
 const columns = [
   {
     title: 'ID',
