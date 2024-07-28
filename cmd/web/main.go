@@ -1,9 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"gitlab.com/massimo-ua/projecta/pkg/broker"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
 	"gitlab.com/massimo-ua/projecta/pkg/dal"
 	"gitlab.com/massimo-ua/projecta/pkg/web"
@@ -22,14 +22,16 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	brk, err := broker.NewAMQPBroker(os.Getenv("AMQP_URI"))
+	os.Stdout.Write([]byte("Connected to the database\n"))
 
-	if err != nil {
-		log.Fatal(err)
-	}
+	//brk, err := broker.NewAMQPBroker(os.Getenv("AMQP_URI"))
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
 	defer func() {
-		brk.Close()
+		//brk.Close()
 		pool.Close()
 	}()
 
@@ -79,14 +81,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	httpListener, err := net.Listen("tcp", os.Getenv("HTTP_URI"))
+	uri := os.Getenv("HTTP_URI")
+	httpListener, err := net.Listen("tcp", uri)
 	if err != nil {
-		log.Fatalf("failed to initialize HTTP listen: %s", err.Error())
+		os.Stderr.Write([]byte(fmt.Sprintf("failed to initialize HTTP listen: %s", err.Error())))
 	}
 
+	os.Stdout.Write([]byte(fmt.Sprintf("HTTP server is listening on %s\n", uri)))
 	err = http.Serve(httpListener, webAPI)
 
 	if err != nil {
-		log.Fatalf("failed to serve HTTP: %s", err.Error())
+		os.Stderr.Write([]byte(fmt.Sprintf("failed to serve HTTP: %s", err.Error())))
 	}
 }

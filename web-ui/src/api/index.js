@@ -5,7 +5,7 @@ import { TypesRepository } from './types.js';
 import { CategoriesRepository } from './categories.js';
 import { ExpensesRepository } from './expenses.js';
 
-const baseUrl = 'http://localhost:5173/api';
+const baseUrl = '/api';
 export const authProvider = new Auth(baseUrl);
 const request = new Request(baseUrl, authProvider);
 
