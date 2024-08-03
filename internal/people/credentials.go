@@ -53,19 +53,23 @@ func (c Credentials) SetIdentifier(identifier string) Credentials {
 	}
 }
 
-func NewCredentials(provider string, registrationID string, identifier string) (Credentials, error) {
+func NewCredentials(provider string, id string, identity string) (Credentials, error) {
 	p, err := ToIdentityProvider(provider)
 	if err != nil {
 		return Credentials{}, err
 	}
 
-	if identifier == "" || registrationID == "" {
+	if id == "" && p == LOCAL {
+		return Credentials{}, errors.New("invalid credentials")
+	}
+
+	if identity == "" {
 		return Credentials{}, errors.New("invalid credentials")
 	}
 
 	return Credentials{
 		provider:       p,
-		identifier:     identifier,
-		registrationID: registrationID,
+		identifier:     identity,
+		registrationID: id,
 	}, nil
 }

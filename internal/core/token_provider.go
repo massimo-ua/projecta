@@ -35,6 +35,10 @@ type AuthTokenProvider interface {
 	ValidateRefreshToken(tokenID uuid.UUID, refreshToken string) bool
 }
 
+type ThirdPartyAuth interface {
+	ValidateToken(token string) (*AuthTokenClaims, error)
+}
+
 type TokenRing struct {
 	accessToken  string
 	refreshToken string

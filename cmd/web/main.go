@@ -13,7 +13,10 @@ import (
 	"os"
 )
 
-const TokenTTL = 300
+const (
+	TokenTTL                  = 300
+	GoogleCertCacheSecondsTTL = 24 * 60 * 60
+)
 
 func main() {
 	pool, err := dal.Connect(os.Getenv("DB_URI"))
@@ -37,6 +40,10 @@ func main() {
 
 	peopleRepository := dal.NewPgPeopleRepository(pool)
 	hasher := crypto.NewBcryptHasher(0)
+	googleAuth := crypto.NewGoogleAuthProvider(
+		os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleCertCacheSecondsTTL,
+	)
 	tokenProvider := crypto.NewJwtTokenProvider(
 		os.Getenv("JWT_SECRET"),
 		TokenTTL,
@@ -46,6 +53,7 @@ func main() {
 		peopleRepository,
 		tokenProvider,
 		hasher,
+		googleAuth,
 	)
 
 	customerService := people.NewCustomerService(

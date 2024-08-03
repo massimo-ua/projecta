@@ -1,9 +1,10 @@
 import {
-  Button, Col, Divider, Form, Input, Row, message,
+  Button, Col, Divider, Form, Input, Row, message, Tooltip,
 } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import HomeLayout from '../Layout';
 import { authProvider } from '../api';
+import { GoogleLoginBtn } from './GoogleLoginBtn';
 
 export function Login() {
   const [messageApi, contextHolder] = message.useMessage();
@@ -25,10 +26,16 @@ export function Login() {
   return (
     <HomeLayout>
       {contextHolder}
+      <Divider orientation="center">Social</Divider>
+      <Row>
+        <Col flex={3} style={{ padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <GoogleLoginBtn />
+        </Col>
+      </Row>
       <Divider orientation="center">Login</Divider>
       <Row>
-        <Col flex={3} />
-        <Col flex={3} style={{ padding: '10px' }}>
+        <Col flex={5} />
+        <Col flex={1} style={{ padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <Form
             name="basic"
             labelCol={{
@@ -39,6 +46,7 @@ export function Login() {
             }}
             style={{
               maxWidth: 600,
+              minWidth: 400,
             }}
             initialValues={{
               remember: true,
@@ -85,7 +93,7 @@ export function Login() {
             </Form.Item>
           </Form>
         </Col>
-        <Col flex={3} />
+        <Col flex={6} />
       </Row>
     </HomeLayout>
   );

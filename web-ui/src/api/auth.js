@@ -112,6 +112,36 @@ export class Auth {
     return this.#pendingTokenRequest;
   }
 
+  async loginSocial(token, provider) {
+    if (this.#pendingTokenRequest) {
+      return this.#pendingTokenRequest;
+    }
+
+    this.#pendingTokenRequest = fetch(`${this.#baseUrl}/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        identity_provider: provider,
+      }),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to login');
+        }
+
+        return response.json();
+      })
+      .then((json) => this.#handleAuthResponse(json))
+      .finally(() => {
+        this.#pendingTokenRequest = null;
+      });
+
+    return this.#pendingTokenRequest;
+  }
+
   logout() {
     localStorage.removeItem(this.#tokenKey);
     localStorage.removeItem(this.#refreshTokenKey);

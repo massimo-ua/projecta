@@ -10,6 +10,7 @@ export * from './Projects/Categories';
 export * from './Projects/Expenses';
 export * from './Login';
 export * from './AuthGuard';
+export * from './GoogleLoginBtn';
 
 export const Types = TypesComponent;
 export const Total = TotalComponent;

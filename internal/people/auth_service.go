@@ -11,21 +11,35 @@ type AuthServiceImpl struct {
 	peopleRepository Repository
 	tokenProvider    core.AuthTokenProvider
 	hasher           core.Hasher
+	google           core.ThirdPartyAuth
 }
 
 func NewAuthService(
 	peopleRepository Repository,
 	tokenProvider core.AuthTokenProvider,
 	hasher core.Hasher,
+	google core.ThirdPartyAuth,
 ) AuthService {
 	return &AuthServiceImpl{
 		peopleRepository: peopleRepository,
 		tokenProvider:    tokenProvider,
 		hasher:           hasher,
+		google:           google,
 	}
 }
 
 func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*core.AuthResponse, error) {
+	switch credentials.Provider() {
+	case LOCAL:
+		return s.loginWithLocal(ctx, credentials)
+	case GOOGLE:
+		return s.loginWithGoogle(ctx, credentials.Identifier())
+	default:
+		return nil, errors.New("unsupported identity provider")
+	}
+}
+
+func (s *AuthServiceImpl) loginWithLocal(ctx context.Context, credentials Credentials) (*core.AuthResponse, error) {
 	personID, hash, err := s.peopleRepository.FindCredentials(
 		ctx,
 		credentials.Provider(),
@@ -39,6 +53,10 @@ func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*
 		return nil, errors.Join(loginFailedError, err)
 	}
 
+	return s.authorizePerson(ctx, personID)
+}
+
+func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUID) (*core.AuthResponse, error) {
 	customer, err := s.peopleRepository.FindByID(ctx, personID)
 
 	if err != nil {
@@ -56,6 +74,22 @@ func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*
 	}
 
 	return authResponse, nil
+}
+
+func (s *AuthServiceImpl) loginWithGoogle(ctx context.Context, token string) (*core.AuthResponse, error) {
+	claims, err := s.google.ValidateToken(token)
+
+	if err != nil {
+		return nil, errors.Join(loginFailedError, err)
+	}
+
+	personID, _, err := s.peopleRepository.FindCredentials(ctx, GOOGLE, claims.Sub)
+
+	if err != nil {
+		return nil, errors.Join(loginFailedError, err)
+	}
+
+	return s.authorizePerson(ctx, personID)
 }
 
 func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing) (*core.AuthResponse, error) {
