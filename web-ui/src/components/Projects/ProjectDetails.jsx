@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   BuildOutlined,
   DollarOutlined,
@@ -6,14 +6,14 @@ import {
   PieChartOutlined,
 } from '@ant-design/icons';
 import { Layout, Menu } from 'antd';
-import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import HomeLayout from '../../Layout.jsx';
 
 const { Sider, Content } = Layout;
 
 export function ProjectDetails() {
   const navigate = useNavigate();
-  const [navMenuItems, setNavMenuItems] = useState([{
+  const [navMenuItems] = useState([{
     key: 'resources',
     label: 'Resources',
     type: 'group',
@@ -58,7 +58,7 @@ export function ProjectDetails() {
         <Sider width="12vw">
           <Menu
             onClick={onClick}
-            style={{ height: '80vh' }}
+            style={{ height: '92vh' }}
             defaultSelectedKeys={['expenses']}
             mode="inline"
             items={navMenuItems}
