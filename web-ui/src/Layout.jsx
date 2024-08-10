@@ -11,7 +11,7 @@ export default function HomeLayout({ children }) {
   return (
     <div className="HomeLayout_container">
       <Layout style={{ width: '100%' }}>
-        <Header style={{ padding: '0 10px' }}>
+        <Header style={{ padding: '0 10px', height: '8vh' }}>
           <Row>
             <Col span={12}><Logo /></Col>
             <Col span={12} style={{ textAlign: 'right' }}><Logout /></Col>
