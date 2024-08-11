@@ -499,6 +499,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 		limit := 100
 		next := true
 		var total *money.Money
+		var remainingDownPayment *money.Money
 
 		for next {
 			page, err := svc.Find(ctx, projecta.ExpenseCollectionFilter{
@@ -527,6 +528,29 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 						return nil, err
 					}
 				}
+
+				if e.Kind == projecta.DownPayment {
+					if remainingDownPayment == nil {
+						remainingDownPayment = e.Amount
+					} else {
+						remainingDownPayment, err = remainingDownPayment.Add(e.Amount)
+						if err != nil {
+							return nil, err
+						}
+					}
+				}
+
+				if e.Amount.Amount() < 0 {
+					// compensate for down payment withdrawal
+					if remainingDownPayment == nil {
+						remainingDownPayment = e.Amount
+					} else {
+						remainingDownPayment, err = remainingDownPayment.Add(e.Amount)
+						if err != nil {
+							return nil, err
+						}
+					}
+				}
 			}
 
 			if len(page.Elements()) < limit {
@@ -542,6 +566,11 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 					Title:    "Total Expenses",
 					Amount:   total.Amount(),
 					Currency: total.Currency().Code,
+				},
+				{
+					Title:    "Remaining Down Payment",
+					Amount:   remainingDownPayment.Amount(),
+					Currency: remainingDownPayment.Currency().Code,
 				},
 			},
 		}, nil
