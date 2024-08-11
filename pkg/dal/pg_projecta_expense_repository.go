@@ -285,7 +285,10 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 
 	qb.Where(qb.Equal("projecta_expenses.owner_id", personID.String()))
 	qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
-	qb.Where(qb.GreaterThan("projecta_expenses.amount", 0))
+
+	if !filter.IncludeTechnicalExpenses {
+		qb.Where(qb.GreaterThan("projecta_expenses.amount", 0))
+	}
 
 	if filter.CategoryID != uuid.Nil {
 		qb.Where(qb.Equal("projecta_expenses.category_id", filter.CategoryID.String()))

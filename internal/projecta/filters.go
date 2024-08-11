@@ -50,7 +50,8 @@ type CategoryCollectionFilter struct {
 type ExpenseCollectionFilter struct {
 	core.Pagination
 	core.Sorting
-	ProjectID  uuid.UUID
-	CategoryID uuid.UUID
-	TypeID     uuid.UUID
+	ProjectID                uuid.UUID
+	CategoryID               uuid.UUID
+	TypeID                   uuid.UUID
+	IncludeTechnicalExpenses bool
 }

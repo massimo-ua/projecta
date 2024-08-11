@@ -508,6 +508,7 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 					Limit:  limit,
 					Offset: offset,
 				},
+				IncludeTechnicalExpenses: true,
 			})
 
 			if err != nil {
