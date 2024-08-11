@@ -25,12 +25,14 @@ type CreateCategoryDTO struct {
 }
 
 type CreateExpenseDTO struct {
-	ProjectID   string `json:"project_id"`
-	TypeID      string `json:"type_id"`
-	Description string `json:"description"`
-	Amount      int64  `json:"amount"`
-	Currency    string `json:"currency"`
-	ExpenseDate string `json:"expense_date"`
+	ProjectID       string `json:"project_id"`
+	TypeID          string `json:"type_id"`
+	Description     string `json:"description"`
+	Amount          int64  `json:"amount"`
+	Currency        string `json:"currency"`
+	ExpenseDate     string `json:"expense_date"`
+	Kind            string `json:"kind,omitempty"`
+	FromDownPayment bool   `json:"from_down_payment,omitempty"`
 }
 
 type OwnerDTO struct {
@@ -222,12 +224,25 @@ func DecodeCreateExpenseRequest(_ context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewValidationException("invalid type id", err)
 	}
 
+	var expenseKind projecta.ExpenseKind
+
+	if req.Kind == "" {
+		expenseKind = projecta.UponCompletionPayment
+	} else {
+		expenseKind, err = projecta.ToExpenseKind(req.Kind)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid expense kind", err)
+		}
+	}
+
 	return projecta.CreateExpenseCommand{
-		ProjectID:   projectUUID,
-		TypeID:      typeUUID,
-		Description: req.Description,
-		Amount:      amount,
-		ExpenseDate: date,
+		ProjectID:       projectUUID,
+		TypeID:          typeUUID,
+		Description:     req.Description,
+		Amount:          amount,
+		ExpenseDate:     date,
+		Kind:            expenseKind,
+		FromDownPayment: req.FromDownPayment,
 	}, err
 }
 

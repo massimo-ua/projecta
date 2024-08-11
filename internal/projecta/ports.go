@@ -3,6 +3,7 @@ package projecta
 import (
 	"context"
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type CategoryService interface {
@@ -62,6 +63,7 @@ type TypeRepository interface {
 }
 
 type ExpenseRepository interface {
+	core.BaseRepository
 	Find(ctx context.Context, filter ExpenseCollectionFilter) (*ExpenseCollection, error)
 	FindOne(ctx context.Context, filter ExpenseFilter) (*Expense, error)
 	Save(ctx context.Context, expense *Expense) error

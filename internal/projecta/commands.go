@@ -68,11 +68,13 @@ type RemoveTypeCommand struct {
 }
 
 type CreateExpenseCommand struct {
-	ProjectID   uuid.UUID
-	TypeID      uuid.UUID
-	Amount      *money.Money
-	Description string
-	ExpenseDate time.Time
+	ProjectID       uuid.UUID
+	TypeID          uuid.UUID
+	Amount          *money.Money
+	Description     string
+	ExpenseDate     time.Time
+	Kind            ExpenseKind
+	FromDownPayment bool
 }
 
 type UpdateExpenseCommand struct {

@@ -3,6 +3,8 @@ package projecta
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -95,7 +97,50 @@ func (s *ExpenseServiceImpl) Create(ctx context.Context, command CreateExpenseCo
 		command.Description,
 		command.Amount,
 		expenseDate,
+		command.Kind,
 	)
+
+	if command.FromDownPayment {
+		compensation := NewExpense(
+			uuid.New(),
+			project,
+			owner,
+			costType,
+			fmt.Sprintf("Compensation for %s", expense.ID.String()),
+			money.New(command.Amount.Amount()*-1, command.Amount.Currency().Code),
+			expenseDate,
+			command.Kind)
+
+		expense.SetCompensation(compensation)
+
+		txCtx, err := s.expenses.TxCtx(ctx)
+
+		defer s.expenses.RollbackTxFromCtx(txCtx)
+
+		if err != nil {
+			return nil, exceptions.NewInternalException(FailedToCreateExpense, err)
+		}
+
+		err = s.expenses.Save(txCtx, compensation)
+
+		if err != nil {
+			return nil, exceptions.NewInternalException(FailedToCreateExpense, err)
+		}
+
+		err = s.expenses.Save(txCtx, expense)
+
+		if err != nil {
+			return nil, exceptions.NewInternalException(FailedToCreateExpense, err)
+		}
+
+		err = s.expenses.CommitTxFromCtx(txCtx)
+
+		if err != nil {
+			return nil, exceptions.NewInternalException(FailedToCreateExpense, err)
+		}
+
+		return expense, nil
+	}
 
 	err = s.expenses.Save(ctx, expense)
 

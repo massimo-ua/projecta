@@ -13,12 +13,14 @@ const toDomain = ({
   expenseDate: format(parseISO(expense_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
 });
 
-const toAddExpenseDTO = ({ typeId, amount, currency, expenseDate, description }) => ({
+const toAddExpenseDTO = ({ typeId, amount, currency, expenseDate, description, expenseKind, fromDownPayment }) => ({
   type_id: typeId,
   amount: amount * 100,
   currency,
   expense_date: formatISO(expenseDate, { representation: 'complete' }),
   description,
+  kind: expenseKind,
+  from_down_payment: fromDownPayment,
 });
 
 export class ExpensesRepository {

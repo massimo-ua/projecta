@@ -6,6 +6,8 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
@@ -52,6 +54,7 @@ func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projec
 		"people.first_name",
 		"COALESCE(people.display_name, '') display_name",
 		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
+		"projecta_expenses.kind",
 	)
 
 	if filter.ProjectID != uuid.Nil {
@@ -81,6 +84,7 @@ func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projec
 		firstName    string
 		displayName  string
 		expenseDate  time.Time
+		expenseKind  string
 	)
 
 	if err := r.db.QueryRow(
@@ -102,6 +106,7 @@ func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projec
 		&firstName,
 		&displayName,
 		&expenseDate,
+		&expenseKind,
 	); err != nil {
 		return nil, err
 	}
@@ -121,6 +126,7 @@ func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projec
 		firstName,
 		displayName,
 		expenseDate,
+		expenseKind,
 	), nil
 }
 
@@ -174,7 +180,23 @@ func (r *PgProjectaExpenseRepository) create(ctx context.Context, expense *proje
 		"description",
 		"owner_id",
 		"expense_date",
+		"kind",
+		"compensatory_id",
 	)
+
+	var compensatoryID pgtype.UUID
+
+	if expense.Compensation != nil {
+		compensatoryID = pgtype.UUID{
+			Bytes: expense.Compensation.ID,
+			Valid: true,
+		}
+	} else {
+		compensatoryID = pgtype.UUID{
+			Bytes: uuid.Nil,
+			Valid: false,
+		}
+	}
 
 	qb.Values(
 		expense.ID.String(),
@@ -185,9 +207,21 @@ func (r *PgProjectaExpenseRepository) create(ctx context.Context, expense *proje
 		expense.Description,
 		expense.Owner.PersonID.String(),
 		expense.Date,
+		expense.Kind.String(),
+		compensatoryID,
 	)
 
 	sql, args := qb.Build()
+
+	tx, ok := ctx.Value(core.TxCtxKey).(pgx.Tx)
+
+	if ok {
+		if _, err := tx.Exec(ctx, sql, args...); err != nil {
+			return err
+		}
+
+		return nil
+	}
 
 	_, err := r.db.Exec(ctx, sql, args...)
 
@@ -300,6 +334,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 		"people.first_name",
 		"COALESCE(people.display_name, '') display_name",
 		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
+		"projecta_expenses.kind",
 	)
 
 	sql, args = qb.Build()
@@ -330,6 +365,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 			firstName    string
 			displayName  string
 			expenseDate  time.Time
+			expenseKind  string
 		)
 		err = rows.Scan(
 			&expenseID,
@@ -346,6 +382,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 			&firstName,
 			&displayName,
 			&expenseDate,
+			&expenseKind,
 		)
 
 		if err != nil {
@@ -367,6 +404,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 			firstName,
 			displayName,
 			expenseDate,
+			expenseKind,
 		)
 
 		collection.Add(expense)
@@ -390,6 +428,7 @@ func toExpense(
 	firstName string,
 	displayName string,
 	expenseDate time.Time,
+	expenseKind string,
 ) *projecta.Expense {
 	projectUUID := uuid.MustParse(projectID)
 	person := &projecta.Owner{
@@ -425,6 +464,8 @@ func toExpense(
 
 	expenseUUID := uuid.MustParse(expenseID)
 
+	kind, _ := projecta.ToExpenseKind(expenseKind)
+
 	expense := projecta.NewExpense(
 		expenseUUID,
 		project,
@@ -433,6 +474,7 @@ func toExpense(
 		description,
 		amountMoney,
 		expenseDate,
+		kind,
 	)
 
 	return expense
