@@ -2,13 +2,13 @@ import { useEffect } from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
-import { expensesRepository } from '../../api';
-import { ExpenseKinds } from '../../constants.js';
+import { paymentRepository } from '../../api';
+import { PaymentKind } from '../../constants';
 
 const { TextArea } = Input;
 const { useForm } = Form;
 
-export default function AddExpenseModal(props) {
+export default function AddPaymentModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
 
@@ -20,23 +20,21 @@ export default function AddExpenseModal(props) {
       typeId,
       amount,
       currency,
-      expenseDate,
+      paymentDate,
       description,
-      expenseKind,
-      fromDownPayment,
+      paymentKind,
     } = form.getFieldsValue();
-    expensesRepository.addExpense(projectId, {
+    paymentRepository.addPayment(projectId, {
       typeId,
       amount,
       currency,
-      expenseDate: expenseDate.toDate(),
+      paymentDate: paymentDate.toDate(),
       description,
-      expenseKind,
-      fromDownPayment,
+      paymentKind,
     }).then(() => {
       onSuccess();
     }).catch((e) => {
-      console.error('Failed to add expense', e.message);
+      console.error('Failed to add payment', e.message);
     });
   };
 
@@ -52,7 +50,7 @@ export default function AddExpenseModal(props) {
 
   return (
     <Modal
-      title="Add Expense"
+      title="Add Payment"
       open={ open }
       onCancel={ handleCancel }
       footer={ [
@@ -89,21 +87,14 @@ export default function AddExpenseModal(props) {
             )) }
           </Select>
         </Form.Item>
-        <Form.Item label="Kind" name="expenseKind">
+        <Form.Item label="Kind" name="paymentKind">
           <Select defaultValue={ 'UPON_COMPLETION' }>
-            { Object.entries(ExpenseKinds).map(([ id, label ]) => (
+            { Object.entries(PaymentKind).map(([ id, label ]) => (
               <Select.Option key={ id } value={ id }>
                 { label }
               </Select.Option>
             )) }
           </Select>
-        </Form.Item>
-        <Form.Item
-          name="fromDownPayment"
-          label="From Down"
-          valuePropName="fromDownPayment"
-        >
-          <Switch/>
         </Form.Item>
         <Form.Item label="Amount" name="amount">
           <InputNumber/>
@@ -117,7 +108,7 @@ export default function AddExpenseModal(props) {
             )) }
           </Select>
         </Form.Item>
-        <Form.Item label="Expense Date" name="expenseDate"><DatePicker/></Form.Item>
+        <Form.Item label="Payment Date" name="paymentDate"><DatePicker/></Form.Item>
 
         <Form.Item label="Description" name="description">
           <TextArea rows={ 4 }/>

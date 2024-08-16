@@ -51,7 +51,7 @@ func MakeHTTPHandler(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
 	typeService projecta.TypeService,
-	expenseService projecta.ExpenseService,
+	expenseService projecta.PaymentService,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
@@ -159,23 +159,23 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/expenses").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreateExpense),
-		DecodeCreateExpenseRequest,
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.CreatePayment),
+		DecodeCreatePaymentRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
-	r.Methods(http.MethodGet).Path("/projects/{project_id}/expenses").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListExpenses),
-		decodeListExpensesRequest,
+	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.ListPayments),
+		decodeListPaymentsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
-	r.Methods(http.MethodDelete).Path("/projects/{project_id}/expenses/{expense_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.RemoveExpense),
-		decodeProjectResourceRemoveCommand("project_id", "expense_id"),
+	r.Methods(http.MethodDelete).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.RemovePayment),
+		decodeProjectResourceRemoveCommand("project_id", "payment_id"),
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))

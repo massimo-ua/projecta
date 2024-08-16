@@ -63,12 +63,12 @@ func main() {
 	projectRepository := dal.NewPgProjectaProjectRepository(pool)
 	categoryRepository := dal.NewPgProjectaCategoryRepository(pool)
 	typeRepository := dal.NewPgProjectaCostTypeRepository(pool)
-	expenseRepository := dal.NewPgProjectaExpenseRepository(pool)
+	expenseRepository := dal.NewPgProjectaPaymentRepository(pool)
 	peopleService := projecta.NewPeopleService(peopleRepository)
 	projectService := projecta.NewProjectService(projectRepository, peopleService)
 	categoryService := projecta.NewCategoryService(categoryRepository, projectService)
 	typeService := projecta.NewTypeService(typeRepository, categoryRepository, projectRepository)
-	expenseService := projecta.NewExpenseService(
+	expenseService := projecta.NewPaymentService(
 		expenseRepository,
 		typeRepository,
 		projectRepository,

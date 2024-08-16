@@ -1,18 +1,18 @@
 import { DeleteOutlined, WarningOutlined } from '@ant-design/icons';
 import { Button, Modal } from 'antd';
 
-export default function RemoveExpenseButton(props) {
+export default function RemovePaymentButton(props) {
   const [modal, contextHolder] = Modal.useModal();
-  const { expenseId, onClick } = props;
+  const { paymentId, onClick } = props;
 
   return (<>
     <Button
       icon={<DeleteOutlined />}
       onClick={() => modal.confirm({
-        title: 'Confirm expense removal',
+        title: 'Confirm payment removal',
         icon: <WarningOutlined />,
-        content: 'Confirm expense removal',
-        onOk: () => onClick(expenseId),
+        content: 'Confirm payment removal',
+        onOk: () => onClick(paymentId),
       })} />
       <div>{contextHolder}</div>
     </>
