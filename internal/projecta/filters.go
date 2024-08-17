@@ -28,8 +28,8 @@ type TypeFilter struct {
 	CategoryID uuid.UUID
 }
 
-type ExpenseFilter struct {
-	ExpenseID uuid.UUID
+type PaymentFilter struct {
+	PaymentID uuid.UUID
 	ProjectID uuid.UUID
 	TypeID    uuid.UUID
 }
@@ -47,11 +47,10 @@ type CategoryCollectionFilter struct {
 	Name      string
 }
 
-type ExpenseCollectionFilter struct {
+type PaymentCollectionFilter struct {
 	core.Pagination
 	core.Sorting
-	ProjectID                uuid.UUID
-	CategoryID               uuid.UUID
-	TypeID                   uuid.UUID
-	IncludeTechnicalExpenses bool
+	ProjectID  uuid.UUID
+	CategoryID uuid.UUID
+	TypeID     uuid.UUID
 }

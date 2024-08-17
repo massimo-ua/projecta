@@ -7,24 +7,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"time"
 )
 
-type PgProjectaExpenseRepository struct {
+type PgProjectaPaymentRepository struct {
 	PgRepository
 }
 
-func NewPgProjectaExpenseRepository(pool *pgxpool.Pool) *PgProjectaExpenseRepository {
-	return &PgProjectaExpenseRepository{
+func NewPgProjectaPaymentRepository(pool *pgxpool.Pool) *PgProjectaPaymentRepository {
+	return &PgProjectaPaymentRepository{
 		PgRepository{db: pool},
 	}
 }
 
-func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projecta.ExpenseFilter) (*projecta.Expense, error) {
+func (r *PgProjectaPaymentRepository) FindOne(ctx context.Context, filter projecta.PaymentFilter) (*projecta.Payment, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -33,36 +32,36 @@ func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projec
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 
-	qb.From("projecta_expenses")
-	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_expenses.project_id")
-	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_expenses.type_id")
-	qb.Join("people", "people.person_id = projecta_expenses.owner_id")
+	qb.From("projecta_payments")
+	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_payments.project_id")
+	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_payments.type_id")
+	qb.Join("people", "people.person_id = projecta_payments.owner_id")
 	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 
 	qb.Select(
-		"projecta_expenses.expense_id",
-		"projecta_expenses.project_id",
+		"projecta_payments.payment_id",
+		"projecta_payments.project_id",
 		"projecta_projects.name as project_name",
 		"projecta_cost_categories.category_id",
 		"projecta_cost_categories.name as category_name",
 		"projecta_cost_types.type_id",
 		"projecta_cost_types.name as type_name",
-		"projecta_expenses.amount",
-		"projecta_expenses.currency",
-		"projecta_expenses.description",
-		"projecta_expenses.owner_id",
+		"projecta_payments.amount",
+		"projecta_payments.currency",
+		"projecta_payments.description",
+		"projecta_payments.owner_id",
 		"people.first_name",
 		"COALESCE(people.display_name, '') display_name",
-		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
-		"projecta_expenses.kind",
+		"COALESCE(projecta_payments.payment_date, projecta_payments.created_at) payment_date",
+		"projecta_payments.kind",
 	)
 
 	if filter.ProjectID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
+		qb.Where(qb.Equal("projecta_payments.project_id", filter.ProjectID.String()))
 	}
 
-	if filter.ExpenseID != uuid.Nil {
-		qb.Where(qb.Equal("expense_id", filter.ExpenseID.String()))
+	if filter.PaymentID != uuid.Nil {
+		qb.Where(qb.Equal("payment_id", filter.PaymentID.String()))
 	}
 
 	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
@@ -130,7 +129,7 @@ func (r *PgProjectaExpenseRepository) FindOne(ctx context.Context, filter projec
 	), nil
 }
 
-func (r *PgProjectaExpenseRepository) Save(ctx context.Context, expense *projecta.Expense) error {
+func (r *PgProjectaPaymentRepository) Save(ctx context.Context, expense *projecta.Payment) error {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -138,9 +137,9 @@ func (r *PgProjectaExpenseRepository) Save(ctx context.Context, expense *project
 	}
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	qb.From("projecta_expenses")
+	qb.From("projecta_payments")
 	qb.Select(
-		"expense_id",
+		"payment_id",
 		"project_id",
 		"type_id",
 		"amount",
@@ -150,7 +149,7 @@ func (r *PgProjectaExpenseRepository) Save(ctx context.Context, expense *project
 		"updated_at",
 	)
 
-	qb.Where(qb.Equal("expense_id", expense.ID.String()))
+	qb.Where(qb.Equal("payment_id", expense.ID.String()))
 	qb.Where(qb.Equal("owner_id", personID.String()))
 
 	sql, args := qb.Build()
@@ -168,35 +167,20 @@ func (r *PgProjectaExpenseRepository) Save(ctx context.Context, expense *project
 	}
 }
 
-func (r *PgProjectaExpenseRepository) create(ctx context.Context, expense *projecta.Expense) error {
+func (r *PgProjectaPaymentRepository) create(ctx context.Context, expense *projecta.Payment) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
-	qb.InsertInto("projecta_expenses")
+	qb.InsertInto("projecta_payments")
 	qb.Cols(
-		"expense_id",
+		"payment_id",
 		"project_id",
 		"type_id",
 		"amount",
 		"currency",
 		"description",
 		"owner_id",
-		"expense_date",
+		"payment_date",
 		"kind",
-		"compensatory_id",
 	)
-
-	var compensatoryID pgtype.UUID
-
-	if expense.Compensation != nil {
-		compensatoryID = pgtype.UUID{
-			Bytes: expense.Compensation.ID,
-			Valid: true,
-		}
-	} else {
-		compensatoryID = pgtype.UUID{
-			Bytes: uuid.Nil,
-			Valid: false,
-		}
-	}
 
 	qb.Values(
 		expense.ID.String(),
@@ -208,7 +192,6 @@ func (r *PgProjectaExpenseRepository) create(ctx context.Context, expense *proje
 		expense.Owner.PersonID.String(),
 		expense.Date,
 		expense.Kind.String(),
-		compensatoryID,
 	)
 
 	sql, args := qb.Build()
@@ -228,19 +211,19 @@ func (r *PgProjectaExpenseRepository) create(ctx context.Context, expense *proje
 	return err
 }
 
-func (r *PgProjectaExpenseRepository) update(ctx context.Context, expense *projecta.Expense) error {
+func (r *PgProjectaPaymentRepository) update(ctx context.Context, expense *projecta.Payment) error {
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
-	qb.Update("projecta_expenses")
+	qb.Update("projecta_payments")
 	qb.Set(
 		qb.Assign("project_id", expense.Project.ProjectID.String()),
 		qb.Assign("type_id", expense.Type.ID.String()),
 		qb.Assign("amount", expense.Amount.Amount()),
 		qb.Assign("currency", expense.Amount.Currency().Code),
 		qb.Assign("description", expense.Description),
-		qb.Assign("expense_date", expense.Date),
+		qb.Assign("payment_date", expense.Date),
 	)
 
-	qb.Where(qb.Equal("expense_id", expense.ID.String()))
+	qb.Where(qb.Equal("payment_id", expense.ID.String()))
 
 	sql, args := qb.Build()
 
@@ -249,7 +232,7 @@ func (r *PgProjectaExpenseRepository) update(ctx context.Context, expense *proje
 	return err
 }
 
-func (r *PgProjectaExpenseRepository) Remove(ctx context.Context, expense *projecta.Expense) error {
+func (r *PgProjectaPaymentRepository) Remove(ctx context.Context, expense *projecta.Payment) error {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -257,8 +240,8 @@ func (r *PgProjectaExpenseRepository) Remove(ctx context.Context, expense *proje
 	}
 
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
-	qb.DeleteFrom("projecta_expenses")
-	qb.Where(qb.Equal("expense_id", expense.ID.String()))
+	qb.DeleteFrom("projecta_payments")
+	qb.Where(qb.Equal("payment_id", expense.ID.String()))
 	qb.Where(qb.Equal("owner_id", personID.String()))
 	qb.Where(qb.Equal("project_id", expense.Project.ProjectID.String()))
 
@@ -269,7 +252,7 @@ func (r *PgProjectaExpenseRepository) Remove(ctx context.Context, expense *proje
 	return err
 }
 
-func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.ExpenseCollectionFilter) (*projecta.ExpenseCollection, error) {
+func (r *PgProjectaPaymentRepository) Find(ctx context.Context, filter projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -277,25 +260,21 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 	}
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	qb.From("projecta_expenses")
-	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_expenses.project_id")
-	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_expenses.type_id")
-	qb.Join("people", "people.person_id = projecta_expenses.owner_id")
+	qb.From("projecta_payments")
+	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_payments.project_id")
+	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_payments.type_id")
+	qb.Join("people", "people.person_id = projecta_payments.owner_id")
 	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 
-	qb.Where(qb.Equal("projecta_expenses.owner_id", personID.String()))
-	qb.Where(qb.Equal("projecta_expenses.project_id", filter.ProjectID.String()))
-
-	if !filter.IncludeTechnicalExpenses {
-		qb.Where(qb.GreaterThan("projecta_expenses.amount", 0))
-	}
+	qb.Where(qb.Equal("projecta_payments.owner_id", personID.String()))
+	qb.Where(qb.Equal("projecta_payments.project_id", filter.ProjectID.String()))
 
 	if filter.CategoryID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_expenses.category_id", filter.CategoryID.String()))
+		qb.Where(qb.Equal("projecta_payments.category_id", filter.CategoryID.String()))
 	}
 
 	if filter.TypeID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_expenses.type_id", filter.TypeID.String()))
+		qb.Where(qb.Equal("projecta_payments.type_id", filter.TypeID.String()))
 	}
 
 	qb.Select(qb.As("COUNT(*)", "total"))
@@ -318,27 +297,27 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 	qb.Offset(filter.Offset)
 
 	if filter.OrderBy != "" && filter.Order != "" {
-		qb.OrderBy(fmt.Sprintf("projecta_expenses.%s %s", filter.OrderBy, filter.Order.String()))
+		qb.OrderBy(fmt.Sprintf("projecta_payments.%s %s", filter.OrderBy, filter.Order.String()))
 	} else {
-		qb.OrderBy("projecta_expenses.expense_date DESC")
+		qb.OrderBy("projecta_payments.payment_date DESC")
 	}
 
 	qb.Select(
-		"projecta_expenses.expense_id",
-		"projecta_expenses.project_id",
+		"projecta_payments.payment_id",
+		"projecta_payments.project_id",
 		"projecta_projects.name as project_name",
 		"projecta_cost_categories.category_id",
 		"projecta_cost_categories.name as category_name",
 		"projecta_cost_types.type_id",
 		"projecta_cost_types.name as type_name",
-		"projecta_expenses.amount",
-		"projecta_expenses.currency",
-		"projecta_expenses.description",
-		"projecta_expenses.owner_id",
+		"projecta_payments.amount",
+		"projecta_payments.currency",
+		"projecta_payments.description",
+		"projecta_payments.owner_id",
 		"people.first_name",
 		"COALESCE(people.display_name, '') display_name",
-		"COALESCE(projecta_expenses.expense_date, projecta_expenses.created_at) expense_date",
-		"projecta_expenses.kind",
+		"COALESCE(projecta_payments.payment_date, projecta_payments.created_at) payment_date",
+		"projecta_payments.kind",
 	)
 
 	sql, args = qb.Build()
@@ -349,7 +328,7 @@ func (r *PgProjectaExpenseRepository) Find(ctx context.Context, filter projecta.
 		return nil, err
 	}
 
-	collection := projecta.NewExpenseCollection(total)
+	collection := projecta.NewPaymentCollection(total)
 
 	defer rows.Close()
 
@@ -433,7 +412,7 @@ func toExpense(
 	displayName string,
 	expenseDate time.Time,
 	expenseKind string,
-) *projecta.Expense {
+) *projecta.Payment {
 	projectUUID := uuid.MustParse(projectID)
 	person := &projecta.Owner{
 		PersonID:    uuid.MustParse(ownerID),
@@ -468,9 +447,9 @@ func toExpense(
 
 	expenseUUID := uuid.MustParse(expenseID)
 
-	kind, _ := projecta.ToExpenseKind(expenseKind)
+	kind, _ := projecta.ToPaymentKind(expenseKind)
 
-	expense := projecta.NewExpense(
+	expense := projecta.NewPayment(
 		expenseUUID,
 		project,
 		person,

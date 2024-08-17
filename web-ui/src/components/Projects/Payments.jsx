@@ -1,11 +1,11 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { Button, Skeleton, Table, Tag } from 'antd';
-import useExpenses from '../../hooks/expenses';
+import usePayments from '../../hooks/payments';
 import { DollarOutlined } from '@ant-design/icons';
-import AddExpenseModal from './AddExpenseModal';
-import RemoveExpenseButton from './RemoveExpenseButton';
-import { expensesRepository } from '../../api';
+import AddPaymentModal from './AddPaymentModal';
+import RemovePaymentButton from './RemovePaymentButton';
+import { paymentRepository } from '../../api';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
 
 const columns = [
@@ -16,8 +16,8 @@ const columns = [
   },
   {
     title: 'Date',
-    dataIndex: 'expenseDate',
-    key: 'expenseDate',
+    dataIndex: 'paymentDate',
+    key: 'paymentDate',
   },
   {
     title: 'Description',
@@ -28,7 +28,7 @@ const columns = [
     title: 'Category',
     dataIndex: 'category',
     key: 'category',
-    render: (_, expense) => (<Tag>{expense.category}</Tag>),
+    render: (_, payment) => (<Tag>{payment.category}</Tag>),
   },
   {
     title: 'Type',
@@ -47,16 +47,16 @@ const columns = [
   },
 ];
 
-export function Expenses() {
+export function Payments() {
   const { projectId } = useParams();
-  const [loading, expenses, total, setFilter] = useExpenses();
+  const [loading, payments, total, setFilter] = usePayments();
   const [addModalOpened, setAddModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const onPaginationChange = (nextPage) => {
     setCurrentPage(nextPage);
   };
-  const onAddExpenseClick = () => {
+  const onAddButtonClick = () => {
     if (!addModalOpened) {
       setAddModalOpen(true);
     }
@@ -80,8 +80,8 @@ export function Expenses() {
     });
   };
 
-  const onRemoveButtonClick = (expenseId) => {
-    expensesRepository.removeExpense(projectId, expenseId)
+  const onRemoveButtonClick = (paymentId) => {
+    paymentRepository.removePayment(projectId, paymentId)
       .then(() => {
         setFilter({
           projectId,
@@ -96,14 +96,14 @@ export function Expenses() {
 
   return loading ? <Skeleton active /> : (
     <div>
-    <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<DollarOutlined />} type="primary" onClick={onAddExpenseClick}>Add Expense</Button>
+    <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<DollarOutlined />} type="primary" onClick={onAddButtonClick}>Add Payment</Button>
     <Table
-      dataSource={expenses}
+      dataSource={payments}
       columns={[...columns, {
         title: 'Action',
         key: 'action',
-        render: (_, expense) => (
-          <RemoveExpenseButton expenseId={expense.id} onClick={onRemoveButtonClick}/>
+        render: (_, payment) => (
+          <RemovePaymentButton paymentId={payment.id} onClick={onRemoveButtonClick}/>
         ),
       }]}
       showSorterTooltip={{
@@ -117,7 +117,7 @@ export function Expenses() {
         onChange: onPaginationChange,
       }}
     />
-    <AddExpenseModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
+    <AddPaymentModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
     </div>
   );
 }

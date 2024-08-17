@@ -67,27 +67,26 @@ type RemoveTypeCommand struct {
 	ID        uuid.UUID
 }
 
-type CreateExpenseCommand struct {
-	ProjectID       uuid.UUID
-	TypeID          uuid.UUID
-	Amount          *money.Money
-	Description     string
-	ExpenseDate     time.Time
-	Kind            ExpenseKind
-	FromDownPayment bool
+type CreatePaymentCommand struct {
+	ProjectID   uuid.UUID
+	TypeID      uuid.UUID
+	Amount      *money.Money
+	Description string
+	PaymentDate time.Time
+	Kind        PaymentKind
 }
 
-type UpdateExpenseCommand struct {
+type UpdatePaymentCommand struct {
 	ProjectID   uuid.UUID
 	PersonID    uuid.UUID
 	ID          uuid.UUID
 	TypeID      uuid.UUID
 	Amount      *money.Money
 	Description string
-	ExpenseDate time.Time
+	PaymentDate time.Time
 }
 
-type RemoveExpenseCommand struct {
+type RemovePaymentCommand struct {
 	ProjectID uuid.UUID
 	ID        uuid.UUID
 }
