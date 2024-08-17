@@ -6,7 +6,7 @@ const toDomain = ({
   key: asset_id,
   id: asset_id,
   description,
-  amount: (price / 100).toFixed(2),
+  price: (price / 100).toFixed(2),
   currency,
   type: type?.name,
   category: category?.name,
