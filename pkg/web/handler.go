@@ -7,6 +7,7 @@ import (
 	"fmt"
 	ht "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
+	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
@@ -51,7 +52,8 @@ func MakeHTTPHandler(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
 	typeService projecta.TypeService,
-	expenseService projecta.ExpenseService,
+	expenseService projecta.PaymentService,
+	assetService asset.Service,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
@@ -61,6 +63,7 @@ func MakeHTTPHandler(
 		categoryService,
 		typeService,
 		expenseService,
+		assetService,
 	)
 
 	if err != nil {
@@ -159,23 +162,44 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/expenses").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreateExpense),
-		DecodeCreateExpenseRequest,
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.CreatePayment),
+		DecodeCreatePaymentRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
-	r.Methods(http.MethodGet).Path("/projects/{project_id}/expenses").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListExpenses),
-		decodeListExpensesRequest,
+	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.ListPayments),
+		decodeListPaymentsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
-	r.Methods(http.MethodDelete).Path("/projects/{project_id}/expenses/{expense_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.RemoveExpense),
-		decodeProjectResourceRemoveCommand("project_id", "expense_id"),
+	r.Methods(http.MethodDelete).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.RemovePayment),
+		decodeProjectResourceRemoveCommand("project_id", "payment_id"),
+		encodeJSON(http.StatusNoContent),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.CreateAsset),
+		decodeCreateAssetRequest,
+		encodeJSON(http.StatusCreated),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodGet).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.ListAssets),
+		decodeListAssetsRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodDelete).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.RemoveAsset),
+		decodeProjectResourceRemoveCommand("project_id", "asset_id"),
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))

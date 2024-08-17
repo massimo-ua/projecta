@@ -2,13 +2,12 @@ import { useEffect } from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
-import { expensesRepository } from '../../api';
-import { ExpenseKinds } from '../../constants.js';
+import { assetRepository } from '../../api';
 
 const { TextArea } = Input;
 const { useForm } = Form;
 
-export default function AddExpenseModal(props) {
+export default function AddAssetModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
 
@@ -18,25 +17,25 @@ export default function AddExpenseModal(props) {
   const handleAdd = () => {
     const {
       typeId,
-      amount,
+      price,
       currency,
-      expenseDate,
+      acquiredAt,
+      name,
       description,
-      expenseKind,
-      fromDownPayment,
+      withPayment,
     } = form.getFieldsValue();
-    expensesRepository.addExpense(projectId, {
+    assetRepository.addAsset(projectId, {
       typeId,
-      amount,
+      price,
       currency,
-      expenseDate: expenseDate.toDate(),
+      acquiredAt: acquiredAt.toDate(),
+      name,
       description,
-      expenseKind,
-      fromDownPayment,
+      withPayment,
     }).then(() => {
       onSuccess();
     }).catch((e) => {
-      console.error('Failed to add expense', e.message);
+      console.error('Failed to add asset', e.message);
     });
   };
 
@@ -52,7 +51,7 @@ export default function AddExpenseModal(props) {
 
   return (
     <Modal
-      title="Add Expense"
+      title="Add Asset"
       open={ open }
       onCancel={ handleCancel }
       footer={ [
@@ -89,23 +88,14 @@ export default function AddExpenseModal(props) {
             )) }
           </Select>
         </Form.Item>
-        <Form.Item label="Kind" name="expenseKind">
-          <Select defaultValue={ 'UPON_COMPLETION' }>
-            { Object.entries(ExpenseKinds).map(([ id, label ]) => (
-              <Select.Option key={ id } value={ id }>
-                { label }
-              </Select.Option>
-            )) }
-          </Select>
-        </Form.Item>
         <Form.Item
-          name="fromDownPayment"
-          label="From Down"
-          valuePropName="fromDownPayment"
+          name="withPayment"
+          label="Create Payment"
+          valuePropName="withPayment"
         >
           <Switch/>
         </Form.Item>
-        <Form.Item label="Amount" name="amount">
+        <Form.Item label="Price" name="price">
           <InputNumber/>
         </Form.Item>
         <Form.Item label="Currency" name="currency">
@@ -117,8 +107,10 @@ export default function AddExpenseModal(props) {
             )) }
           </Select>
         </Form.Item>
-        <Form.Item label="Expense Date" name="expenseDate"><DatePicker/></Form.Item>
-
+        <Form.Item label="Acquision Date" name="acquiredAt"><DatePicker/></Form.Item>
+        <Form.Item label="Name" name="name">
+          <Input />
+        </Form.Item>
         <Form.Item label="Description" name="description">
           <TextArea rows={ 4 }/>
         </Form.Item>

@@ -13,7 +13,7 @@ type ProjectServiceImpl struct {
 	peopleService PeopleService
 }
 
-func (s *ProjectServiceImpl) Save(ctx context.Context, expense *Expense) error {
+func (s *ProjectServiceImpl) Save(ctx context.Context, expense *Payment) error {
 	//TODO implement me
 	panic("implement me")
 }

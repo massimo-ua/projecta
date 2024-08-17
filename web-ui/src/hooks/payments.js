@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { expensesRepository } from '../api';
+import { paymentRepository } from '../api';
 
-export default function useExpenses() {
+export default function usePayments() {
   const [loading, setLoading] = useState(false);
-  const [expenses, setExpenses] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState();
 
@@ -19,13 +19,13 @@ export default function useExpenses() {
     } = filter;
 
     setLoading(true);
-    expensesRepository.getExpenses(projectId, limit, offset)
-      .then(([expenses, total]) => {
-        setExpenses(expenses);
+    paymentRepository.getPayments(projectId, limit, offset)
+      .then(([payments, total]) => {
+        setPayments(payments);
         setTotal(total);
       })
       .finally(() => setLoading(false));
   }, [filter]);
 
-  return [loading, expenses, total, setFilter];
+  return [loading, payments, total, setFilter];
 }

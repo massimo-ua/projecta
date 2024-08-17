@@ -178,7 +178,7 @@ func decodeListCategoriesRequest(_ context.Context, r *http.Request) (any, error
 	return filter, nil
 }
 
-func decodeListExpensesRequest(_ context.Context, r *http.Request) (any, error) {
+func decodeListPaymentsRequest(_ context.Context, r *http.Request) (any, error) {
 	var err error
 	var limit, offset int
 	vars := mux.Vars(r)
@@ -239,7 +239,7 @@ func decodeListExpensesRequest(_ context.Context, r *http.Request) (any, error) 
 		}
 	}
 
-	filter := projecta.ExpenseCollectionFilter{
+	filter := projecta.PaymentCollectionFilter{
 		Pagination: core.Pagination{
 			Limit:  limit,
 			Offset: offset,
