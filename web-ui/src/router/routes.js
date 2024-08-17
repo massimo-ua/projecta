@@ -7,6 +7,7 @@ import {
   Total,
   Login,
   AuthenticatedOnly,
+  Assets,
 } from '../components';
 
 const routes = [{
@@ -34,6 +35,9 @@ const routes = [{
   }, {
     path: 'total',
     Component: AuthenticatedOnly(Total),
+  }, {
+    path: 'assets',
+    Component: AuthenticatedOnly(Assets),
   }],
 }];
 

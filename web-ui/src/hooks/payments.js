@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { paymentRepository } from '../api';
 
-export default function useExpenses() {
+export default function usePayments() {
   const [loading, setLoading] = useState(false);
   const [payments, setPayments] = useState([]);
   const [total, setTotal] = useState(0);

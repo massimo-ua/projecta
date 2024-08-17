@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
@@ -63,16 +64,24 @@ func main() {
 	projectRepository := dal.NewPgProjectaProjectRepository(pool)
 	categoryRepository := dal.NewPgProjectaCategoryRepository(pool)
 	typeRepository := dal.NewPgProjectaCostTypeRepository(pool)
-	expenseRepository := dal.NewPgProjectaPaymentRepository(pool)
+	paymentRepository := dal.NewPgProjectaPaymentRepository(pool)
+	assetRepository := dal.NewPgAssetRepository(pool)
 	peopleService := projecta.NewPeopleService(peopleRepository)
 	projectService := projecta.NewProjectService(projectRepository, peopleService)
 	categoryService := projecta.NewCategoryService(categoryRepository, projectService)
 	typeService := projecta.NewTypeService(typeRepository, categoryRepository, projectRepository)
-	expenseService := projecta.NewPaymentService(
-		expenseRepository,
+	paymentService := projecta.NewPaymentService(
+		paymentRepository,
 		typeRepository,
 		projectRepository,
 		peopleService,
+	)
+	assetService := asset.NewService(
+		assetRepository,
+		peopleService,
+		typeRepository,
+		projectRepository,
+		paymentRepository,
 	)
 
 	webAPI, err := web.MakeHTTPHandler(
@@ -82,7 +91,8 @@ func main() {
 		projectService,
 		categoryService,
 		typeService,
-		expenseService,
+		paymentService,
+		assetService,
 	)
 
 	if err != nil {

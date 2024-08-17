@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  BuildOutlined,
+  BuildOutlined, CarryOutOutlined,
   DollarOutlined,
   FileTextOutlined,
   PieChartOutlined,
@@ -43,6 +43,11 @@ export function ProjectDetails() {
         key: 'payments',
         label: 'Payments',
         icon: <DollarOutlined />,
+      },
+      {
+        key: 'assets',
+        label: 'Assets',
+        icon: <CarryOutOutlined />,
       },
     ],
   }]);

@@ -7,10 +7,11 @@ export * from './Logo';
 export * from './Projects/ProjectCard';
 export * from './Projects/ProjectDetails';
 export * from './Projects/Categories';
-export * from './Projects/Payments.jsx';
+export * from './Projects/Payments';
 export * from './Login';
 export * from './AuthGuard';
 export * from './GoogleLoginBtn';
+export * from './Projects/Assets';
 
 export const Types = TypesComponent;
 export const Total = TotalComponent;

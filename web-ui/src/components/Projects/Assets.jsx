@@ -1,11 +1,11 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { Button, Skeleton, Table, Tag } from 'antd';
-import usePayments from '../../hooks/payments';
-import { DollarOutlined } from '@ant-design/icons';
-import AddPaymentModal from './AddPaymentModal';
-import RemovePaymentButton from './RemovePaymentButton';
-import { paymentRepository } from '../../api';
+import useAssets from '../../hooks/assets';
+import { CarryOutOutlined } from '@ant-design/icons';
+import AddAssetModal from './AddAssetModal';
+import RemoveAssetButton from './RemoveAssetButton';
+import { assetRepository } from '../../api';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
 
 const columns = [
@@ -16,8 +16,13 @@ const columns = [
   },
   {
     title: 'Date',
-    dataIndex: 'paymentDate',
-    key: 'paymentDate',
+    dataIndex: 'acquiredAt',
+    key: 'acquiredAt',
+  },
+  {
+    title: 'Name',
+    dataIndex: 'name',
+    key: 'name',
   },
   {
     title: 'Description',
@@ -28,7 +33,7 @@ const columns = [
     title: 'Category',
     dataIndex: 'category',
     key: 'category',
-    render: (_, payment) => (<Tag>{payment.category}</Tag>),
+    render: (_, asset) => (<Tag>{asset.category}</Tag>),
   },
   {
     title: 'Type',
@@ -36,9 +41,9 @@ const columns = [
     key: 'type',
   },
   {
-    title: 'Amount',
-    dataIndex: 'amount',
-    key: 'amount',
+    title: 'Price',
+    dataIndex: 'price',
+    key: 'price',
   },
   {
     title: 'Currency',
@@ -47,9 +52,9 @@ const columns = [
   },
 ];
 
-export function Payments() {
+export function Assets() {
   const { projectId } = useParams();
-  const [loading, payments, total, setFilter] = usePayments();
+  const [loading, assets, total, setFilter] = useAssets();
   const [addModalOpened, setAddModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -80,8 +85,8 @@ export function Payments() {
     });
   };
 
-  const onRemoveButtonClick = (paymentId) => {
-    paymentRepository.removePayment(projectId, paymentId)
+  const onRemoveButtonClick = (assetId) => {
+    assetRepository.removeAsset(projectId, assetId)
       .then(() => {
         setFilter({
           projectId,
@@ -96,14 +101,14 @@ export function Payments() {
 
   return loading ? <Skeleton active /> : (
     <div>
-    <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<DollarOutlined />} type="primary" onClick={onAddButtonClick}>Add Payment</Button>
+    <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<CarryOutOutlined />} type="primary" onClick={onAddButtonClick}>Add Asset</Button>
     <Table
-      dataSource={payments}
+      dataSource={assets}
       columns={[...columns, {
         title: 'Action',
         key: 'action',
-        render: (_, payment) => (
-          <RemovePaymentButton paymentId={payment.id} onClick={onRemoveButtonClick}/>
+        render: (_, asset) => (
+          <RemoveAssetButton assetId={asset.id} onClick={onRemoveButtonClick}/>
         ),
       }]}
       showSorterTooltip={{
@@ -117,7 +122,7 @@ export function Payments() {
         onChange: onPaginationChange,
       }}
     />
-    <AddPaymentModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
+    <AddAssetModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
     </div>
   );
 }

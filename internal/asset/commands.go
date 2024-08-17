@@ -9,10 +9,11 @@ import (
 type CreateAssetCommand struct {
 	Name        string
 	Description string
-	ProjectID   string
-	TypeID      string
+	ProjectID   uuid.UUID
+	TypeID      uuid.UUID
 	Price       *money.Money
 	AcquiredAt  time.Time
+	WithPayment bool
 }
 
 type RemoveAssetCommand struct {

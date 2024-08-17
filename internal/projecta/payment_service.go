@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"time"
 )
 
 const (
@@ -79,13 +78,7 @@ func (s *PaymentServiceImpl) Create(ctx context.Context, command CreatePaymentCo
 		return nil, exceptions.NewValidationException(FailedToCreatePayment, err)
 	}
 
-	var paymentDate time.Time
-
-	if command.PaymentDate.IsZero() {
-		paymentDate = time.Now()
-	} else {
-		paymentDate = command.PaymentDate
-	}
+	paymentDate := core.DateOrNow(command.PaymentDate)
 
 	payment := NewPayment(
 		uuid.New(),

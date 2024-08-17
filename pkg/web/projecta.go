@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
@@ -88,6 +89,9 @@ type ProjectEndpoints struct {
 	ShowProjectTotals endpoint.Endpoint
 	RemoveType        endpoint.Endpoint
 	RemovePayment     endpoint.Endpoint
+	CreateAsset       endpoint.Endpoint
+	RemoveAsset       endpoint.Endpoint
+	ListAssets        endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -489,18 +493,18 @@ func makeListPaymentsEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	}
 }
 
-func makeShowProjectTotalsEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
+func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		projectID := request.(uuid.UUID)
 
 		offset := 0
 		limit := 100
 		next := true
-		var total *money.Money
-		var remainingDownPayment *money.Money
+		var totalPayments *money.Money
+		var totalAssets *money.Money
 
 		for next {
-			page, err := svc.Find(ctx, projecta.PaymentCollectionFilter{
+			page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
 				ProjectID: projectID,
 				Pagination: core.Pagination{
 					Limit:  limit,
@@ -513,40 +517,17 @@ func makeShowProjectTotalsEndpoint(svc projecta.PaymentService) endpoint.Endpoin
 			}
 
 			for _, e := range page.Elements() {
-				if total == nil {
-					total = e.Amount
+				if totalPayments == nil {
+					totalPayments = e.Amount
 				} else {
-					if total.Currency() != e.Amount.Currency() {
-						return nil, exceptions.NewInternalException("project expenses currencies mismatch", nil)
+					if totalPayments.Currency() != e.Amount.Currency() {
+						return nil, exceptions.NewInternalException("project payments currencies mismatch", nil)
 					}
 
-					total, err = total.Add(e.Amount)
+					totalPayments, err = totalPayments.Add(e.Amount)
 
 					if err != nil {
 						return nil, err
-					}
-				}
-
-				if e.Kind == projecta.DownPayment {
-					if remainingDownPayment == nil {
-						remainingDownPayment = e.Amount
-					} else {
-						remainingDownPayment, err = remainingDownPayment.Add(e.Amount)
-						if err != nil {
-							return nil, err
-						}
-					}
-				}
-
-				if e.Amount.Amount() < 0 {
-					// compensate for down payment withdrawal
-					if remainingDownPayment == nil {
-						remainingDownPayment = e.Amount
-					} else {
-						remainingDownPayment, err = remainingDownPayment.Add(e.Amount)
-						if err != nil {
-							return nil, err
-						}
 					}
 				}
 			}
@@ -558,21 +539,60 @@ func makeShowProjectTotalsEndpoint(svc projecta.PaymentService) endpoint.Endpoin
 			offset += limit
 		}
 
-		totals := []TotalDTO{}
+		next = true
+		offset = 0
+		limit = 100
+		for next {
+			page, err := assets.Find(ctx, asset.CollectionFilter{
+				ProjectID: projectID,
+				Pagination: core.Pagination{
+					Limit:  limit,
+					Offset: offset,
+				},
+			})
 
-		if total != nil {
+			if err != nil {
+				return nil, err
+			}
+
+			for _, e := range page.Elements() {
+				if totalAssets == nil {
+					totalAssets = e.Price
+				} else {
+					if totalAssets.Currency() != e.Price.Currency() {
+						return nil, exceptions.NewInternalException("project assets currencies mismatch", nil)
+					}
+
+					totalAssets, err = totalAssets.Add(e.Price)
+
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+
+			if len(page.Elements()) < limit {
+				next = false
+			}
+
+			offset += limit
+		}
+
+		totals := make([]TotalDTO, 0)
+
+		if totalPayments != nil {
 			totals = append(totals, TotalDTO{
 				Title:    "Total Payments",
-				Amount:   total.Amount(),
-				Currency: total.Currency().Code,
+				Amount:   totalPayments.Amount(),
+				Currency: totalPayments.Currency().Code,
 			})
 		}
 
-		if remainingDownPayment != nil {
+		if totalAssets != nil {
 			totals = append(totals, TotalDTO{
-				Title:    "Remaining Down Payment",
-				Amount:   remainingDownPayment.Amount(),
-				Currency: remainingDownPayment.Currency().Code,
+				Title:    "Project Balance",
+				Amount:   totalPayments.Amount() - totalAssets.Amount(),
+				Currency: totalAssets.Currency().Code,
 			})
 		}
 
@@ -614,6 +634,7 @@ func MakeProjectEndpoints(
 	categoryService projecta.CategoryService,
 	typeService projecta.TypeService,
 	expenseService projecta.PaymentService,
+	assetService asset.Service,
 ) (ProjectEndpoints, error) {
 	return ProjectEndpoints{
 		CreateProject:     makeCreateProjectEndpoint(projectService),
@@ -624,8 +645,11 @@ func MakeProjectEndpoints(
 		ListTypes:         makeListProjectTypesEndpoint(typeService),
 		ListCategories:    makeListCategoriesEndpoint(categoryService),
 		ListPayments:      makeListPaymentsEndpoint(expenseService),
-		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService),
+		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService, assetService),
 		RemoveType:        makeRemoveTypeEndpoint(typeService),
 		RemovePayment:     makeRemovePaymentEndpoint(expenseService),
+		CreateAsset:       makeCreateAssetEndpoint(assetService),
+		RemoveAsset:       makeRemoveAssetEndpoint(assetService),
+		ListAssets:        makeListAssetsEndpoint(assetService),
 	}, nil
 }
