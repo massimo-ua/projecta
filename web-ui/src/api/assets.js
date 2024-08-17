@@ -10,7 +10,7 @@ const toDomain = ({
   currency,
   type: type?.name,
   category: category?.name,
-  paymentDate: format(parseISO(acquired_at), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
+  acquiredAt: format(parseISO(acquired_at), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
 });
 
 const toAddAssetDTO = ({ typeId, price, currency, acquiredAt, name, description, withPayment }) => ({
