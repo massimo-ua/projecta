@@ -33,11 +33,11 @@ type TypeService interface {
 	Update(ctx context.Context, command UpdateTypeCommand) error
 }
 
-type ExpenseService interface {
-	Find(ctx context.Context, filter ExpenseCollectionFilter) (*ExpenseCollection, error)
-	Create(ctx context.Context, command CreateExpenseCommand) (*Expense, error)
-	Update(ctx context.Context, command UpdateExpenseCommand) error
-	Remove(ctx context.Context, command RemoveExpenseCommand) error
+type PaymentService interface {
+	Find(ctx context.Context, filter PaymentCollectionFilter) (*PaymentCollection, error)
+	Create(ctx context.Context, command CreatePaymentCommand) (*Payment, error)
+	Update(ctx context.Context, command UpdatePaymentCommand) error
+	Remove(ctx context.Context, command RemovePaymentCommand) error
 }
 
 type CategoryRepository interface {
@@ -62,10 +62,10 @@ type TypeRepository interface {
 	Remove(ctx context.Context, costType *CostType) error
 }
 
-type ExpenseRepository interface {
+type PaymentRepository interface {
 	core.BaseRepository
-	Find(ctx context.Context, filter ExpenseCollectionFilter) (*ExpenseCollection, error)
-	FindOne(ctx context.Context, filter ExpenseFilter) (*Expense, error)
-	Save(ctx context.Context, expense *Expense) error
-	Remove(ctx context.Context, expense *Expense) error
+	Find(ctx context.Context, filter PaymentCollectionFilter) (*PaymentCollection, error)
+	FindOne(ctx context.Context, filter PaymentFilter) (*Payment, error)
+	Save(ctx context.Context, payment *Payment) error
+	Remove(ctx context.Context, payment *Payment) error
 }

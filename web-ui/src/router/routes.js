@@ -3,10 +3,11 @@ import {
   ProjectDetails,
   Types,
   Categories,
-  Expenses,
+  Payments,
   Total,
   Login,
   AuthenticatedOnly,
+  Assets,
 } from '../components';
 
 const routes = [{
@@ -29,11 +30,14 @@ const routes = [{
     path: 'categories',
     Component: AuthenticatedOnly(Categories),
   }, {
-    path: 'expenses',
-    Component: AuthenticatedOnly(Expenses),
+    path: 'payments',
+    Component: AuthenticatedOnly(Payments),
   }, {
     path: 'total',
     Component: AuthenticatedOnly(Total),
+  }, {
+    path: 'assets',
+    Component: AuthenticatedOnly(Assets),
   }],
 }];
 

@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
@@ -24,15 +25,14 @@ type CreateCategoryDTO struct {
 	Description string `json:"description"`
 }
 
-type CreateExpenseDTO struct {
-	ProjectID       string `json:"project_id"`
-	TypeID          string `json:"type_id"`
-	Description     string `json:"description"`
-	Amount          int64  `json:"amount"`
-	Currency        string `json:"currency"`
-	ExpenseDate     string `json:"expense_date"`
-	Kind            string `json:"kind,omitempty"`
-	FromDownPayment bool   `json:"from_down_payment,omitempty"`
+type CreatePaymentDTO struct {
+	ProjectID   string `json:"project_id"`
+	TypeID      string `json:"type_id"`
+	Description string `json:"description"`
+	Amount      int64  `json:"amount"`
+	Currency    string `json:"currency"`
+	PaymentDate string `json:"payment_date"`
+	Kind        string `json:"kind,omitempty"`
 }
 
 type OwnerDTO struct {
@@ -65,8 +65,8 @@ type TypeDTO struct {
 	Category    TypeCategoryDTO `json:"category"`
 }
 
-type ExpenseDTO struct {
-	ExpenseID   string      `json:"expense_id"`
+type PaymentDTO struct {
+	PaymentID   string      `json:"payment_id"`
 	Project     ProjectDTO  `json:"project"`
 	Owner       OwnerDTO    `json:"owner"`
 	Type        TypeDTO     `json:"type"`
@@ -74,21 +74,24 @@ type ExpenseDTO struct {
 	Description string      `json:"description"`
 	Amount      int64       `json:"amount"`
 	Currency    string      `json:"currency"`
-	ExpenseDate string      `json:"expense_date"`
+	PaymentDate string      `json:"payment_date"`
 }
 
 type ProjectEndpoints struct {
 	CreateProject     endpoint.Endpoint
 	CreateCategory    endpoint.Endpoint
 	CreateType        endpoint.Endpoint
-	CreateExpense     endpoint.Endpoint
+	CreatePayment     endpoint.Endpoint
 	ListProjects      endpoint.Endpoint
 	ListTypes         endpoint.Endpoint
 	ListCategories    endpoint.Endpoint
-	ListExpenses      endpoint.Endpoint
+	ListPayments      endpoint.Endpoint
 	ShowProjectTotals endpoint.Endpoint
 	RemoveType        endpoint.Endpoint
-	RemoveExpense     endpoint.Endpoint
+	RemovePayment     endpoint.Endpoint
+	CreateAsset       endpoint.Endpoint
+	RemoveAsset       endpoint.Endpoint
+	ListAssets        endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -188,7 +191,7 @@ func DecodeCreateTypeRequest(_ context.Context, r *http.Request) (any, error) {
 	}, err
 }
 
-func DecodeCreateExpenseRequest(_ context.Context, r *http.Request) (any, error) {
+func DecodeCreatePaymentRequest(_ context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 
 	projectID, ok := vars["project_id"]
@@ -203,7 +206,7 @@ func DecodeCreateExpenseRequest(_ context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	var req CreateExpenseDTO
+	var req CreatePaymentDTO
 	err = json.NewDecoder(r.Body).Decode(&req)
 
 	if err != nil {
@@ -212,7 +215,7 @@ func DecodeCreateExpenseRequest(_ context.Context, r *http.Request) (any, error)
 
 	amount := money.New(req.Amount, req.Currency)
 
-	date, err := time.Parse(time.RFC3339, req.ExpenseDate)
+	date, err := time.Parse(time.RFC3339, req.PaymentDate)
 
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid date", err)
@@ -224,25 +227,24 @@ func DecodeCreateExpenseRequest(_ context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewValidationException("invalid type id", err)
 	}
 
-	var expenseKind projecta.ExpenseKind
+	var paymentKind projecta.PaymentKind
 
 	if req.Kind == "" {
-		expenseKind = projecta.UponCompletionPayment
+		paymentKind = projecta.UponCompletionPayment
 	} else {
-		expenseKind, err = projecta.ToExpenseKind(req.Kind)
+		paymentKind, err = projecta.ToPaymentKind(req.Kind)
 		if err != nil {
-			return nil, exceptions.NewValidationException("invalid expense kind", err)
+			return nil, exceptions.NewValidationException("invalid payment kind", err)
 		}
 	}
 
-	return projecta.CreateExpenseCommand{
-		ProjectID:       projectUUID,
-		TypeID:          typeUUID,
-		Description:     req.Description,
-		Amount:          amount,
-		ExpenseDate:     date,
-		Kind:            expenseKind,
-		FromDownPayment: req.FromDownPayment,
+	return projecta.CreatePaymentCommand{
+		ProjectID:   projectUUID,
+		TypeID:      typeUUID,
+		Description: req.Description,
+		Amount:      amount,
+		PaymentDate: date,
+		Kind:        paymentKind,
 	}, err
 }
 
@@ -304,9 +306,9 @@ func makeCreateTypeEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 	}
 }
 
-func makeCreateExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+func makeCreatePaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.CreateExpenseCommand)
+		command := request.(projecta.CreatePaymentCommand)
 
 		expense, err := svc.Create(ctx, command)
 
@@ -314,8 +316,8 @@ func makeCreateExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 			return nil, err
 		}
 
-		return ExpenseDTO{
-			ExpenseID: expense.ID.String(),
+		return PaymentDTO{
+			PaymentID: expense.ID.String(),
 			Project: ProjectDTO{
 				ProjectID:   expense.Project.ProjectID.String(),
 				Name:        expense.Project.Name,
@@ -342,7 +344,7 @@ func makeCreateExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 			Description: expense.Description,
 			Amount:      expense.Amount.Amount(),
 			Currency:    expense.Amount.Currency().Code,
-			ExpenseDate: expense.Date.Format(time.RFC3339),
+			PaymentDate: expense.Date.Format(time.RFC3339),
 		}, nil
 	}
 }
@@ -435,9 +437,9 @@ func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint 
 	}
 }
 
-func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+func makeListPaymentsEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(projecta.ExpenseCollectionFilter)
+		filter := request.(projecta.PaymentCollectionFilter)
 
 		collection, err := svc.Find(ctx, filter)
 
@@ -445,11 +447,11 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 			return nil, err
 		}
 
-		var list []ExpenseDTO = make([]ExpenseDTO, 0)
+		var list []PaymentDTO = make([]PaymentDTO, 0)
 
 		for _, e := range collection.Elements() {
-			list = append(list, ExpenseDTO{
-				ExpenseID: e.ID.String(),
+			list = append(list, PaymentDTO{
+				PaymentID: e.ID.String(),
 				Project: ProjectDTO{
 					ProjectID:   e.Project.ProjectID.String(),
 					Name:        e.Project.Name,
@@ -476,12 +478,12 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 				Description: e.Description,
 				Amount:      e.Amount.Amount(),
 				Currency:    e.Amount.Currency().Code,
-				ExpenseDate: e.Date.Format(time.RFC3339),
+				PaymentDate: e.Date.Format(time.RFC3339),
 			})
 		}
 
-		return ListExpensesResponse{
-			Expenses: list,
+		return ListPaymentsResponse{
+			Payments: list,
 			PaginationDTO: PaginationDTO{
 				Limit:  filter.Limit,
 				Offset: filter.Offset,
@@ -491,24 +493,23 @@ func makeListExpensesEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 	}
 }
 
-func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		projectID := request.(uuid.UUID)
 
 		offset := 0
 		limit := 100
 		next := true
-		var total *money.Money
-		var remainingDownPayment *money.Money
+		var totalPayments *money.Money
+		var totalAssets *money.Money
 
 		for next {
-			page, err := svc.Find(ctx, projecta.ExpenseCollectionFilter{
+			page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
 				ProjectID: projectID,
 				Pagination: core.Pagination{
 					Limit:  limit,
 					Offset: offset,
 				},
-				IncludeTechnicalExpenses: true,
 			})
 
 			if err != nil {
@@ -516,40 +517,17 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 			}
 
 			for _, e := range page.Elements() {
-				if total == nil {
-					total = e.Amount
+				if totalPayments == nil {
+					totalPayments = e.Amount
 				} else {
-					if total.Currency() != e.Amount.Currency() {
-						return nil, exceptions.NewInternalException("project expenses currencies mismatch", nil)
+					if totalPayments.Currency() != e.Amount.Currency() {
+						return nil, exceptions.NewInternalException("project payments currencies mismatch", nil)
 					}
 
-					total, err = total.Add(e.Amount)
+					totalPayments, err = totalPayments.Add(e.Amount)
 
 					if err != nil {
 						return nil, err
-					}
-				}
-
-				if e.Kind == projecta.DownPayment {
-					if remainingDownPayment == nil {
-						remainingDownPayment = e.Amount
-					} else {
-						remainingDownPayment, err = remainingDownPayment.Add(e.Amount)
-						if err != nil {
-							return nil, err
-						}
-					}
-				}
-
-				if e.Amount.Amount() < 0 {
-					// compensate for down payment withdrawal
-					if remainingDownPayment == nil {
-						remainingDownPayment = e.Amount
-					} else {
-						remainingDownPayment, err = remainingDownPayment.Add(e.Amount)
-						if err != nil {
-							return nil, err
-						}
 					}
 				}
 			}
@@ -561,19 +539,65 @@ func makeShowProjectTotalsEndpoint(svc projecta.ExpenseService) endpoint.Endpoin
 			offset += limit
 		}
 
+		next = true
+		offset = 0
+		limit = 100
+		for next {
+			page, err := assets.Find(ctx, asset.CollectionFilter{
+				ProjectID: projectID,
+				Pagination: core.Pagination{
+					Limit:  limit,
+					Offset: offset,
+				},
+			})
+
+			if err != nil {
+				return nil, err
+			}
+
+			for _, e := range page.Elements() {
+				if totalAssets == nil {
+					totalAssets = e.Price
+				} else {
+					if totalAssets.Currency() != e.Price.Currency() {
+						return nil, exceptions.NewInternalException("project assets currencies mismatch", nil)
+					}
+
+					totalAssets, err = totalAssets.Add(e.Price)
+
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+
+			if len(page.Elements()) < limit {
+				next = false
+			}
+
+			offset += limit
+		}
+
+		totals := make([]TotalDTO, 0)
+
+		if totalPayments != nil {
+			totals = append(totals, TotalDTO{
+				Title:    "Total Payments",
+				Amount:   totalPayments.Amount(),
+				Currency: totalPayments.Currency().Code,
+			})
+		}
+
+		if totalAssets != nil {
+			totals = append(totals, TotalDTO{
+				Title:    "Project Balance",
+				Amount:   totalPayments.Amount() - totalAssets.Amount(),
+				Currency: totalAssets.Currency().Code,
+			})
+		}
+
 		return ProjectTotalsDTO{
-			Totals: []TotalDTO{
-				{
-					Title:    "Total Expenses",
-					Amount:   total.Amount(),
-					Currency: total.Currency().Code,
-				},
-				{
-					Title:    "Remaining Down Payment",
-					Amount:   remainingDownPayment.Amount(),
-					Currency: remainingDownPayment.Currency().Code,
-				},
-			},
+			Totals: totals,
 		}, nil
 	}
 }
@@ -588,7 +612,7 @@ func makeRemoveTypeEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 	}
 }
 
-func makeRemoveExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
+func makeRemovePaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		command, ok := request.(projecta.RemoveProjectResourceCommand)
 
@@ -596,7 +620,7 @@ func makeRemoveExpenseEndpoint(svc projecta.ExpenseService) endpoint.Endpoint {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
 
-		err := svc.Remove(ctx, projecta.RemoveExpenseCommand{
+		err := svc.Remove(ctx, projecta.RemovePaymentCommand{
 			ID:        command.ResourceID,
 			ProjectID: command.ProjectID,
 		})
@@ -609,19 +633,23 @@ func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
 	typeService projecta.TypeService,
-	expenseService projecta.ExpenseService,
+	expenseService projecta.PaymentService,
+	assetService asset.Service,
 ) (ProjectEndpoints, error) {
 	return ProjectEndpoints{
 		CreateProject:     makeCreateProjectEndpoint(projectService),
 		CreateCategory:    makeCreateCategoryEndpoint(categoryService),
 		CreateType:        makeCreateTypeEndpoint(typeService),
-		CreateExpense:     makeCreateExpenseEndpoint(expenseService),
+		CreatePayment:     makeCreatePaymentEndpoint(expenseService),
 		ListProjects:      makeListProjectsEndpoint(projectService),
 		ListTypes:         makeListProjectTypesEndpoint(typeService),
 		ListCategories:    makeListCategoriesEndpoint(categoryService),
-		ListExpenses:      makeListExpensesEndpoint(expenseService),
-		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService),
+		ListPayments:      makeListPaymentsEndpoint(expenseService),
+		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService, assetService),
 		RemoveType:        makeRemoveTypeEndpoint(typeService),
-		RemoveExpense:     makeRemoveExpenseEndpoint(expenseService),
+		RemovePayment:     makeRemovePaymentEndpoint(expenseService),
+		CreateAsset:       makeCreateAssetEndpoint(assetService),
+		RemoveAsset:       makeRemoveAssetEndpoint(assetService),
+		ListAssets:        makeListAssetsEndpoint(assetService),
 	}, nil
 }

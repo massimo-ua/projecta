@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  BuildOutlined,
+  BuildOutlined, CarryOutOutlined,
   DollarOutlined,
   FileTextOutlined,
   PieChartOutlined,
@@ -14,8 +14,8 @@ const { Sider, Content } = Layout;
 export function ProjectDetails() {
   const navigate = useNavigate();
   const [navMenuItems] = useState([{
-    key: 'resources',
-    label: 'Resources',
+    key: 'taxonomy',
+    label: 'Taxonomy',
     type: 'group',
     children: [
       {
@@ -40,9 +40,14 @@ export function ProjectDetails() {
         icon: <FileTextOutlined />,
       },
       {
-        key: 'expenses',
-        label: 'Expenses',
+        key: 'payments',
+        label: 'Payments',
         icon: <DollarOutlined />,
+      },
+      {
+        key: 'assets',
+        label: 'Assets',
+        icon: <CarryOutOutlined />,
       },
     ],
   }]);
@@ -59,7 +64,7 @@ export function ProjectDetails() {
           <Menu
             onClick={onClick}
             style={{ height: '92vh' }}
-            defaultSelectedKeys={['expenses']}
+            defaultSelectedKeys={['payments']}
             mode="inline"
             items={navMenuItems}
           />

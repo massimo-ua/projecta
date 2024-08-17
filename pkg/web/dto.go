@@ -32,8 +32,8 @@ type ListCategoriesResponse struct {
 	PaginationDTO
 }
 
-type ListExpensesResponse struct {
-	Expenses []ExpenseDTO `json:"expenses"`
+type ListPaymentsResponse struct {
+	Payments []PaymentDTO `json:"payments"`
 	PaginationDTO
 }
 
