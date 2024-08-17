@@ -281,6 +281,7 @@ func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
 					},
 				},
 				Category:    category,
+				Name:        e.Name,
 				Description: e.Description,
 				Price:       e.Price.Amount(),
 				Currency:    e.Price.Currency().Code,

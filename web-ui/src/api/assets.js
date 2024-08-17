@@ -1,7 +1,7 @@
 import { format, formatISO, parseISO } from 'date-fns';
 
 const toDomain = ({
-                    asset_id, price, currency, description, type, category, acquired_at,
+                    asset_id, price, currency, description, type, category, acquired_at, name,
                   }) => ({
   key: asset_id,
   id: asset_id,
@@ -11,6 +11,7 @@ const toDomain = ({
   type: type?.name,
   category: category?.name,
   acquiredAt: format(parseISO(acquired_at), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
+  name,
 });
 
 const toAddAssetDTO = ({ typeId, price, currency, acquiredAt, name, description, withPayment }) => ({
