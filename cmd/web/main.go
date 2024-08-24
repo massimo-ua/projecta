@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/people"
@@ -23,6 +24,13 @@ func main() {
 	pool, err := dal.Connect(os.Getenv("DB_URI"))
 
 	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = pool.Ping(context.Background())
+
+	if err != nil {
+		os.Stdout.Write([]byte("Could not connect to the database\n"))
 		log.Fatalln(err)
 	}
 

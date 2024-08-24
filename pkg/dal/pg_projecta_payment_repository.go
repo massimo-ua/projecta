@@ -277,6 +277,10 @@ func (r *PgProjectaPaymentRepository) Find(ctx context.Context, filter projecta.
 		qb.Where(qb.Equal("projecta_payments.type_id", filter.TypeID.String()))
 	}
 
+	if filter.Kind != "" {
+		qb.Where(qb.Equal("projecta_payments.kind", filter.Kind.String()))
+	}
+
 	qb.Select(qb.As("COUNT(*)", "total"))
 
 	sql, args := qb.Build()

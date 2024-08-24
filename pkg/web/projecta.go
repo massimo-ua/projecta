@@ -506,6 +506,7 @@ func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asse
 		for next {
 			page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
 				ProjectID: projectID,
+				Kind:      projecta.DownPayment,
 				Pagination: core.Pagination{
 					Limit:  limit,
 					Offset: offset,
@@ -514,6 +515,10 @@ func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asse
 
 			if err != nil {
 				return nil, err
+			}
+
+			if page.Total() == 0 {
+				break
 			}
 
 			for _, e := range page.Elements() {
@@ -555,6 +560,10 @@ func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asse
 				return nil, err
 			}
 
+			if page.Total() == 0 {
+				break
+			}
+
 			for _, e := range page.Elements() {
 				if totalAssets == nil {
 					totalAssets = e.Price
@@ -589,9 +598,15 @@ func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asse
 		}
 
 		if totalAssets != nil {
+			var toalPaymentsAmount int64
+
+			if totalPayments != nil {
+				toalPaymentsAmount = totalPayments.Amount()
+			}
+
 			totals = append(totals, TotalDTO{
 				Title:    "Project Balance",
-				Amount:   totalPayments.Amount() - totalAssets.Amount(),
+				Amount:   toalPaymentsAmount - totalAssets.Amount(),
 				Currency: totalAssets.Currency().Code,
 			})
 		}

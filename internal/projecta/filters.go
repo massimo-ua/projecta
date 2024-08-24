@@ -53,4 +53,5 @@ type PaymentCollectionFilter struct {
 	ProjectID  uuid.UUID
 	CategoryID uuid.UUID
 	TypeID     uuid.UUID
+	Kind       PaymentKind
 }
