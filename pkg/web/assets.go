@@ -17,16 +17,15 @@ import (
 )
 
 type AssetDTO struct {
-	AssetID     string      `json:"asset_id"`
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Price       int64       `json:"price"`
-	Currency    string      `json:"currency"`
-	AcquiredAt  string      `json:"acquired_at"`
-	Owner       OwnerDTO    `json:"owner"`
-	Project     ProjectDTO  `json:"project"`
-	Type        TypeDTO     `json:"type"`
-	Category    CategoryDTO `json:"category"`
+	AssetID     string     `json:"asset_id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Price       int64      `json:"price"`
+	Currency    string     `json:"currency"`
+	AcquiredAt  string     `json:"acquired_at"`
+	Owner       OwnerDTO   `json:"owner"`
+	Project     ProjectDTO `json:"project"`
+	Type        TypeDTO    `json:"type"`
 }
 
 type CreateAssetDTO struct {
@@ -183,6 +182,39 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 	}, nil
 }
 
+func decodeGetAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	vars := mux.Vars(r)
+
+	projectID, ok := vars["project_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid project id", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	assetID, ok := vars["asset_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid asset id", nil)
+	}
+
+	assetUUID, err := uuid.Parse(assetID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid asset id", err)
+	}
+
+	return asset.Filter{
+		ProjectID: projectUUID,
+		ID:        assetUUID,
+	}, nil
+}
+
 func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	var err error
 	var limit, offset int
@@ -253,6 +285,54 @@ func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, e
 	return filter, nil
 }
 
+func makeGetAssetEndpoint(s asset.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		filter := request.(asset.Filter)
+
+		a, err := s.FindOne(ctx, filter)
+
+		if err != nil {
+			return nil, err
+		}
+
+		owner := OwnerDTO{
+			PersonID:    a.Owner.PersonID.String(),
+			DisplayName: a.Owner.DisplayName,
+		}
+
+		category := CategoryDTO{
+			CategoryID: a.Type.Category.ID.String(),
+			Name:       a.Type.Category.Name,
+		}
+
+		costType := TypeDTO{
+			TypeID:      a.Type.ID.String(),
+			Name:        a.Type.Name,
+			Description: a.Type.Description,
+			Category: TypeCategoryDTO{
+				CategoryID: category.CategoryID,
+				Name:       category.Name,
+			}}
+
+		return AssetDTO{
+			AssetID:     a.ID.String(),
+			Name:        a.Name,
+			Description: a.Description,
+			Price:       a.Price.Amount(),
+			Currency:    a.Price.Currency().Code,
+			AcquiredAt:  a.AcquiredAt.Format(time.RFC3339),
+			Owner:       owner,
+			Type:        costType,
+			Project: ProjectDTO{
+				ProjectID:   a.Project.ProjectID.String(),
+				Name:        a.Project.Name,
+				Description: a.Project.Description,
+				Owner:       owner,
+			},
+		}, nil
+	}
+}
+
 func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		cmd := request.(asset.CreateAssetCommand)
@@ -296,7 +376,6 @@ func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 					Name:       category.Name,
 				},
 			},
-			Category: category,
 		}, nil
 	}
 }
@@ -369,7 +448,6 @@ func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
 						Name:       category.Name,
 					},
 				},
-				Category:    category,
 				Name:        e.Name,
 				Description: e.Description,
 				Price:       e.Price.Amount(),
