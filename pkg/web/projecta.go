@@ -92,6 +92,7 @@ type ProjectEndpoints struct {
 	CreateAsset       endpoint.Endpoint
 	RemoveAsset       endpoint.Endpoint
 	ListAssets        endpoint.Endpoint
+	UpdateAsset       endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -666,5 +667,6 @@ func MakeProjectEndpoints(
 		CreateAsset:       makeCreateAssetEndpoint(assetService),
 		RemoveAsset:       makeRemoveAssetEndpoint(assetService),
 		ListAssets:        makeListAssetsEndpoint(assetService),
+		UpdateAsset:       makeUpdateAssetEndpoint(assetService),
 	}, nil
 }

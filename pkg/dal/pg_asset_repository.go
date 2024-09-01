@@ -28,7 +28,23 @@ func NewPgAssetRepository(pool *pgxpool.Pool) *PgAssetRepository {
 	}
 }
 
-func (r *PgAssetRepository) Save(ctx context.Context, asset *asset.Asset) error {
+func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) error {
+	_, err := r.FindOne(ctx, asset.Filter{
+		ID: anAsset.ID,
+	})
+
+	if err != nil {
+		if errors.Is(err, AssetNotFoundError) {
+			return r.create(ctx, anAsset)
+		}
+
+		return err
+	}
+
+	return r.update(ctx, anAsset)
+}
+
+func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) error {
 	tx, inTx := ctx.Value(core.TxCtxKey).(pgx.Tx)
 
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
@@ -71,7 +87,40 @@ func (r *PgAssetRepository) Save(ctx context.Context, asset *asset.Asset) error 
 	}
 
 	return nil
+}
 
+func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) error {
+	tx, inTx := ctx.Value(core.TxCtxKey).(pgx.Tx)
+
+	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
+
+	qb.Update("projecta_assets")
+	qb.Set(
+		qb.Assign("name", asset.Name),
+		qb.Assign("description", asset.Description),
+		qb.Assign("type_id", asset.Type.ID.String()),
+		qb.Assign("price", asset.Price.Amount()),
+		qb.Assign("currency", asset.Price.Currency().Code),
+		qb.Assign("acquired_at", asset.AcquiredAt),
+	)
+	qb.Where(qb.Equal("asset_id", asset.ID.String()))
+	qb.Where(qb.Equal("owner_id", asset.Owner.PersonID.String()))
+
+	sql, args := qb.Build()
+
+	if inTx {
+		if _, err := tx.Exec(ctx, sql, args...); err != nil {
+			return errors.Join(FailedToSaveAssetError, err)
+		}
+
+		return nil
+	}
+
+	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
+		return errors.Join(FailedToSaveAssetError, err)
+	}
+
+	return nil
 }
 
 func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) error {

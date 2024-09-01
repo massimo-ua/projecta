@@ -16,6 +16,16 @@ type CreateAssetCommand struct {
 	WithPayment bool
 }
 
+type UpdateAssetCommand struct {
+	AssetID     uuid.UUID
+	Name        string
+	Description string
+	ProjectID   uuid.UUID
+	TypeID      uuid.UUID
+	Price       *money.Money
+	AcquiredAt  time.Time
+}
+
 type RemoveAssetCommand struct {
 	AssetID   uuid.UUID
 	ProjectID uuid.UUID

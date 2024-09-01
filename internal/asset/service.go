@@ -11,6 +11,7 @@ import (
 const (
 	failedToCreateAsset = "failed to create asset"
 	failedToFindAsset   = "failed to find asset"
+	failedToUpdateAsset = "failed to update asset"
 )
 
 type ServiceImpl struct {
@@ -169,4 +170,38 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveAssetCommand) er
 	}
 
 	return s.assets.Remove(ctx, asset)
+}
+
+func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) error {
+	personID, err := core.AuthGuard(ctx)
+
+	if err != nil {
+		return exceptions.NewUnauthorizedException(failedToUpdateAsset, err)
+	}
+
+	_, err = s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
+
+	if err != nil {
+		return exceptions.NewInternalException(failedToUpdateAsset, err)
+	}
+
+	asset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
+
+	if err != nil {
+		return exceptions.NewInternalException(failedToUpdateAsset, err)
+	}
+
+	costType, err := s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
+
+	if err != nil {
+		return exceptions.NewInternalException(failedToUpdateAsset, err)
+	}
+
+	asset.Name = command.Name
+	asset.Description = command.Description
+	asset.Type = costType
+	asset.Price = command.Price
+	asset.AcquiredAt = command.AcquiredAt
+
+	return s.assets.Save(ctx, asset)
 }

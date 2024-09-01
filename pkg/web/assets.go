@@ -39,6 +39,15 @@ type CreateAssetDTO struct {
 	WithPayment bool   `json:"with_payment"`
 }
 
+type UpdateAssetDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	TypeID      string `json:"type_id"`
+	Price       int64  `json:"price"`
+	Currency    string `json:"currency"`
+	AcquiredAt  string `json:"acquired_at,omitempty"`
+}
+
 type ListAssetsResponse struct {
 	Assets []AssetDTO `json:"assets"`
 	PaginationDTO
@@ -100,6 +109,77 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		Price:       price,
 		AcquiredAt:  date,
 		WithPayment: req.WithPayment,
+	}, nil
+}
+
+func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	vars := mux.Vars(r)
+
+	projectID, ok := vars["project_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid project id", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	assetID, ok := vars["asset_id"]
+
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid asset id", nil)
+	}
+
+	assetUUID, err := uuid.Parse(assetID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid asset id", err)
+	}
+
+	var req UpdateAssetDTO
+	err = json.NewDecoder(r.Body).Decode(&req)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+
+	if req.Name == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+
+	typeUUID, err := uuid.Parse(req.TypeID)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid type id", err)
+	}
+
+	if req.Price <= 0 {
+		return nil, exceptions.NewValidationException("price must be greater than 0", nil)
+	}
+
+	if req.Currency == "" {
+		return nil, exceptions.NewValidationException("currency is required", nil)
+	}
+
+	price := money.New(req.Price, req.Currency)
+
+	date, err := time.Parse(time.RFC3339, req.AcquiredAt)
+
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid acquired at date", err)
+	}
+
+	return asset.UpdateAssetCommand{
+		AssetID:     assetUUID,
+		Name:        req.Name,
+		Description: req.Description,
+		ProjectID:   projectUUID,
+		TypeID:      typeUUID,
+		Price:       price,
+		AcquiredAt:  date,
 	}, nil
 }
 
@@ -218,6 +298,15 @@ func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 			},
 			Category: category,
 		}, nil
+	}
+}
+
+func makeUpdateAssetEndpoint(s asset.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		cmd := request.(asset.UpdateAssetCommand)
+		err := s.Update(ctx, cmd)
+
+		return nil, err
 	}
 }
 

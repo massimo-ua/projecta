@@ -204,5 +204,12 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodPut).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.UpdateAsset),
+		decodeUpdateAssetRequest,
+		encodeJSON(http.StatusNoContent),
+		withAuth...,
+	))
+
 	return r, nil
 }
