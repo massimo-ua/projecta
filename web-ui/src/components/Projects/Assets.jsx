@@ -1,9 +1,10 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
-import { Button, Skeleton, Table, Tag } from 'antd';
+import { Button, Row, Skeleton, Table, Tag } from 'antd';
 import useAssets from '../../hooks/assets';
-import { CarryOutOutlined } from '@ant-design/icons';
+import { CarryOutOutlined, EditOutlined } from '@ant-design/icons';
 import AddAssetModal from './AddAssetModal';
+import EditAssetModal from './EditAssetModal';
 import RemoveAssetButton from './RemoveAssetButton';
 import { assetRepository } from '../../api';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
@@ -56,6 +57,7 @@ export function Assets() {
   const { projectId } = useParams();
   const [loading, assets, total, setFilter] = useAssets();
   const [addModalOpened, setAddModalOpen] = useState(false);
+  const [assetIdToEdit, setAssetIdToEdit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
   const onPaginationChange = (nextPage) => {
@@ -66,6 +68,11 @@ export function Assets() {
       setAddModalOpen(true);
     }
   };
+  const onEditButtonClick = (assetId) => {
+    if (!assetIdToEdit) {
+      setAssetIdToEdit(assetId);
+    }
+  }
 
   useEffect(() => {
     setFilter({
@@ -75,8 +82,8 @@ export function Assets() {
     });
   }, [currentPage]);
 
-  const onCancel = () => setAddModalOpen(false);
-  const onSucces = () => {
+  const onAddCancel = () => setAddModalOpen(false);
+  const onAddSuccess = () => {
     setAddModalOpen(false);
     setFilter({
       projectId,
@@ -84,6 +91,16 @@ export function Assets() {
       offset: DEFAULT_OFFSET,
     });
   };
+
+  const onEditSuccess = () => {
+    setAssetIdToEdit(false);
+    setFilter({
+      projectId,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
+    });
+  }
+  const onEditCancel = () => setAssetIdToEdit('');
 
   const onRemoveButtonClick = (assetId) => {
     assetRepository.removeAsset(projectId, assetId)
@@ -108,7 +125,10 @@ export function Assets() {
         title: 'Action',
         key: 'action',
         render: (_, asset) => (
-          <RemoveAssetButton assetId={asset.id} onClick={onRemoveButtonClick}/>
+          <Row style={{ gap: '2px'}}>
+            <EditOutlined onClick={() => onEditButtonClick(asset.id)}/>
+            <RemoveAssetButton assetId={asset.id} onClick={onRemoveButtonClick}/>
+          </Row>
         ),
       }]}
       showSorterTooltip={{
@@ -122,7 +142,8 @@ export function Assets() {
         onChange: onPaginationChange,
       }}
     />
-    <AddAssetModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
+      <AddAssetModal open={addModalOpened} onCancel={onAddCancel} onSuccess={onAddSuccess} />
+      <EditAssetModal assetId={assetIdToEdit} onCancel={onEditCancel} onSuccess={onEditSuccess} />
     </div>
   );
 }
