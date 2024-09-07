@@ -211,19 +211,21 @@ func (r *PgProjectaPaymentRepository) create(ctx context.Context, expense *proje
 	return err
 }
 
-func (r *PgProjectaPaymentRepository) update(ctx context.Context, expense *projecta.Payment) error {
+func (r *PgProjectaPaymentRepository) update(ctx context.Context, payment *projecta.Payment) error {
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_payments")
 	qb.Set(
-		qb.Assign("project_id", expense.Project.ProjectID.String()),
-		qb.Assign("type_id", expense.Type.ID.String()),
-		qb.Assign("amount", expense.Amount.Amount()),
-		qb.Assign("currency", expense.Amount.Currency().Code),
-		qb.Assign("description", expense.Description),
-		qb.Assign("payment_date", expense.Date),
+		qb.Assign("type_id", payment.Type.ID.String()),
+		qb.Assign("amount", payment.Amount.Amount()),
+		qb.Assign("currency", payment.Amount.Currency().Code),
+		qb.Assign("description", payment.Description),
+		qb.Assign("payment_date", payment.Date),
+		qb.Assign("kind", payment.Kind.String()),
 	)
 
-	qb.Where(qb.Equal("payment_id", expense.ID.String()))
+	qb.Where(qb.Equal("payment_id", payment.ID.String()))
+	qb.Where(qb.Equal("project_id", payment.Project.ProjectID.String()))
+	qb.Where(qb.Equal("owner_id", payment.Owner.PersonID.String()))
 
 	sql, args := qb.Build()
 

@@ -34,6 +34,7 @@ type TypeService interface {
 }
 
 type PaymentService interface {
+	FindOne(ctx context.Context, filter PaymentFilter) (*Payment, error)
 	Find(ctx context.Context, filter PaymentCollectionFilter) (*PaymentCollection, error)
 	Create(ctx context.Context, command CreatePaymentCommand) (*Payment, error)
 	Update(ctx context.Context, command UpdatePaymentCommand) error

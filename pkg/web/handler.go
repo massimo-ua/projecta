@@ -176,6 +176,20 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodPut).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.UpdatePayment),
+		decodeUpdatePaymentRequest,
+		encodeJSON(http.StatusNoContent),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.GetPayment),
+		decodeGetPaymentRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
 		loggedInOnly(projectEndpoints.RemovePayment),
 		decodeProjectResourceRemoveCommand("project_id", "payment_id"),

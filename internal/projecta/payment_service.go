@@ -22,8 +22,34 @@ type PaymentServiceImpl struct {
 }
 
 func (s *PaymentServiceImpl) Update(ctx context.Context, command UpdatePaymentCommand) error {
-	//TODO implement me
-	panic("implement me")
+	p, err := s.payments.FindOne(ctx, PaymentFilter{
+		PaymentID: command.ID,
+		ProjectID: command.ProjectID,
+	})
+
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return exceptions.NewNotFoundException(FailedToFindPayment, err)
+		}
+
+		return exceptions.NewInternalException(FailedToFindPayment, err)
+	}
+
+	costType, err := s.types.FindOne(ctx, TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
+
+	if err != nil {
+		return exceptions.NewValidationException(FailedToFindPayment, err)
+	}
+
+	paymentDate := core.DateOrNow(command.PaymentDate)
+
+	p.Type = costType
+	p.Description = command.Description
+	p.Amount = command.Amount
+	p.Date = paymentDate
+	p.Kind = command.Kind
+
+	return s.payments.Save(ctx, p)
 }
 
 func (s *PaymentServiceImpl) Remove(ctx context.Context, command RemovePaymentCommand) error {
@@ -108,4 +134,18 @@ func (s *PaymentServiceImpl) Find(ctx context.Context, filter PaymentCollectionF
 	}
 
 	return collection, nil
+}
+
+func (s *PaymentServiceImpl) FindOne(ctx context.Context, filter PaymentFilter) (*Payment, error) {
+	p, err := s.payments.FindOne(ctx, filter)
+
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException(FailedToFindPayment, err)
+		}
+
+		return nil, exceptions.NewInternalException(FailedToFindPayment, err)
+	}
+
+	return p, nil
 }

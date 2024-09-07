@@ -78,12 +78,12 @@ type CreatePaymentCommand struct {
 
 type UpdatePaymentCommand struct {
 	ProjectID   uuid.UUID
-	PersonID    uuid.UUID
 	ID          uuid.UUID
 	TypeID      uuid.UUID
 	Amount      *money.Money
 	Description string
 	PaymentDate time.Time
+	Kind        PaymentKind
 }
 
 type RemovePaymentCommand struct {
