@@ -165,16 +165,16 @@ func makeGetPaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 				TypeID:      p.Type.ID.String(),
 				Name:        p.Type.Name,
 				Description: p.Type.Description,
-			},
-			Category: CategoryDTO{
-				CategoryID:  p.Type.Category.ID.String(),
-				Name:        p.Type.Category.Name,
-				Description: p.Type.Category.Description,
+				Category: TypeCategoryDTO{
+					CategoryID: p.Type.Category.ID.String(),
+					Name:       p.Type.Category.Name,
+				},
 			},
 			Description: p.Description,
 			Amount:      p.Amount.Amount(),
 			Currency:    p.Amount.Currency().Code,
 			PaymentDate: p.Date.Format(time.RFC3339),
+			Kind:        p.Kind.String(),
 		}, nil
 	}
 }

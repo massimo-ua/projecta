@@ -75,6 +75,7 @@ type PaymentDTO struct {
 	Amount      int64       `json:"amount"`
 	Currency    string      `json:"currency"`
 	PaymentDate string      `json:"payment_date"`
+	Kind        string      `json:"kind"`
 }
 
 type ProjectEndpoints struct {
@@ -339,16 +340,16 @@ func makeCreatePaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 				TypeID:      expense.Type.ID.String(),
 				Name:        expense.Type.Name,
 				Description: expense.Type.Description,
-			},
-			Category: CategoryDTO{
-				CategoryID:  expense.Type.Category.ID.String(),
-				Name:        expense.Type.Category.Name,
-				Description: expense.Type.Category.Description,
+				Category: TypeCategoryDTO{
+					CategoryID: expense.Type.Category.ID.String(),
+					Name:       expense.Type.Category.Name,
+				},
 			},
 			Description: expense.Description,
 			Amount:      expense.Amount.Amount(),
 			Currency:    expense.Amount.Currency().Code,
 			PaymentDate: expense.Date.Format(time.RFC3339),
+			Kind:        expense.Kind.String(),
 		}, nil
 	}
 }
@@ -473,16 +474,16 @@ func makeListPaymentsEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 					TypeID:      e.Type.ID.String(),
 					Name:        e.Type.Name,
 					Description: e.Type.Description,
-				},
-				Category: CategoryDTO{
-					CategoryID:  e.Type.Category.ID.String(),
-					Name:        e.Type.Category.Name,
-					Description: e.Type.Category.Description,
+					Category: TypeCategoryDTO{
+						CategoryID: e.Type.Category.ID.String(),
+						Name:       e.Type.Category.Name,
+					},
 				},
 				Description: e.Description,
 				Amount:      e.Amount.Amount(),
 				Currency:    e.Amount.Currency().Code,
 				PaymentDate: e.Date.Format(time.RFC3339),
+				Kind:        e.Kind.String(),
 			})
 		}
 

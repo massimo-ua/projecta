@@ -1,13 +1,12 @@
 import { DeleteOutlined, WarningOutlined } from '@ant-design/icons';
-import { Button, Modal } from 'antd';
+import { Modal } from 'antd';
 
 export default function RemoveTypeButton(props) {
   const [modal, contextHolder] = Modal.useModal();
   const { typeId, onClick } = props;
 
   return (<>
-    <Button
-      icon={<DeleteOutlined />}
+    <DeleteOutlined
       onClick={() => modal.confirm({
         title: 'Confirm type removal',
         icon: <WarningOutlined />,

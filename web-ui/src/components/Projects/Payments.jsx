@@ -1,12 +1,13 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
-import { Button, Skeleton, Table, Tag } from 'antd';
+import { Button, Row, Skeleton, Table, Tag } from 'antd';
 import usePayments from '../../hooks/payments';
-import { DollarOutlined } from '@ant-design/icons';
+import { DollarOutlined, EditOutlined } from '@ant-design/icons';
 import AddPaymentModal from './AddPaymentModal';
 import RemovePaymentButton from './RemovePaymentButton';
 import { paymentRepository } from '../../api';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
+import EditPaymentModal from './EditPaymentModal';
 
 const columns = [
   {
@@ -51,6 +52,7 @@ export function Payments() {
   const { projectId } = useParams();
   const [loading, payments, total, setFilter] = usePayments();
   const [addModalOpened, setAddModalOpen] = useState(false);
+  const [paymentIdToEdit, setPaymentIdToEdit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
   const onPaginationChange = (nextPage) => {
@@ -62,6 +64,12 @@ export function Payments() {
     }
   };
 
+  const onEditButtonClick = (paymentId) => {
+    if (!paymentIdToEdit) {
+      setPaymentIdToEdit(paymentId);
+    }
+  }
+
   useEffect(() => {
     setFilter({
       projectId,
@@ -70,8 +78,8 @@ export function Payments() {
     });
   }, [currentPage]);
 
-  const onCancel = () => setAddModalOpen(false);
-  const onSucces = () => {
+  const onAddCancel = () => setAddModalOpen(false);
+  const onAddSuccess = () => {
     setAddModalOpen(false);
     setFilter({
       projectId,
@@ -94,6 +102,16 @@ export function Payments() {
       })
   };
 
+  const onEditSuccess = () => {
+    setPaymentIdToEdit('');
+    setFilter({
+      projectId,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
+    });
+  }
+  const onEditCancel = () => setPaymentIdToEdit('');
+
   return loading ? <Skeleton active /> : (
     <div>
     <Button disabled={addModalOpened} style={{ margin: '10px' }} icon={<DollarOutlined />} type="primary" onClick={onAddButtonClick}>Add Payment</Button>
@@ -103,7 +121,10 @@ export function Payments() {
         title: 'Action',
         key: 'action',
         render: (_, payment) => (
-          <RemovePaymentButton paymentId={payment.id} onClick={onRemoveButtonClick}/>
+          <Row style={{ gap: '2px'}}>
+            <EditOutlined onClick={() => onEditButtonClick(payment.id)}/>
+            <RemovePaymentButton paymentId={payment.id} onClick={onRemoveButtonClick}/>
+          </Row>
         ),
       }]}
       showSorterTooltip={{
@@ -117,7 +138,8 @@ export function Payments() {
         onChange: onPaginationChange,
       }}
     />
-    <AddPaymentModal open={addModalOpened} onCancel={onCancel} onSuccess={onSucces} />
+      <AddPaymentModal open={addModalOpened} onCancel={onAddCancel} onSuccess={onAddSuccess} />
+      <EditPaymentModal paymentId={paymentIdToEdit} onCancel={onEditCancel} onSuccess={onEditSuccess} />
     </div>
   );
 }

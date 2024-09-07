@@ -1,25 +1,48 @@
 import { format, formatISO, parseISO } from 'date-fns';
+import { fromISO, toISO, toPrice, toPriceView } from './mappers';
 
 const toDomain = ({
-                    payment_id, amount, currency, description, type, category, payment_date,
+                    payment_id, amount, currency, description, type, payment_date,
                   }) => ({
   key: payment_id,
   id: payment_id,
   description,
-  amount: (amount / 100).toFixed(2),
+  amount: toPriceView(amount),
   currency,
   type: type?.name,
-  category: category?.name,
+  category: type.category?.name,
   paymentDate: format(parseISO(payment_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
 });
 
 const toAddPaymentDTO = ({ typeId, amount, currency, paymentDate, description, expenseKind }) => ({
   type_id: typeId,
-  amount: amount * 100,
+  amount: toPrice(amount),
   currency,
   payment_date: formatISO(paymentDate, { representation: 'complete' }),
   description,
   kind: expenseKind,
+});
+
+const toUpdatePaymentDTO = ({ typeId, amount, currency, paymentDate, description, paymentKind }) => ({
+  type_id: typeId,
+  amount: toPrice(amount),
+  currency,
+  payment_date: toISO(paymentDate),
+  description,
+  kind: paymentKind,
+});
+
+const toEditPaymentView = ({
+  payment_id, amount, currency, description, type, payment_date, kind,
+}) => ({
+  id: payment_id,
+  amount: toPriceView(amount),
+  currency,
+  description,
+  typeId: type.type_id,
+  categoryId: type.category?.category_id,
+  paymentDate: fromISO(payment_date),
+  kind,
 });
 
 export class PaymentRepository {
@@ -55,7 +78,23 @@ export class PaymentRepository {
     const response = await this.#request.delete(`/projects/${projectId}/payments/${paymentId}`);
 
     if (!response.ok) {
-      throw new Error('Failed to remove expense');
+      throw new Error('Failed to remove payment');
+    }
+  }
+
+  async getPayment(projectId, paymentId) {
+    const response = await this.#request.get(`/projects/${projectId}/payments/${paymentId}`);
+
+    return toEditPaymentView(response);
+  }
+
+  async updatePayment(projectId, payment) {
+    const response = await this.#request.put(
+      `/projects/${projectId}/payments/${payment.id}`,
+      toUpdatePaymentDTO(payment));
+
+    if (!response.ok) {
+      throw new Error('Failed to update payment');
     }
   }
 }

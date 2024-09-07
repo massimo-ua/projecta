@@ -93,7 +93,7 @@ export function Assets() {
   };
 
   const onEditSuccess = () => {
-    setAssetIdToEdit(false);
+    setAssetIdToEdit('');
     setFilter({
       projectId,
       limit: PAGE_SIZE,
