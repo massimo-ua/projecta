@@ -18,7 +18,7 @@ export function toPriceView(price) {
 }
 
 export function toPrice(price) {
-  return price * 100;
+  return Math.round(price * 100);
 }
 
 export function fromPrice(price) {
