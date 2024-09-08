@@ -24,6 +24,9 @@ const routes = [{
   path: '/projects/:projectId',
   Component: AuthenticatedOnly(ProjectDetails),
   children: [{
+    index: true,
+    Component: AuthenticatedOnly(Payments),
+  },{
     path: 'types',
     Component: AuthenticatedOnly(Types),
   }, {
