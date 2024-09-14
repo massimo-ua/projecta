@@ -14,13 +14,13 @@ const toDomain = ({
   paymentDate: format(parseISO(payment_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
 });
 
-const toAddPaymentDTO = ({ typeId, amount, currency, paymentDate, description, expenseKind }) => ({
+const toAddPaymentDTO = ({ typeId, amount, currency, paymentDate, description, paymentKind }) => ({
   type_id: typeId,
   amount: toPrice(amount),
   currency,
   payment_date: formatISO(paymentDate, { representation: 'complete' }),
   description,
-  kind: expenseKind,
+  kind: paymentKind,
 });
 
 const toUpdatePaymentDTO = ({ typeId, amount, currency, paymentDate, description, paymentKind }) => ({
