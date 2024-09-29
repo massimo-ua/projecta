@@ -511,7 +511,6 @@ func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asse
 		for next {
 			page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
 				ProjectID: projectID,
-				Kind:      projecta.DownPayment,
 				Pagination: core.Pagination{
 					Limit:  limit,
 					Offset: offset,
