@@ -6,9 +6,10 @@ require (
 	github.com/Rhymond/go-money v1.0.14
 	github.com/go-kit/kit v0.13.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
-	github.com/golang-migrate/migrate/v4 v4.17.1
+	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/huandu/go-sqlbuilder v1.28.1
 	github.com/jackc/pgx/v5 v5.7.0
 	github.com/rabbitmq/amqp091-go v1.10.0
