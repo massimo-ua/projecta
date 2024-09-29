@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/huandu/go-sqlbuilder v1.30.0
 	github.com/jackc/pgx/v5 v5.7.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/rabbitmq/amqp091-go v1.10.0
 	golang.org/x/crypto v0.27.0
 )
