@@ -1,9 +1,15 @@
 package websocket
 
 import (
+	"encoding/json"
 	"github.com/gorilla/websocket"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"net/http"
 	"strings"
+)
+
+const (
+	authQueryParam = "token"
 )
 
 type originValidator = func(origin string) bool
@@ -29,9 +35,18 @@ func createWsUpgradeHandler(isAllowedOrigin originValidator) websocket.Upgrader 
 	}
 }
 
-func makeWsHandler(a *AppAdapter, allowedOrigins []string) http.HandlerFunc {
+func makeWsHandler(a *AppAdapterImpl, allowedOrigins []string, authorizer authorizer) http.HandlerFunc {
 	u := createWsUpgradeHandler(createOriginValidator(allowedOrigins))
 	return func(w http.ResponseWriter, r *http.Request) {
+		aToken := r.URL.Query().Get(authQueryParam)
+		_, err := authorizer(aToken)
+
+		// TODO: review this solution
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
 		c, err := u.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -41,13 +56,22 @@ func makeWsHandler(a *AppAdapter, allowedOrigins []string) http.HandlerFunc {
 		for {
 			mt, message, err := c.ReadMessage()
 			if err != nil {
-				break
+				continue
 			}
 
-			response, err := a.Handle(IncomingMessage{
-				MessageType: mt,
-				Payload:     message,
-			})
+			var payload PayloadDTO
+
+			err = json.Unmarshal(message, &payload)
+
+			if err != nil {
+				continue
+			}
+
+			requesterID, err := authorizer(payload.Token)
+
+			ctx := createAuthorizedContext(requesterID)
+
+			response, err := a.Handle(ctx, payload.Type, payload.Data)
 
 			if err != nil {
 				continue
@@ -61,7 +85,8 @@ func makeWsHandler(a *AppAdapter, allowedOrigins []string) http.HandlerFunc {
 	}
 }
 
-func CreateWsHandler(allowedOrigins []string) http.HandlerFunc {
+func CreateWsHandler(allowedOrigins []string, provider core.AuthTokenProvider) http.HandlerFunc {
 	a := NewAppAdapter()
-	return makeWsHandler(a, allowedOrigins)
+	authorizer := createJwtAuthorizer(provider)
+	return makeWsHandler(a, allowedOrigins, authorizer)
 }

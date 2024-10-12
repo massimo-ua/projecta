@@ -3,6 +3,7 @@ import { differenceInMinutes } from 'date-fns';
 const ACCESS_TOKEN_KEY = 'access-token';
 const REFRESH_TOKEN_KEY = 'refresh-token';
 const TOKEN_EXPIRES_AT_KEY = 'access-token-expires-at';
+const IDENTITY_CHANGED = 'identity-changed';
 
 export class Auth {
   #baseUrl;
@@ -15,16 +16,28 @@ export class Auth {
 
   #pendingTokenRequest;
 
+  #eventEmitter;
+
   constructor(baseURL) {
     this.#baseUrl = baseURL;
     this.#tokenKey = ACCESS_TOKEN_KEY;
     this.#refreshTokenKey = REFRESH_TOKEN_KEY;
     this.#tokenExpiresAtKey = TOKEN_EXPIRES_AT_KEY;
+    this.#eventEmitter = new EventTarget();
   }
 
   #isTokenExpired() {
     const expiresAt = parseInt(localStorage.getItem(this.#tokenExpiresAtKey), 10);
     return !expiresAt || differenceInMinutes(new Date(expiresAt), new Date()) < 2;
+  }
+
+  onIdentityChange(listener) {
+    if (this.isAuthenticated()) {
+      listener({ detail: localStorage.getItem(this.#tokenKey) });
+    }
+
+    this.#eventEmitter.addEventListener(IDENTITY_CHANGED, listener);
+    return () => this.#eventEmitter.removeEventListener(IDENTITY_CHANGED, listener);
   }
 
   async getToken() {
@@ -78,6 +91,7 @@ export class Auth {
     localStorage.setItem(this.#tokenKey, accessToken);
     localStorage.setItem(this.#refreshTokenKey, refreshToken);
     localStorage.setItem(this.#tokenExpiresAtKey, String(expiresAt * 1000));
+    this.#eventEmitter.dispatchEvent(new CustomEvent(IDENTITY_CHANGED, { detail: accessToken }));
     return accessToken;
   }
 
@@ -146,6 +160,7 @@ export class Auth {
     localStorage.removeItem(this.#tokenKey);
     localStorage.removeItem(this.#refreshTokenKey);
     localStorage.removeItem(this.#tokenExpiresAtKey);
+    this.#eventEmitter.dispatchEvent(new CustomEvent(IDENTITY_CHANGED, { detail: '' }));
     this.#pendingTokenRequest = null;
   }
 

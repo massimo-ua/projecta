@@ -9,10 +9,12 @@ import (
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
 	"gitlab.com/massimo-ua/projecta/pkg/dal"
 	"gitlab.com/massimo-ua/projecta/pkg/web"
+	"gitlab.com/massimo-ua/projecta/pkg/websocket"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 )
 
 const (
@@ -92,6 +94,9 @@ func main() {
 		paymentRepository,
 	)
 
+	allowedOrigins := strings.Split(os.Getenv("WS_ALLOWED_ORIGINS"), ",")
+	wsHandler := websocket.CreateWsHandler(allowedOrigins, tokenProvider)
+
 	webAPI, err := web.MakeHTTPHandler(
 		customerService,
 		tokenProvider,
@@ -101,6 +106,7 @@ func main() {
 		typeService,
 		paymentService,
 		assetService,
+		wsHandler,
 	)
 
 	if err != nil {

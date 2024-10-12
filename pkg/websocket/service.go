@@ -1,45 +1,41 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
-	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
-type AppAdapter struct{}
-
-type IncomingMessage struct {
-	MessageType int
-	Payload     []byte
+type AppAdapter interface {
+	Handle(ctx context.Context, eventType string, data string) ([]byte, error)
 }
 
-type OutgoingMessage struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
+type PayloadType = string
+
+const (
+	Ping  PayloadType = "ping"
+	Error PayloadType = "error"
+)
+
+type AppAdapterImpl struct{}
+
+var (
+	pongResponse            = PayloadDTO{Type: Ping, Data: "pong"}
+	noActiveHandlerResponse = PayloadDTO{Type: Error, Data: "no active handler"}
+)
+
+func NewAppAdapter() *AppAdapterImpl {
+	return &AppAdapterImpl{}
 }
 
-type PingMessage struct {
-	Type string `json:"type"`
+func (a *AppAdapterImpl) pong() ([]byte, error) {
+	return json.Marshal(pongResponse)
 }
 
-func NewAppAdapter() *AppAdapter {
-	return &AppAdapter{}
-}
-
-func (a *AppAdapter) Handle(m IncomingMessage) ([]byte, error) {
-	var pingMessage PingMessage
-	err := json.Unmarshal(m.Payload, &pingMessage)
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to decode message", err)
+func (a *AppAdapterImpl) Handle(ctx context.Context, eventType string, data string) ([]byte, error) {
+	switch eventType {
+	case Ping:
+		return a.pong()
+	default:
+		return json.Marshal(noActiveHandlerResponse)
 	}
-
-	response, err := json.Marshal(OutgoingMessage{
-		Type:    "ping",
-		Message: "pong",
-	})
-
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to encode response", err)
-	}
-
-	return response, nil
 }

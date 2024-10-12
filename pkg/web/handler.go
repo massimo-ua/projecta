@@ -12,7 +12,6 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"gitlab.com/massimo-ua/projecta/pkg/websocket"
 	"net/http"
 )
 
@@ -55,6 +54,7 @@ func MakeHTTPHandler(
 	typeService projecta.TypeService,
 	expenseService projecta.PaymentService,
 	assetService asset.Service,
+	websocketHandler http.HandlerFunc,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
@@ -79,9 +79,7 @@ func MakeHTTPHandler(
 
 	withAuth := append(options, ht.ServerBefore(jwtMiddleware(authTokenProvider)))
 
-	wsHandler := websocket.CreateWsHandler([]string{"ws://127.0.0.1:8000"})
-
-	r.Path("/ws").HandlerFunc(wsHandler)
+	r.Path("/ws").HandlerFunc(websocketHandler)
 
 	r.Methods(http.MethodPost).Path("/register").Handler(ht.NewServer(
 		peopleEndpoints.Register,
