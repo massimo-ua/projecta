@@ -9,10 +9,10 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
-	github.com/huandu/go-sqlbuilder v1.30.0
+	github.com/huandu/go-sqlbuilder v1.33.1
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/rabbitmq/amqp091-go v1.10.0
-	golang.org/x/crypto v0.27.0
+	golang.org/x/crypto v0.31.0
 )
 
 require (
@@ -26,6 +26,6 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 )
