@@ -112,13 +112,19 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		owner,
 	)
 
+	paymentDescription := command.Description
+
+	if paymentDescription == "" {
+		paymentDescription = command.Name
+	}
+
 	if command.WithPayment {
 		payment := projecta.NewPayment(
 			uuid.New(),
 			project,
 			owner,
 			costType,
-			command.Description,
+			paymentDescription,
 			command.Price,
 			acquiredAt,
 			projecta.UponCompletionPayment,
