@@ -2,39 +2,64 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
 	"gitlab.com/massimo-ua/projecta/pkg/dal"
+	"gitlab.com/massimo-ua/projecta/pkg/logger"
 	"gitlab.com/massimo-ua/projecta/pkg/web"
-	"log"
-	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
-const (
-	TokenTTL                  = 300
-	GoogleCertCacheSecondsTTL = 24 * 60 * 60
-)
+func createErrorHandler(logger core.Logger) func(err error) {
+	return func(err error) {
+		logger.Error("failed to start the application", err, nil)
+		os.Exit(1)
+	}
+}
 
 func main() {
-	pool, err := dal.Connect(os.Getenv("DB_URI"))
+	log := logger.New(dbUri, jwtSecret)
+	handleError := createErrorHandler(log)
+
+	config, err := loadConfig()
 
 	if err != nil {
-		log.Fatalln(err)
+		handleError(err)
 	}
 
-	err = pool.Ping(context.Background())
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	pool, err := dal.Connect(config.DbUri)
 
 	if err != nil {
-		os.Stdout.Write([]byte("Could not connect to the database\n"))
-		log.Fatalln(err)
+		handleError(exceptions.NewInternalException("failed to connect to the database", err))
 	}
 
-	os.Stdout.Write([]byte("Connected to the database\n"))
+	defer pool.Close()
+
+	if err != nil {
+		handleError(err)
+	}
+
+	startTime := time.Now()
+	if err = pool.Ping(ctx); err != nil {
+		handleError(exceptions.NewInternalException("database ping failed", err))
+	}
+
+	log.Info("Database Connection Established", map[string]any{"connection_time": time.Since(startTime)})
 
 	//brk, err := broker.NewAMQPBroker(os.Getenv("AMQP_URI"))
 	//
@@ -42,20 +67,15 @@ func main() {
 	//	log.Fatal(err)
 	//}
 
-	defer func() {
-		//brk.Close()
-		pool.Close()
-	}()
-
 	peopleRepository := dal.NewPgPeopleRepository(pool)
 	hasher := crypto.NewBcryptHasher(0)
 	googleAuth := crypto.NewGoogleAuthProvider(
-		os.Getenv("GOOGLE_CLIENT_ID"),
-		GoogleCertCacheSecondsTTL,
+		config.GoogleClientID,
+		config.GoogleCertTTL,
 	)
 	tokenProvider := crypto.NewJwtTokenProvider(
-		os.Getenv("JWT_SECRET"),
-		TokenTTL,
+		config.JwtSecret,
+		config.TokenTTL,
 		hasher,
 	)
 	authService := people.NewAuthService(
@@ -103,20 +123,36 @@ func main() {
 		assetService,
 	)
 
-	if err != nil {
-		log.Fatal(err)
+	server := &http.Server{
+		Addr:    config.HttpUri,
+		Handler: webAPI,
+		// Add timeouts for security
+		ReadTimeout:  config.HttpReadTimeout,
+		WriteTimeout: config.HttpWriteTimeout,
 	}
 
-	uri := os.Getenv("HTTP_URI")
-	httpListener, err := net.Listen("tcp", uri)
-	if err != nil {
-		os.Stderr.Write([]byte(fmt.Sprintf("failed to initialize HTTP listen: %s", err.Error())))
+	go func() {
+		log.Info("Starting HTTP Server", map[string]any{"uri": config.HttpUri})
+		if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("HTTP Server Failed", err, nil)
+		}
+	}()
+
+	// Waiting for interrupt signal
+	<-ctx.Done()
+
+	// Graceful Shutdown
+	startTime = time.Now()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
+	defer cancel()
+
+	if err = server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Error("server shutdown failed", err, map[string]any{
+			"shutdown_time": time.Since(startTime),
+		})
 	}
 
-	os.Stdout.Write([]byte(fmt.Sprintf("HTTP server is listening on %s\n", uri)))
-	err = http.Serve(httpListener, webAPI)
-
-	if err != nil {
-		os.Stderr.Write([]byte(fmt.Sprintf("failed to serve HTTP: %s", err.Error())))
-	}
+	log.Info("application shutdown completed", map[string]any{
+		"shutdown_time": time.Since(startTime),
+	})
 }
