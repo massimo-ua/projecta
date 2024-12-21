@@ -44,6 +44,13 @@ func main() {
 
 	pool, err := dal.Connect(config.DbUri)
 
+	// Remove old connection code once migration to DbConnection is complete
+	if err != nil {
+		handleError(exceptions.NewInternalException("failed to connect to the database", err))
+	}
+
+	db, err := dal.NewPgDbConnection(config.DbUri)
+
 	if err != nil {
 		handleError(exceptions.NewInternalException("failed to connect to the database", err))
 	}
@@ -93,7 +100,7 @@ func main() {
 	categoryRepository := dal.NewPgProjectaCategoryRepository(pool)
 	typeRepository := dal.NewPgProjectaCostTypeRepository(pool)
 	paymentRepository := dal.NewPgProjectaPaymentRepository(pool)
-	assetRepository := dal.NewPgAssetRepository(pool)
+	assetRepository := dal.NewPgAssetRepository(db)
 	peopleService := projecta.NewPeopleService(peopleRepository)
 	projectService := projecta.NewProjectService(projectRepository, peopleService)
 	categoryService := projecta.NewCategoryService(categoryRepository, projectService)
@@ -105,6 +112,7 @@ func main() {
 		peopleService,
 	)
 	assetService := asset.NewService(
+		db,
 		assetRepository,
 		peopleService,
 		typeRepository,
