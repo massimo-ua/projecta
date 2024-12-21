@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"time"
 )
@@ -19,12 +19,12 @@ var FailedToSaveAssetError = errors.New("failed to save asset")
 var AssetNotFoundError = errors.New("asset not found")
 
 type PgAssetRepository struct {
-	PgRepository
+	db *PgDbConnection
 }
 
-func NewPgAssetRepository(pool *pgxpool.Pool) *PgAssetRepository {
+func NewPgAssetRepository(conn *PgDbConnection) *PgAssetRepository {
 	return &PgAssetRepository{
-		PgRepository{db: pool},
+		db: conn,
 	}
 }
 
@@ -45,7 +45,11 @@ func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) erro
 }
 
 func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) error {
-	tx, inTx := ctx.Value(core.TxCtxKey).(pgx.Tx)
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
 
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 
@@ -74,15 +78,7 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 
 	sql, args := qb.Build()
 
-	if inTx {
-		if _, err := tx.Exec(ctx, sql, args...); err != nil {
-			return errors.Join(FailedToSaveAssetError, err)
-		}
-
-		return nil
-	}
-
-	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
+	if _, err = db.Exec(ctx, sql, args...); err != nil {
 		return errors.Join(FailedToSaveAssetError, err)
 	}
 
@@ -90,7 +86,11 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 }
 
 func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) error {
-	tx, inTx := ctx.Value(core.TxCtxKey).(pgx.Tx)
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
 
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 
@@ -108,15 +108,7 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 
 	sql, args := qb.Build()
 
-	if inTx {
-		if _, err := tx.Exec(ctx, sql, args...); err != nil {
-			return errors.Join(FailedToSaveAssetError, err)
-		}
-
-		return nil
-	}
-
-	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
+	if _, err = db.Exec(ctx, sql, args...); err != nil {
 		return errors.Join(FailedToSaveAssetError, err)
 	}
 
@@ -124,6 +116,12 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 }
 
 func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_assets")
 	qb.Where(qb.Equal("asset_id", asset.ID.String()))
@@ -131,7 +129,7 @@ func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) erro
 
 	sql, args := qb.Build()
 
-	res, err := r.db.Exec(ctx, sql, args...)
+	res, err := db.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -145,6 +143,12 @@ func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) erro
 }
 
 func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_assets")
 
@@ -183,7 +187,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		categoryDescription string
 	)
 
-	if err := r.db.QueryRow(
+	if err = db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -243,6 +247,12 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 }
 
 func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_assets")
 
@@ -268,7 +278,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 
 	var total int
 
-	if err := r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+	if err = db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
 		return nil, err
 	}
 
@@ -287,7 +297,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 
 	sql, args = qb.Build()
 
-	rows, err := r.db.Query(ctx, sql, args...)
+	rows, err := db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err
@@ -317,7 +327,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			categoryDescription string
 		)
 
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&assetID,
 			&name,
 			&description,

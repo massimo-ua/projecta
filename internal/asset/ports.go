@@ -2,7 +2,6 @@ package asset
 
 import (
 	"context"
-	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type Service interface {
@@ -14,7 +13,6 @@ type Service interface {
 }
 
 type Repository interface {
-	core.BaseRepository
 	Save(ctx context.Context, asset *Asset) error
 	Remove(ctx context.Context, asset *Asset) error
 	FindOne(ctx context.Context, filter Filter) (*Asset, error)
