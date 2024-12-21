@@ -2,34 +2,26 @@ package dal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"time"
 )
 
 type PgPaymentRepository struct {
-	db *PgDbConnection
+	db *PgRepository
 }
 
 func NewPgPaymentRepository(db *PgDbConnection) *PgPaymentRepository {
 	return &PgPaymentRepository{
-		db,
+		db: &PgRepository{db},
 	}
 }
 
 func (r *PgPaymentRepository) FindOne(ctx context.Context, filter projecta.PaymentFilter) (*projecta.Payment, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -92,7 +84,7 @@ func (r *PgPaymentRepository) FindOne(ctx context.Context, filter projecta.Payme
 		expenseKind  string
 	)
 
-	if err = db.QueryRow(
+	if err = r.db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -136,12 +128,6 @@ func (r *PgPaymentRepository) FindOne(ctx context.Context, filter projecta.Payme
 }
 
 func (r *PgPaymentRepository) Save(ctx context.Context, expense *projecta.Payment) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -166,7 +152,7 @@ func (r *PgPaymentRepository) Save(ctx context.Context, expense *projecta.Paymen
 
 	sql, args := qb.Build()
 
-	res, err := db.Exec(ctx, sql, args...)
+	res, err := r.db.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -180,12 +166,6 @@ func (r *PgPaymentRepository) Save(ctx context.Context, expense *projecta.Paymen
 }
 
 func (r *PgPaymentRepository) create(ctx context.Context, expense *projecta.Payment) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_payments")
 	qb.Cols(
@@ -214,18 +194,12 @@ func (r *PgPaymentRepository) create(ctx context.Context, expense *projecta.Paym
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgPaymentRepository) update(ctx context.Context, payment *projecta.Payment) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_payments")
 	qb.Set(
@@ -243,18 +217,12 @@ func (r *PgPaymentRepository) update(ctx context.Context, payment *projecta.Paym
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgPaymentRepository) Remove(ctx context.Context, expense *projecta.Payment) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -269,18 +237,12 @@ func (r *PgPaymentRepository) Remove(ctx context.Context, expense *projecta.Paym
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err = r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgPaymentRepository) Find(ctx context.Context, filter projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -315,7 +277,7 @@ func (r *PgPaymentRepository) Find(ctx context.Context, filter projecta.PaymentC
 
 	var total int
 
-	if err = db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
 		return nil, err
 	}
 
@@ -354,7 +316,7 @@ func (r *PgPaymentRepository) Find(ctx context.Context, filter projecta.PaymentC
 
 	sql, args = qb.Build()
 
-	rows, err := db.Query(ctx, sql, args...)
+	rows, err := r.db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err

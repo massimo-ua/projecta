@@ -6,30 +6,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
-	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 )
 
 type PgPeopleRepository struct {
-	db *PgDbConnection
+	db *PgRepository
 }
 
 var failedToRegisterPersonError = "failed to register person"
 
 func NewPgPeopleRepository(db *PgDbConnection) *PgPeopleRepository {
 	return &PgPeopleRepository{
-		db: db,
+		db: &PgRepository{db},
 	}
 }
 
 func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("people")
 	qb.Cols("person_id", "first_name", "last_name")
@@ -37,7 +30,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 
 	sql, args := qb.Build()
 
-	if _, err = db.Exec(
+	if _, err := r.db.Exec(
 		ctx,
 		sql,
 		args...,
@@ -45,7 +38,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
-	if err = r.setCredentials(ctx, person.ID, person.Identities()); err != nil {
+	if err := r.setCredentials(ctx, person.ID, person.Identities()); err != nil {
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
@@ -57,16 +50,10 @@ func (r *PgPeopleRepository) FindCredentials(
 	provider people.IdentityProvider,
 	registrationID string,
 ) (uuid.UUID, string, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return uuid.Nil, "", exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	var personID string
 	var identity string
 
-	err = db.QueryRow(
+	err := r.db.QueryRow(
 		ctx,
 		`SELECT
 				"person_id", "identity"
@@ -96,12 +83,6 @@ func (r *PgPeopleRepository) setCredentials(
 	personID uuid.UUID,
 	credentials []people.Credentials,
 ) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("credentials")
 	qb.Cols("person_id", "provider", "identity", "registration_id")
@@ -112,7 +93,7 @@ func (r *PgPeopleRepository) setCredentials(
 
 	sql, args := qb.Build()
 
-	if _, err = db.Exec(ctx, sql, args...); err != nil {
+	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
 		return err
 	}
 
@@ -120,12 +101,6 @@ func (r *PgPeopleRepository) setCredentials(
 }
 
 func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("people")
 	qb.Select("first_name", "last_name")
@@ -138,7 +113,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 		lastName  string
 	)
 
-	if err = db.QueryRow(
+	if err := r.db.QueryRow(
 		ctx,
 		sql,
 		args...,

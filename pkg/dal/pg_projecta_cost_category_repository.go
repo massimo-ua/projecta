@@ -8,27 +8,20 @@ import (
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 type PgCostCategoryRepository struct {
-	db *PgDbConnection
+	db *PgRepository
 }
 
 func NewPgCategoryRepository(db *PgDbConnection) *PgCostCategoryRepository {
 	return &PgCostCategoryRepository{
-		db,
+		db: &PgRepository{db},
 	}
 }
 
 func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -53,7 +46,7 @@ func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.Cat
 
 	var total int
 
-	if err = db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
 		return nil, err
 	}
 
@@ -72,7 +65,7 @@ func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.Cat
 
 	sql, args = qb.Build()
 
-	rows, err := db.Query(ctx, sql, args...)
+	rows, err := r.db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err
@@ -105,12 +98,6 @@ func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.Cat
 }
 
 func (r *PgCostCategoryRepository) FindOne(ctx context.Context, filter projecta.CategoryFilter) (*projecta.CostCategory, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
 
 	if personID == uuid.Nil {
@@ -142,7 +129,7 @@ func (r *PgCostCategoryRepository) FindOne(ctx context.Context, filter projecta.
 		description string
 	)
 
-	if err = db.QueryRow(
+	if err := r.db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -158,12 +145,6 @@ func (r *PgCostCategoryRepository) FindOne(ctx context.Context, filter projecta.
 }
 
 func (r *PgCostCategoryRepository) Save(ctx context.Context, category *projecta.CostCategory) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_categories")
 	qb.Select("1 as exists")
@@ -171,7 +152,7 @@ func (r *PgCostCategoryRepository) Save(ctx context.Context, category *projecta.
 	qb.Where(qb.Equal("project_id", category.ProjectID.String()))
 
 	sql, args := qb.Build()
-	err = db.QueryRow(ctx, sql, args...).Scan()
+	err := r.db.QueryRow(ctx, sql, args...).Scan()
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -185,18 +166,12 @@ func (r *PgCostCategoryRepository) Save(ctx context.Context, category *projecta.
 }
 
 func (r *PgCostCategoryRepository) Remove(ctx context.Context, category *projecta.CostCategory) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_cost_categories")
 	qb.Where(qb.Equal("category_id", category.ID.String()))
 
 	sql, args := qb.Build()
-	res, err := db.Exec(ctx, sql, args...)
+	res, err := r.db.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -210,30 +185,18 @@ func (r *PgCostCategoryRepository) Remove(ctx context.Context, category *project
 }
 
 func (r *PgCostCategoryRepository) create(ctx context.Context, category *projecta.CostCategory) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_cost_categories")
 	qb.Cols("category_id", "project_id", "name", "description")
 	qb.Values(category.ID.String(), category.ProjectID.String(), category.Name, category.Description)
 
 	sql, args := qb.Build()
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgCostCategoryRepository) update(ctx context.Context, category *projecta.CostCategory) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_cost_categories")
 	qb.Set(
@@ -243,7 +206,7 @@ func (r *PgCostCategoryRepository) update(ctx context.Context, category *project
 	qb.Where(qb.Equal("category_id", category.ID.String()))
 
 	sql, args := qb.Build()
-	res, err := db.Exec(ctx, sql, args...)
+	res, err := r.db.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err

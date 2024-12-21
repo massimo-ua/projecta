@@ -2,32 +2,24 @@ package dal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 type PgCostTypeRepository struct {
-	db *PgDbConnection
+	db *PgRepository
 }
 
 func NewPgCostTypeRepository(db *PgDbConnection) *PgCostTypeRepository {
 	return &PgCostTypeRepository{
-		db,
+		db: &PgRepository{db},
 	}
 }
 
 func (r *PgCostTypeRepository) FindOne(ctx context.Context, filter projecta.TypeFilter) (*projecta.CostType, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
 
 	if personID == uuid.Nil {
@@ -67,7 +59,7 @@ func (r *PgCostTypeRepository) FindOne(ctx context.Context, filter projecta.Type
 		categoryName string
 	)
 
-	if err = db.QueryRow(
+	if err := r.db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -86,12 +78,6 @@ func (r *PgCostTypeRepository) FindOne(ctx context.Context, filter projecta.Type
 }
 
 func (r *PgCostTypeRepository) Save(ctx context.Context, costType *projecta.CostType) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_cost_types")
 	qb.Cols("type_id", "project_id", "category_id", "name", "description")
@@ -105,17 +91,12 @@ func (r *PgCostTypeRepository) Save(ctx context.Context, costType *projecta.Cost
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgCostTypeRepository) Remove(ctx context.Context, costType *projecta.CostType) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
 	// TODO: Verify that the person is the owner of the project that the cost type belongs to
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_cost_types")
@@ -124,18 +105,12 @@ func (r *PgCostTypeRepository) Remove(ctx context.Context, costType *projecta.Co
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgCostTypeRepository) Find(ctx context.Context, filter projecta.TypeCollectionFilter) (*projecta.CostTypeCollection, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -166,7 +141,7 @@ func (r *PgCostTypeRepository) Find(ctx context.Context, filter projecta.TypeCol
 
 	var total int
 
-	if err = db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
 		return nil, err
 	}
 
@@ -192,7 +167,7 @@ func (r *PgCostTypeRepository) Find(ctx context.Context, filter projecta.TypeCol
 
 	sql, args = qb.Build()
 
-	rows, err := db.Query(ctx, sql, args...)
+	rows, err := r.db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err

@@ -14,22 +14,16 @@ import (
 )
 
 type PgProjectRepository struct {
-	db *PgDbConnection
+	db *PgRepository
 }
 
 func NewPgProjectRepository(db *PgDbConnection) *PgProjectRepository {
 	return &PgProjectRepository{
-		db,
+		db: &PgRepository{db},
 	}
 }
 
 func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
 
 	if personID == uuid.Nil {
@@ -73,7 +67,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		lastName    string
 	)
 
-	if err = db.QueryRow(
+	if err := r.db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -98,12 +92,6 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 }
 
 func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_projects")
 	qb.Cols(
@@ -125,18 +113,12 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_projects")
 	qb.Set(
@@ -151,18 +133,12 @@ func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Proj
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgProjectRepository) Remove(ctx context.Context, project *projecta.Project) error {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_projects")
 	qb.Where(qb.Equal("project_id", project.ProjectID.String()))
@@ -170,18 +146,12 @@ func (r *PgProjectRepository) Remove(ctx context.Context, project *projecta.Proj
 
 	sql, args := qb.Build()
 
-	_, err = db.Exec(ctx, sql, args...)
+	_, err := r.db.Exec(ctx, sql, args...)
 
 	return err
 }
 
 func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
-	db, err := r.db.GetConnection(ctx)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
-	}
-
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -213,7 +183,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 
 	sql, args := qb.Build()
 
-	rows, err := db.Query(ctx, sql, args...)
+	rows, err := r.db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err
