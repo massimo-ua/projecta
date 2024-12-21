@@ -74,7 +74,7 @@ func main() {
 	//	log.Fatal(err)
 	//}
 
-	peopleRepository := dal.NewPgPeopleRepository(pool)
+	peopleRepository := dal.NewPgPeopleRepository(db)
 	hasher := crypto.NewBcryptHasher(0)
 	googleAuth := crypto.NewGoogleAuthProvider(
 		config.GoogleClientID,
@@ -92,10 +92,7 @@ func main() {
 		googleAuth,
 	)
 
-	customerService := people.NewCustomerService(
-		peopleRepository,
-		hasher)
-
+	customerService := people.NewCustomerService(db, peopleRepository, hasher)
 	projectRepository := dal.NewPgProjectaProjectRepository(pool)
 	categoryRepository := dal.NewPgProjectaCategoryRepository(pool)
 	typeRepository := dal.NewPgProjectaCostTypeRepository(pool)

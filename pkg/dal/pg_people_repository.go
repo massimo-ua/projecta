@@ -1,162 +1,178 @@
 package dal
 
 import (
-    "context"
-    "errors"
-    "github.com/google/uuid"
-    "github.com/huandu/go-sqlbuilder"
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgxpool"
-    "gitlab.com/massimo-ua/projecta/internal/core"
-    "gitlab.com/massimo-ua/projecta/internal/exceptions"
-    "gitlab.com/massimo-ua/projecta/internal/people"
+	"context"
+	"errors"
+	"github.com/google/uuid"
+	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
+	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"gitlab.com/massimo-ua/projecta/internal/people"
 )
 
 type PgPeopleRepository struct {
-    PgRepository
+	db *PgDbConnection
 }
 
 var failedToRegisterPersonError = "failed to register person"
 
-func NewPgPeopleRepository(pool *pgxpool.Pool) *PgPeopleRepository {
-    return &PgPeopleRepository{
-        PgRepository{db: pool},
-    }
+func NewPgPeopleRepository(db *PgDbConnection) *PgPeopleRepository {
+	return &PgPeopleRepository{
+		db: db,
+	}
 }
 
 func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person) error {
-    tx, ok := ctx.Value(core.TxCtxKey).(pgx.Tx)
+	tx, ok := ctx.Value(core.TxCtxKey).(pgx.Tx)
 
-    if !ok {
-        return exceptions.NewInternalException(failedToRegisterPersonError, failedToObtainTransactionError)
-    }
+	if !ok {
+		return exceptions.NewInternalException(failedToRegisterPersonError, failedToObtainTransactionError)
+	}
 
-    defer rollbackTx(ctx, tx)
+	defer rollbackTx(ctx, tx)
 
-    qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
-    qb.InsertInto("people")
-    qb.Cols("person_id", "first_name", "last_name")
-    qb.Values(person.ID.String(), person.FirstName, person.LastName)
+	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
+	qb.InsertInto("people")
+	qb.Cols("person_id", "first_name", "last_name")
+	qb.Values(person.ID.String(), person.FirstName, person.LastName)
 
-    sql, args := qb.Build()
+	sql, args := qb.Build()
 
-    if _, err := tx.Exec(
-        ctx,
-        sql,
-        args...,
-    ); err != nil {
-        return exceptions.NewInternalException(failedToRegisterPersonError, err)
-    }
+	if _, err := tx.Exec(
+		ctx,
+		sql,
+		args...,
+	); err != nil {
+		return exceptions.NewInternalException(failedToRegisterPersonError, err)
+	}
 
-    if err := r.setCredentials(ctx, tx, person.ID, person.Identities()); err != nil {
-        return exceptions.NewInternalException(failedToRegisterPersonError, err)
-    }
+	if err := r.setCredentials(ctx, person.ID, person.Identities()); err != nil {
+		return exceptions.NewInternalException(failedToRegisterPersonError, err)
+	}
 
-    if err := tx.Commit(ctx); err != nil {
-        return exceptions.NewInternalException(failedToRegisterPersonError, err)
-    }
+	if err := tx.Commit(ctx); err != nil {
+		return exceptions.NewInternalException(failedToRegisterPersonError, err)
+	}
 
-    return nil
+	return nil
 }
 
 func (r *PgPeopleRepository) FindCredentials(
-    ctx context.Context,
-    provider people.IdentityProvider,
-    registrationID string,
+	ctx context.Context,
+	provider people.IdentityProvider,
+	registrationID string,
 ) (uuid.UUID, string, error) {
-    var personID string
-    var identity string
+	db, err := r.db.GetConnection(ctx)
 
-    err := r.db.QueryRow(
-        ctx,
-        `SELECT
+	if err != nil {
+		return uuid.Nil, "", exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
+	var personID string
+	var identity string
+
+	err = db.QueryRow(
+		ctx,
+		`SELECT
 				"person_id", "identity"
 				FROM "credentials"
 				WHERE "provider" = $1 AND "registration_id" = $2`,
-        provider,
-        registrationID,
-    ).Scan(
-        &personID,
-        &identity)
+		provider,
+		registrationID,
+	).Scan(
+		&personID,
+		&identity)
 
-    if err != nil {
-        return uuid.Nil, "", exceptions.NewNotFoundException("credentials not found", err)
-    }
+	if err != nil {
+		return uuid.Nil, "", exceptions.NewNotFoundException("credentials not found", err)
+	}
 
-    personUUID, err := uuid.Parse(personID)
+	personUUID, err := uuid.Parse(personID)
 
-    if err != nil {
-        return uuid.Nil, "", exceptions.NewInternalException("failed to fetch person id", err)
-    }
+	if err != nil {
+		return uuid.Nil, "", exceptions.NewInternalException("failed to fetch person id", err)
+	}
 
-    return personUUID, identity, nil
+	return personUUID, identity, nil
 }
 
 func (r *PgPeopleRepository) setCredentials(
-    ctx context.Context,
-    tx pgx.Tx,
-    personID uuid.UUID,
-    credentials []people.Credentials,
+	ctx context.Context,
+	personID uuid.UUID,
+	credentials []people.Credentials,
 ) error {
-    qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
-    qb.InsertInto("credentials")
-    qb.Cols("person_id", "provider", "identity", "registration_id")
+	db, err := r.db.GetConnection(ctx)
 
-    for _, i := range credentials {
-        qb.Values(personID.String(), i.Provider(), i.Identifier(), i.RegistrationID())
-    }
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
 
-    sql, args := qb.Build()
+	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
+	qb.InsertInto("credentials")
+	qb.Cols("person_id", "provider", "identity", "registration_id")
 
-    if _, err := tx.Exec(ctx, sql, args...); err != nil {
-        return err
-    }
+	for _, i := range credentials {
+		qb.Values(personID.String(), i.Provider(), i.Identifier(), i.RegistrationID())
+	}
 
-    return nil
+	sql, args := qb.Build()
+
+	if _, err = db.Exec(ctx, sql, args...); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
-    qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-    qb.From("people")
-    qb.Select("first_name", "last_name")
-    qb.Where(qb.Equal("person_id", personID.String()))
+	db, err := r.db.GetConnection(ctx)
 
-    sql, args := qb.Build()
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
 
-    var (
-        firstName string
-        lastName  string
-    )
+	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	qb.From("people")
+	qb.Select("first_name", "last_name")
+	qb.Where(qb.Equal("person_id", personID.String()))
 
-    if err := r.db.QueryRow(
-        ctx,
-        sql,
-        args...,
-    ).Scan(
-        &firstName,
-        &lastName,
-    ); err != nil {
-        if errors.Is(err, pgx.ErrNoRows) {
-            return nil, exceptions.NewNotFoundException("person not found", err)
-        }
+	sql, args := qb.Build()
 
-        return nil, err
-    }
+	var (
+		firstName string
+		lastName  string
+	)
 
-    person, err := toPersonFromPg(personID.String(), firstName, lastName)
+	if err = db.QueryRow(
+		ctx,
+		sql,
+		args...,
+	).Scan(
+		&firstName,
+		&lastName,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, exceptions.NewNotFoundException("person not found", err)
+		}
 
-    if err != nil {
-        return nil, exceptions.NewInternalException("failed to fetch person information", err)
-    }
+		return nil, err
+	}
 
-    return &person, nil
+	person, err := toPersonFromPg(personID.String(), firstName, lastName)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to fetch person information", err)
+	}
+
+	return &person, nil
 }
 
 func toPersonFromPg(personID string, personFirstName string, personLastName string) (people.Person, error) {
-    p, err := people.NewPerson(uuid.MustParse(personID), personFirstName, personLastName, nil)
+	p, err := people.NewPerson(uuid.MustParse(personID), personFirstName, personLastName, nil)
 
-    if err != nil {
-        return people.Person{}, err
-    }
-    return *p, nil
+	if err != nil {
+		return people.Person{}, err
+	}
+	return *p, nil
 }
