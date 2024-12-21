@@ -15,6 +15,7 @@ const (
 )
 
 type ServiceImpl struct {
+	db       core.DbConnection
 	assets   Repository
 	people   projecta.PeopleService
 	types    projecta.TypeRepository
@@ -23,6 +24,7 @@ type ServiceImpl struct {
 }
 
 func NewService(
+	db core.DbConnection,
 	assets Repository,
 	people projecta.PeopleService,
 	types projecta.TypeRepository,
@@ -30,6 +32,7 @@ func NewService(
 	payments projecta.PaymentRepository,
 ) *ServiceImpl {
 	return &ServiceImpl{
+		db:       db,
 		assets:   assets,
 		people:   people,
 		types:    types,
@@ -130,25 +133,17 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 			projecta.UponCompletionPayment,
 		)
 
-		txCtx, err := s.assets.TxCtx(ctx)
+		_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
+			if err = s.payments.Save(ctx, payment); err != nil {
+				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+			}
 
-		defer s.assets.RollbackTxFromCtx(txCtx)
+			if err = s.assets.Save(ctx, asset); err != nil {
+				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+			}
 
-		if err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
-
-		if err = s.payments.Save(txCtx, payment); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
-
-		if err = s.assets.Save(txCtx, asset); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
-
-		if err = s.assets.CommitTxFromCtx(txCtx); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
+			return nil, nil
+		})
 
 		return asset, nil
 	}
