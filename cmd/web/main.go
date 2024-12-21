@@ -42,27 +42,20 @@ func main() {
 	)
 	defer stop()
 
-	pool, err := dal.Connect(config.DbUri)
-
-	// Remove old connection code once migration to DbConnection is complete
-	if err != nil {
-		handleError(exceptions.NewInternalException("failed to connect to the database", err))
-	}
-
 	db, err := dal.NewPgDbConnection(config.DbUri)
 
 	if err != nil {
 		handleError(exceptions.NewInternalException("failed to connect to the database", err))
 	}
 
-	defer pool.Close()
+	defer db.Close()
 
 	if err != nil {
 		handleError(err)
 	}
 
 	startTime := time.Now()
-	if err = pool.Ping(ctx); err != nil {
+	if err = db.Ping(ctx); err != nil {
 		handleError(exceptions.NewInternalException("database ping failed", err))
 	}
 
@@ -93,10 +86,10 @@ func main() {
 	)
 
 	customerService := people.NewCustomerService(db, peopleRepository, hasher)
-	projectRepository := dal.NewPgProjectaProjectRepository(pool)
-	categoryRepository := dal.NewPgProjectaCategoryRepository(pool)
-	typeRepository := dal.NewPgProjectaCostTypeRepository(pool)
-	paymentRepository := dal.NewPgProjectaPaymentRepository(pool)
+	projectRepository := dal.NewPgProjectRepository(db)
+	categoryRepository := dal.NewPgCategoryRepository(db)
+	typeRepository := dal.NewPgCostTypeRepository(db)
+	paymentRepository := dal.NewPgPaymentRepository(db)
 	assetRepository := dal.NewPgAssetRepository(db)
 	peopleService := projecta.NewPeopleService(peopleRepository)
 	projectService := projecta.NewProjectService(projectRepository, peopleService)

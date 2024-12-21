@@ -24,13 +24,11 @@ func NewPgPeopleRepository(db *PgDbConnection) *PgPeopleRepository {
 }
 
 func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person) error {
-	tx, ok := ctx.Value(core.TxCtxKey).(pgx.Tx)
+	db, err := r.db.GetConnection(ctx)
 
-	if !ok {
-		return exceptions.NewInternalException(failedToRegisterPersonError, failedToObtainTransactionError)
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
 	}
-
-	defer rollbackTx(ctx, tx)
 
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("people")
@@ -39,7 +37,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 
 	sql, args := qb.Build()
 
-	if _, err := tx.Exec(
+	if _, err = db.Exec(
 		ctx,
 		sql,
 		args...,
@@ -47,11 +45,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
-	if err := r.setCredentials(ctx, person.ID, person.Identities()); err != nil {
-		return exceptions.NewInternalException(failedToRegisterPersonError, err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
+	if err = r.setCredentials(ctx, person.ID, person.Identities()); err != nil {
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 

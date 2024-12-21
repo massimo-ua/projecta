@@ -17,4 +17,5 @@ var (
 type DbConnection interface {
 	Tx(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error)
 	Close()
+	Ping(ctx context.Context) error
 }

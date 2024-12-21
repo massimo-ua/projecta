@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
@@ -14,17 +13,23 @@ import (
 	"time"
 )
 
-type PgProjectaProjectRepository struct {
-	PgRepository
+type PgProjectRepository struct {
+	db *PgDbConnection
 }
 
-func NewPgProjectaProjectRepository(pool *pgxpool.Pool) *PgProjectaProjectRepository {
-	return &PgProjectaProjectRepository{
-		PgRepository{db: pool},
+func NewPgProjectRepository(db *PgDbConnection) *PgProjectRepository {
+	return &PgProjectRepository{
+		db,
 	}
 }
 
-func (r *PgProjectaProjectRepository) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
+func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
 
 	if personID == uuid.Nil {
@@ -68,7 +73,7 @@ func (r *PgProjectaProjectRepository) FindOne(ctx context.Context, filter projec
 		lastName    string
 	)
 
-	if err := r.db.QueryRow(
+	if err = db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -92,7 +97,13 @@ func (r *PgProjectaProjectRepository) FindOne(ctx context.Context, filter projec
 	return toProject(projectID, name, description, ownerID, firstName, lastName, startedAt, endedAt)
 }
 
-func (r *PgProjectaProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
+func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_projects")
 	qb.Cols(
@@ -114,12 +125,18 @@ func (r *PgProjectaProjectRepository) Create(ctx context.Context, project *proje
 
 	sql, args := qb.Build()
 
-	_, err := r.db.Exec(ctx, sql, args...)
+	_, err = db.Exec(ctx, sql, args...)
 
 	return err
 }
 
-func (r *PgProjectaProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
+func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_projects")
 	qb.Set(
@@ -134,12 +151,18 @@ func (r *PgProjectaProjectRepository) Update(ctx context.Context, project *proje
 
 	sql, args := qb.Build()
 
-	_, err := r.db.Exec(ctx, sql, args...)
+	_, err = db.Exec(ctx, sql, args...)
 
 	return err
 }
 
-func (r *PgProjectaProjectRepository) Remove(ctx context.Context, project *projecta.Project) error {
+func (r *PgProjectRepository) Remove(ctx context.Context, project *projecta.Project) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_projects")
 	qb.Where(qb.Equal("project_id", project.ProjectID.String()))
@@ -147,12 +170,18 @@ func (r *PgProjectaProjectRepository) Remove(ctx context.Context, project *proje
 
 	sql, args := qb.Build()
 
-	_, err := r.db.Exec(ctx, sql, args...)
+	_, err = db.Exec(ctx, sql, args...)
 
 	return err
 }
 
-func (r *PgProjectaProjectRepository) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -184,7 +213,7 @@ func (r *PgProjectaProjectRepository) Find(ctx context.Context, filter projecta.
 
 	sql, args := qb.Build()
 
-	rows, err := r.db.Query(ctx, sql, args...)
+	rows, err := db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err
@@ -206,7 +235,7 @@ func (r *PgProjectaProjectRepository) Find(ctx context.Context, filter projecta.
 			lastName    string
 		)
 
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&projectID,
 			&name,
 			&description,

@@ -92,3 +92,8 @@ func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (a
 func (p *PgDbConnection) Close() {
 	p.pool.Close()
 }
+
+// Ping checks if the connection is alive
+func (p *PgDbConnection) Ping(ctx context.Context) error {
+	return p.pool.Ping(ctx)
+}

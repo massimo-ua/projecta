@@ -7,22 +7,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
-type PgProjectaCostCategoryRepository struct {
-	PgRepository
+type PgCostCategoryRepository struct {
+	db *PgDbConnection
 }
 
-func NewPgProjectaCategoryRepository(pool *pgxpool.Pool) *PgProjectaCostCategoryRepository {
-	return &PgProjectaCostCategoryRepository{
-		PgRepository{db: pool},
+func NewPgCategoryRepository(db *PgDbConnection) *PgCostCategoryRepository {
+	return &PgCostCategoryRepository{
+		db,
 	}
 }
 
-func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
+func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -47,7 +53,7 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 
 	var total int
 
-	if err = r.db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
+	if err = db.QueryRow(ctx, sql, args...).Scan(&total); err != nil {
 		return nil, err
 	}
 
@@ -66,7 +72,7 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 
 	sql, args = qb.Build()
 
-	rows, err := r.db.Query(ctx, sql, args...)
+	rows, err := db.Query(ctx, sql, args...)
 
 	if err != nil {
 		return nil, err
@@ -98,7 +104,13 @@ func (r *PgProjectaCostCategoryRepository) Find(ctx context.Context, filter proj
 	return collection, nil
 }
 
-func (r *PgProjectaCostCategoryRepository) FindOne(ctx context.Context, filter projecta.CategoryFilter) (*projecta.CostCategory, error) {
+func (r *PgCostCategoryRepository) FindOne(ctx context.Context, filter projecta.CategoryFilter) (*projecta.CostCategory, error) {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
 
 	if personID == uuid.Nil {
@@ -130,7 +142,7 @@ func (r *PgProjectaCostCategoryRepository) FindOne(ctx context.Context, filter p
 		description string
 	)
 
-	if err := r.db.QueryRow(
+	if err = db.QueryRow(
 		ctx,
 		sql,
 		args...,
@@ -145,7 +157,13 @@ func (r *PgProjectaCostCategoryRepository) FindOne(ctx context.Context, filter p
 	return toCostCategory(categoryID, projectID, name, description)
 }
 
-func (r *PgProjectaCostCategoryRepository) Save(ctx context.Context, category *projecta.CostCategory) error {
+func (r *PgCostCategoryRepository) Save(ctx context.Context, category *projecta.CostCategory) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_categories")
 	qb.Select("1 as exists")
@@ -153,7 +171,7 @@ func (r *PgProjectaCostCategoryRepository) Save(ctx context.Context, category *p
 	qb.Where(qb.Equal("project_id", category.ProjectID.String()))
 
 	sql, args := qb.Build()
-	err := r.db.QueryRow(ctx, sql, args...).Scan()
+	err = db.QueryRow(ctx, sql, args...).Scan()
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -166,13 +184,19 @@ func (r *PgProjectaCostCategoryRepository) Save(ctx context.Context, category *p
 	return r.update(ctx, category)
 }
 
-func (r *PgProjectaCostCategoryRepository) Remove(ctx context.Context, category *projecta.CostCategory) error {
+func (r *PgCostCategoryRepository) Remove(ctx context.Context, category *projecta.CostCategory) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_cost_categories")
 	qb.Where(qb.Equal("category_id", category.ID.String()))
 
 	sql, args := qb.Build()
-	res, err := r.db.Exec(ctx, sql, args...)
+	res, err := db.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -185,19 +209,31 @@ func (r *PgProjectaCostCategoryRepository) Remove(ctx context.Context, category 
 	return nil
 }
 
-func (r *PgProjectaCostCategoryRepository) create(ctx context.Context, category *projecta.CostCategory) error {
+func (r *PgCostCategoryRepository) create(ctx context.Context, category *projecta.CostCategory) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_cost_categories")
 	qb.Cols("category_id", "project_id", "name", "description")
 	qb.Values(category.ID.String(), category.ProjectID.String(), category.Name, category.Description)
 
 	sql, args := qb.Build()
-	_, err := r.db.Exec(ctx, sql, args...)
+	_, err = db.Exec(ctx, sql, args...)
 
 	return err
 }
 
-func (r *PgProjectaCostCategoryRepository) update(ctx context.Context, category *projecta.CostCategory) error {
+func (r *PgCostCategoryRepository) update(ctx context.Context, category *projecta.CostCategory) error {
+	db, err := r.db.GetConnection(ctx)
+
+	if err != nil {
+		return exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_cost_categories")
 	qb.Set(
@@ -207,7 +243,7 @@ func (r *PgProjectaCostCategoryRepository) update(ctx context.Context, category 
 	qb.Where(qb.Equal("category_id", category.ID.String()))
 
 	sql, args := qb.Build()
-	res, err := r.db.Exec(ctx, sql, args...)
+	res, err := db.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
