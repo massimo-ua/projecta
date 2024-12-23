@@ -20,14 +20,20 @@ export function GoogleLoginBtn() {
   const errorMessage = (error) => {
     messageApi.open({
       type: 'error',
-      content: 'Login failed!',
+      content: `Login failed: ${error.message}`,
     });
   };
 
   return (
     <>
       { contextHolder }
-      <GoogleLogin onSuccess={ responseMessage } onError={ errorMessage }/>
+      <GoogleLogin
+        onSuccess={ responseMessage }
+        onError={ errorMessage }
+        type="icon"
+        shape="circle"
+        theme="outline"
+      />
     </>
   );
 }
