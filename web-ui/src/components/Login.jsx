@@ -1,11 +1,12 @@
-import { Button, Col, Divider, Form, Input, message, Row, } from 'antd';
+import { Button, Form, Input, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import HomeLayout from '../Layout';
 import { authProvider } from '../api';
 import { GoogleLoginBtn } from './GoogleLoginBtn';
+import './Login.css';
 
 export function Login() {
-  const [ messageApi, contextHolder ] = message.useMessage();
+  const [messageApi, contextHolder] = message.useMessage();
   const navigate = useNavigate();
 
   const onFinish = async (values) => {
@@ -17,113 +18,82 @@ export function Login() {
   const onFinishFailed = (error) => {
     messageApi.open({
       type: 'error',
-      content: 'Login failed!',
+      content: `Login failed: ${error.message}`,
     });
   };
 
   return (
     <HomeLayout>
-      { contextHolder }
-      <Row>
-        <Col
-          span={ 12 }
-          style={ {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundImage: "url('/traxer-vjMZIuTozXc-unsplash.jpg')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            height: '92vh',
-            width: '100%',
-          } }>
-        </Col>
-        <Col
-          span={ 12 }
-          style={ {
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'center',
-          } }
-        >
-          <Row>
-            <Col>
-              <Row style={{ paddingTop: 30 }}><Divider orientation="center">Social</Divider></Row>
-              <Row>
-                <Col flex={ 3 }
-                     style={ { padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' } }>
-                  <GoogleLoginBtn/>
-                </Col>
-              </Row>
-              <Row><Divider orientation="center">Login</Divider></Row>
-              <Row>
-                <Col flex={ 5 }/>
-                <Col flex={ 1 }
-                     style={ { padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' } }>
-                  <Form
-                    name="basic"
-                    labelCol={ {
-                      span: 8,
-                    } }
-                    wrapperCol={ {
-                      span: 16,
-                    } }
-                    style={ {
-                      maxWidth: 500,
-                      minWidth: 300,
-                    } }
-                    initialValues={ {
-                      remember: true,
-                    } }
-                    onFinish={ onFinish }
-                    onFinishFailed={ onFinishFailed }
-                    autoComplete="off"
-                  >
-                    <Form.Item
-                      label="Username"
-                      name="username"
-                      rules={ [
-                        {
-                          required: true,
-                          message: 'Please input your username!',
-                        },
-                      ] }
-                    >
-                      <Input/>
-                    </Form.Item>
+      {contextHolder}
+      <div className="login-container">
+        <div className="login-image-section" />
 
-                    <Form.Item
-                      label="Password"
-                      name="password"
-                      rules={ [
-                        {
-                          required: true,
-                          message: 'Please input your password!',
-                        },
-                      ] }
-                    >
-                      <Input.Password/>
-                    </Form.Item>
+        <div className="login-form-section">
+          <div className="login-form-container">
+            <div className="login-divider-section">
+              <div className="login-divider-text">Social</div>
+              <div className="login-social-section">
+                <GoogleLoginBtn />
+              </div>
 
-                    <Form.Item
-                      wrapperCol={ {
-                        offset: 8,
-                        span: 16,
-                      } }
-                    >
-                      <Button type="primary" htmlType="submit">
-                        Submit
-                      </Button>
-                    </Form.Item>
-                  </Form>
-                </Col>
-                <Col flex={ 6 }/>
-              </Row>
-            </Col>
-          </Row>
-        </Col>
-      </Row>
+              <div className="login-divider-text">Login</div>
+            </div>
+
+            <Form
+              name="basic"
+              labelCol={{
+                span: 8,
+              }}
+              wrapperCol={{
+                span: 16,
+              }}
+              initialValues={{
+                remember: true,
+              }}
+              onFinish={onFinish}
+              onFinishFailed={onFinishFailed}
+              autoComplete="off"
+            >
+              <Form.Item
+                label="Username"
+                name="username"
+                rules={[
+                  {
+                    required: true,
+                    message: 'Please input your username!',
+                  },
+                ]}
+              >
+                <Input />
+              </Form.Item>
+
+              <Form.Item
+                label="Password"
+                name="password"
+                rules={[
+                  {
+                    required: true,
+                    message: 'Please input your password!',
+                  },
+                ]}
+              >
+                <Input.Password />
+              </Form.Item>
+
+              <Form.Item
+                wrapperCol={{
+                  offset: 8,
+                  span: 16,
+                }}
+              >
+                <Button type="primary" htmlType="submit">
+                  Submit
+                </Button>
+              </Form.Item>
+            </Form>
+          </div>
+        </div>
+      </div>
     </HomeLayout>
   );
 }
