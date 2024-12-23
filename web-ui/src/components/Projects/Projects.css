@@ -5,3 +5,14 @@
     gap: 20px;
     padding: 20px 20px 0 20px;
 }
+
+.ProjectCard_container {
+    width: 100%;  /* Full width on mobile */
+}
+
+/* On tablets and desktop (768px and above) */
+@media screen and (min-width: 768px) {
+    .ProjectCard_container {
+        width: 300px;  /* Fixed width on larger screens */
+    }
+}
