@@ -5,14 +5,17 @@ import {
   FileTextOutlined,
   PieChartOutlined,
 } from '@ant-design/icons';
-import { Layout, Menu } from 'antd';
+import { Layout, Menu, Grid } from 'antd';
 import { Outlet, useNavigate } from 'react-router-dom';
-import HomeLayout from '../../Layout.jsx';
+import HomeLayout from '../../Layout';
+
+const { useBreakpoint } = Grid;
 
 const { Sider, Content } = Layout;
 
 export function ProjectDetails() {
   const navigate = useNavigate();
+  const screens = useBreakpoint();
   const [navMenuItems] = useState([{
     key: 'taxonomy',
     label: 'Taxonomy',
@@ -60,7 +63,7 @@ export function ProjectDetails() {
   return (
     <HomeLayout>
       <Layout>
-        <Sider width="12vw">
+        {!screens.xs && (<Sider width="12vw">
           <Menu
             onClick={onClick}
             style={{ height: '92vh' }}
@@ -68,7 +71,7 @@ export function ProjectDetails() {
             mode="inline"
             items={navMenuItems}
           />
-        </Sider>
+        </Sider>)}
         <Content>
           <Outlet />
         </Content>
