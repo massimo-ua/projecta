@@ -1,19 +1,24 @@
 import React, { useState } from 'react';
 import {
-  BuildOutlined, CarryOutOutlined,
+  BuildOutlined,
+  CarryOutOutlined,
   DollarOutlined,
   FileTextOutlined,
+  MenuOutlined,
   PieChartOutlined,
 } from '@ant-design/icons';
-import { Layout, Menu } from 'antd';
+import { Button, Dropdown, Grid, Layout, Menu, Space } from 'antd';
 import { Outlet, useNavigate } from 'react-router-dom';
-import HomeLayout from '../../Layout.jsx';
+import HomeLayout from '../../Layout';
+
+const { useBreakpoint } = Grid;
 
 const { Sider, Content } = Layout;
 
 export function ProjectDetails() {
   const navigate = useNavigate();
-  const [navMenuItems] = useState([{
+  const screens = useBreakpoint();
+  const [ navItems ] = useState([ {
     key: 'taxonomy',
     label: 'Taxonomy',
     type: 'group',
@@ -21,12 +26,12 @@ export function ProjectDetails() {
       {
         key: 'categories',
         label: 'Categories',
-        icon: <PieChartOutlined />,
+        icon: <PieChartOutlined/>,
       },
       {
         key: 'types',
         label: 'Types',
-        icon: <BuildOutlined />,
+        icon: <BuildOutlined/>,
       },
     ],
   }, {
@@ -37,40 +42,57 @@ export function ProjectDetails() {
       {
         key: 'total',
         label: 'Total',
-        icon: <FileTextOutlined />,
+        icon: <FileTextOutlined/>,
       },
       {
         key: 'payments',
         label: 'Payments',
-        icon: <DollarOutlined />,
+        icon: <DollarOutlined/>,
       },
       {
         key: 'assets',
         label: 'Assets',
-        icon: <CarryOutOutlined />,
+        icon: <CarryOutOutlined/>,
       },
     ],
-  }]);
+  } ]);
 
   const onClick = (e) => {
     const { key } = e;
     navigate(key);
   };
 
+  const toDropDownItems = () => navItems.map((i) => i.children.map((i) => ({
+    ...i,
+    label: <a onClick={ () => onClick({ key: i.key }) }>{ i.label }</a>
+  }))).flat();
+
   return (
     <HomeLayout>
       <Layout>
-        <Sider width="12vw">
-          <Menu
-            onClick={onClick}
-            style={{ height: '92vh' }}
-            defaultSelectedKeys={['payments']}
-            mode="inline"
-            items={navMenuItems}
-          />
-        </Sider>
+        { screens.xs
+          ? (<Dropdown menu={ {
+            onClick: (e) => onClick(e),
+            items: toDropDownItems(),
+          } }>
+            <Button type="text">
+              <Space>
+                Menu
+                <MenuOutlined/>
+              </Space>
+            </Button>
+          </Dropdown>)
+          : (<Sider width="12vw">
+            <Menu
+              onClick={ onClick }
+              style={ { height: '92vh' } }
+              defaultSelectedKeys={ [ 'payments' ] }
+              mode="inline"
+              items={ navItems }
+            />
+          </Sider>) }
         <Content>
-          <Outlet />
+          <Outlet/>
         </Content>
       </Layout>
     </HomeLayout>
