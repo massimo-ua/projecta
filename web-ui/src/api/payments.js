@@ -2,7 +2,7 @@ import { format, formatISO, parseISO } from 'date-fns';
 import { fromISO, toISO, toPrice, toPriceView } from './mappers';
 
 const toDomain = ({
-                    payment_id, amount, currency, description, type, payment_date,
+                    payment_id, amount, currency, description, type, payment_date, kind,
                   }) => ({
   key: payment_id,
   id: payment_id,
@@ -12,6 +12,7 @@ const toDomain = ({
   type: type?.name,
   category: type.category?.name,
   paymentDate: format(parseISO(payment_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
+  kind,
 });
 
 const toAddPaymentDTO = ({ typeId, amount, currency, paymentDate, description, paymentKind }) => ({

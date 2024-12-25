@@ -3,11 +3,11 @@ import {
   ProjectDetails,
   Types,
   Categories,
-  Payments,
   Total,
   Login,
   AuthenticatedOnly,
   Assets,
+  PaymentsListView,
 } from '../components';
 
 const routes = [{
@@ -25,7 +25,7 @@ const routes = [{
   Component: AuthenticatedOnly(ProjectDetails),
   children: [{
     index: true,
-    Component: AuthenticatedOnly(Payments),
+    Component: AuthenticatedOnly(PaymentsListView),
   },{
     path: 'types',
     Component: AuthenticatedOnly(Types),
@@ -34,7 +34,7 @@ const routes = [{
     Component: AuthenticatedOnly(Categories),
   }, {
     path: 'payments',
-    Component: AuthenticatedOnly(Payments),
+    Component: AuthenticatedOnly(PaymentsListView),
   }, {
     path: 'total',
     Component: AuthenticatedOnly(Total),
