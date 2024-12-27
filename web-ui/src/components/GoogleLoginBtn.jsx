@@ -3,7 +3,6 @@ import { message } from 'antd';
 import { authProvider } from '../api';
 import { GoogleLogin } from '@react-oauth/google';
 
-
 export function GoogleLoginBtn() {
   const [ messageApi, contextHolder ] = message.useMessage();
   const navigate = useNavigate();
@@ -26,10 +25,10 @@ export function GoogleLoginBtn() {
 
   return (
     <>
-      { contextHolder }
+      {contextHolder}
       <GoogleLogin
-        onSuccess={ responseMessage }
-        onError={ errorMessage }
+        onSuccess={responseMessage}
+        onError={errorMessage}
         type="icon"
         shape="circle"
         theme="outline"

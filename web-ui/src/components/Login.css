@@ -21,6 +21,7 @@
     flex-direction: column;
     align-items: center;
     padding-top: 2rem;
+    background-color: white;
 }
 
 .login-form-container {
