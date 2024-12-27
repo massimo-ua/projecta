@@ -1,18 +1,18 @@
 .Projects_container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 20px;
     padding: 20px 20px 0 20px;
 }
 
 .ProjectCard_container {
-    width: 100%;  /* Full width on mobile */
+    height: 140px; /* Fixed height for all cards */
+    width: 100%;
 }
 
-/* On tablets and desktop (768px and above) */
-@media screen and (min-width: 768px) {
-    .ProjectCard_container {
-        width: 300px;  /* Fixed width on larger screens */
+/* Ensure proper spacing on mobile */
+@media screen and (max-width: 767px) {
+    .Projects_container {
+        grid-template-columns: 1fr;
     }
 }
