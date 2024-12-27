@@ -1,9 +1,10 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
-import { Space, Tag, Typography } from 'antd';
+import { Tag, Typography } from 'antd';
 import { DollarOutlined } from '@ant-design/icons';
 import styled from 'styled-components';
 import usePayments from '../../hooks/payments';
+import useTypes from '../../hooks/types';
 import AddPaymentModal from './AddPaymentModal';
 import { paymentRepository } from '../../api';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
@@ -42,6 +43,7 @@ export function Payments() {
   const [addModalOpened, setAddModalOpen] = useState(false);
   const [paymentIdToEdit, setPaymentIdToEdit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [ , types, , setTypesFilter ] = useTypes();
 
   const onPaginationChange = (nextPage) => {
     setCurrentPage(nextPage);
@@ -64,6 +66,11 @@ export function Payments() {
       projectId,
       limit: PAGE_SIZE,
       offset: (currentPage - 1) * PAGE_SIZE,
+    });
+    setTypesFilter({
+      projectId,
+      limit: 100,
+      offset: 0,
     });
   }, [currentPage, projectId, setFilter]);
 
@@ -166,6 +173,7 @@ export function Payments() {
       />
 
       <AddPaymentModal
+        types={types}
         projectId={projectId}
         open={addModalOpened}
         onCancel={onAddCancel}
@@ -173,6 +181,7 @@ export function Payments() {
       />
 
       <EditPaymentModal
+        types={types}
         projectId={projectId}
         paymentId={paymentIdToEdit}
         open={!!paymentIdToEdit}

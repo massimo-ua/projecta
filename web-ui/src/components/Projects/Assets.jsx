@@ -4,6 +4,7 @@ import { Space, Tag, Typography } from 'antd';
 import { CarryOutOutlined } from '@ant-design/icons';
 import styled from 'styled-components';
 import useAssets from '../../hooks/assets';
+import useTypes from '../../hooks/types';
 import AddAssetModal from './AddAssetModal';
 import EditAssetModal from './EditAssetModal';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
@@ -39,6 +40,7 @@ const TagsRow = styled.div`
 export function Assets() {
   const { projectId } = useParams();
   const [loading, assets, total, setFilter] = useAssets();
+  const [, types, , setTypesFilter] = useTypes();
   const [addModalOpened, setAddModalOpen] = useState(false);
   const [assetIdToEdit, setAssetIdToEdit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,7 +67,12 @@ export function Assets() {
       limit: PAGE_SIZE,
       offset: (currentPage - 1) * PAGE_SIZE,
     });
-  }, [currentPage, projectId, setFilter]);
+    setTypesFilter({
+      projectId,
+      limit: 100,
+      offset: 0,
+    });
+  }, [currentPage, projectId, setFilter, setTypesFilter]);
 
   const onAddCancel = () => setAddModalOpen(false);
   const onAddSuccess = () => {
@@ -167,6 +174,7 @@ export function Assets() {
         open={addModalOpened}
         onCancel={onAddCancel}
         onSuccess={onAddSuccess}
+        types={types}
       />
 
       <EditAssetModal
@@ -175,6 +183,7 @@ export function Assets() {
         open={!!assetIdToEdit}
         onCancel={onEditCancel}
         onSuccess={onEditSuccess}
+        types={types}
       />
     </>
   );

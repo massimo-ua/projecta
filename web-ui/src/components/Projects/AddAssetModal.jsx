@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import React from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
-import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
 import { assetRepository } from '../../api';
 
@@ -9,9 +8,7 @@ const { useForm } = Form;
 
 export default function AddAssetModal(props) {
   const { projectId } = useParams();
-  const { open, onSuccess, onCancel } = props;
-
-  const [ , types, , setTypesFilter ] = useTypes();
+  const { open, onSuccess, onCancel, types } = props;
   const [ form ] = useForm();
 
   const handleAdd = () => {
@@ -41,14 +38,6 @@ export default function AddAssetModal(props) {
 
   const handleCancel = () => onCancel();
 
-  useEffect(() => {
-    setTypesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
-  }, [ projectId ]);
-
   return (
     <Modal
       title="Add Asset"
@@ -77,6 +66,7 @@ export default function AddAssetModal(props) {
         autoComplete="off"
         initialValues={ {
           currency: 'UAH',
+          withPayment: false,
         } }
       >
         <Form.Item label="Type" name="typeId">
@@ -91,7 +81,7 @@ export default function AddAssetModal(props) {
         <Form.Item
           name="withPayment"
           label="Create Payment"
-          valuePropName="withPayment"
+          valuePropName="checked"
         >
           <Switch/>
         </Form.Item>
@@ -107,9 +97,11 @@ export default function AddAssetModal(props) {
             )) }
           </Select>
         </Form.Item>
-        <Form.Item label="Acquision Date" name="acquiredAt"><DatePicker/></Form.Item>
+        <Form.Item label="Acquired At" name="acquiredAt">
+          <DatePicker/>
+        </Form.Item>
         <Form.Item label="Name" name="name">
-          <Input />
+          <Input/>
         </Form.Item>
         <Form.Item label="Description" name="description">
           <TextArea rows={ 4 }/>

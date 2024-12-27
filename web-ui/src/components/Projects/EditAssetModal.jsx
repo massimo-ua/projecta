@@ -1,17 +1,14 @@
 import { useEffect } from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
-import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
 import { assetRepository } from '../../api';
 
 const { TextArea } = Input;
 const { useForm } = Form;
 
-export default function AddAssetModal(props) {
+export default function EditAssetModal(props) {
   const { projectId } = useParams();
-  const { onSuccess, onCancel, assetId } = props;
-
-  const [ , types, , setTypesFilter ] = useTypes();
+  const { onSuccess, onCancel, assetId, types } = props;
   const [ form ] = useForm();
 
   const handleUpdate = () => {
@@ -39,14 +36,6 @@ export default function AddAssetModal(props) {
   };
 
   const handleCancel = () => onCancel();
-
-  useEffect(() => {
-    setTypesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
-  }, [ projectId ]);
 
   useEffect(() => {
     if (!assetId) {
@@ -114,9 +103,11 @@ export default function AddAssetModal(props) {
             )) }
           </Select>
         </Form.Item>
-        <Form.Item label="Acquision Date" name="acquiredAt"><DatePicker/></Form.Item>
+        <Form.Item label="Acquired At" name="acquiredAt">
+          <DatePicker/>
+        </Form.Item>
         <Form.Item label="Name" name="name">
-          <Input />
+          <Input/>
         </Form.Item>
         <Form.Item label="Description" name="description">
           <TextArea rows={ 4 }/>

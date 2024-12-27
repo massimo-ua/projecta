@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
-import useTypes from '../../hooks/types';
 import { useParams } from 'react-router-dom';
 import { paymentRepository } from '../../api';
 import { PaymentKind } from '../../constants';
@@ -10,9 +9,7 @@ const { useForm } = Form;
 
 export default function EditPaymentModal(props) {
   const { projectId } = useParams();
-  const { onSuccess, onCancel, paymentId } = props;
-
-  const [ , types, , setTypesFilter ] = useTypes();
+  const { onSuccess, onCancel, paymentId, types } = props;
   const [ form ] = useForm();
 
   const handleUpdate = () => {
@@ -40,14 +37,6 @@ export default function EditPaymentModal(props) {
   };
 
   const handleCancel = () => onCancel();
-
-  useEffect(() => {
-    setTypesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
-  }, [ projectId ]);
 
   useEffect(() => {
     if (!paymentId) {
