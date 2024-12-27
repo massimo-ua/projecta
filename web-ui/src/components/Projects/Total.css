@@ -1,0 +1,18 @@
+.Total_container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px 20px 0 20px;
+}
+
+.TotalCard_container {
+    height: 140px;
+    width: 100%;
+}
+
+/* Ensure proper spacing on mobile */
+@media screen and (max-width: 767px) {
+    .Total_container {
+        grid-template-columns: 1fr;
+    }
+}
