@@ -7,7 +7,7 @@ import {
   Login,
   AuthenticatedOnly,
   Assets,
-  PaymentsListView,
+  Payments,
 } from '../components';
 
 const routes = [{
@@ -25,7 +25,7 @@ const routes = [{
   Component: AuthenticatedOnly(ProjectDetails),
   children: [{
     index: true,
-    Component: AuthenticatedOnly(PaymentsListView),
+    Component: AuthenticatedOnly(Payments),
   },{
     path: 'types',
     Component: AuthenticatedOnly(Types),
@@ -34,7 +34,8 @@ const routes = [{
     Component: AuthenticatedOnly(Categories),
   }, {
     path: 'payments',
-    Component: AuthenticatedOnly(PaymentsListView),
+    Component: AuthenticatedOnly(Payments),
+    exact: true,
   }, {
     path: 'total',
     Component: AuthenticatedOnly(Total),

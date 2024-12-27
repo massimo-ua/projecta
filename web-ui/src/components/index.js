@@ -7,7 +7,7 @@ export * from './Logo';
 export * from './Projects/ProjectCard';
 export * from './Projects/ProjectDetails';
 export * from './Projects/Categories';
-export * from './Projects/PaymentsListView';
+export * from './Projects/Payments';
 export * from './Login';
 export * from './AuthGuard';
 export * from './GoogleLoginBtn';

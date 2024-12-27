@@ -1,19 +1,19 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { Space, Tag, Typography } from 'antd';
-import { CarryOutOutlined } from '@ant-design/icons';
+import { DollarOutlined } from '@ant-design/icons';
 import styled from 'styled-components';
-import useAssets from '../../hooks/assets';
-import AddAssetModal from './AddAssetModal';
-import EditAssetModal from './EditAssetModal';
+import usePayments from '../../hooks/payments';
+import AddPaymentModal from './AddPaymentModal';
+import { paymentRepository } from '../../api';
 import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
+import EditPaymentModal from './EditPaymentModal';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
 import { CopyableText } from './ListView/CopyableText';
 import { DetailItem } from './ListView/DetailItem';
-import { assetRepository } from '../../api';
-import './Assets.css';
+import './Payments.css';
 
 const { Text } = Typography;
 
@@ -36,11 +36,11 @@ const TagsRow = styled.div`
   flex-wrap: wrap;
 `;
 
-export function Assets() {
+export function Payments() {
   const { projectId } = useParams();
-  const [loading, assets, total, setFilter] = useAssets();
+  const [loading, payments, total, setFilter] = usePayments();
   const [addModalOpened, setAddModalOpen] = useState(false);
-  const [assetIdToEdit, setAssetIdToEdit] = useState('');
+  const [paymentIdToEdit, setPaymentIdToEdit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
   const onPaginationChange = (nextPage) => {
@@ -53,9 +53,9 @@ export function Assets() {
     }
   };
 
-  const onEditButtonClick = (assetId) => {
-    if (!assetIdToEdit) {
-      setAssetIdToEdit(assetId);
+  const onEditButtonClick = (paymentId) => {
+    if (!paymentIdToEdit) {
+      setPaymentIdToEdit(paymentId);
     }
   };
 
@@ -77,19 +77,8 @@ export function Assets() {
     });
   };
 
-  const onEditSuccess = () => {
-    setAssetIdToEdit('');
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: DEFAULT_OFFSET,
-    });
-  };
-
-  const onEditCancel = () => setAssetIdToEdit('');
-
-  const onRemoveButtonClick = (assetId) => {
-    assetRepository.removeAsset(projectId, assetId)
+  const onRemoveButtonClick = (paymentId) => {
+    paymentRepository.removePayment(projectId, paymentId)
       .then(() => {
         setFilter({
           projectId,
@@ -102,44 +91,58 @@ export function Assets() {
       });
   };
 
-  const renderAssetMainContent = (asset) => (
+  const onEditSuccess = () => {
+    setPaymentIdToEdit('');
+    setFilter({
+      projectId,
+      limit: PAGE_SIZE,
+      offset: DEFAULT_OFFSET,
+    });
+  };
+
+  const onEditCancel = () => setPaymentIdToEdit('');
+
+  const renderPaymentMainContent = (payment) => (
     <MainContent>
       <HeaderRow>
         <Text type="secondary" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-          {asset.acquiredAt}
+          {payment.paymentDate}
         </Text>
-        <Text strong>{asset.name}</Text>
+        <Text strong>{payment.description}</Text>
       </HeaderRow>
       <TagsRow>
-        <Tag>{asset.category}</Tag>
-        <Tag>{asset.type}</Tag>
+        <Tag>{payment.category}</Tag>
+        <Tag>{payment.type}</Tag>
       </TagsRow>
-      <Text type="secondary">{asset.description}</Text>
     </MainContent>
   );
 
-  const renderAssetAmount = (asset) => (
-    `${asset.price} ${asset.currency}`
+  const renderPaymentAmount = (payment) => (
+    <span style={{
+      color: payment.kind === 'DOWN_PAYMENT' ? 'red' : 'green',
+    }}>
+      {payment.amount} {payment.currency}
+    </span>
   );
 
-  const renderAssetDetails = (asset) => (
+  const renderPaymentDetails = (payment) => (
     <div className="details-grid">
       <DetailItem label="ID">
-        <CopyableText text={asset.id} truncate />
+        <CopyableText text={payment.id} truncate />
       </DetailItem>
       <DetailItem label="Type">
-        <Text>{asset.type}</Text>
+        <Text>{payment.type}</Text>
       </DetailItem>
       <DetailItem label="Category">
-        <Text>{asset.category}</Text>
+        <Text>{payment.category}</Text>
       </DetailItem>
     </div>
   );
 
-  const renderAssetActions = (asset) => (
+  const renderPaymentActions = (payment) => (
     <>
-      <EditButton onClick={() => onEditButtonClick(asset.id)} />
-      <RemoveButton onRemove={() => onRemoveButtonClick(asset.id)} />
+      <EditButton onClick={() => onEditButtonClick(payment.id)} />
+      <RemoveButton onRemove={() => onRemoveButtonClick(payment.id)} />
     </>
   );
 
@@ -147,32 +150,32 @@ export function Assets() {
     <>
       <ListView
         loading={loading}
-        items={assets}
+        items={payments}
         total={total}
         pageSize={PAGE_SIZE}
         currentPage={currentPage}
         onPaginationChange={onPaginationChange}
         onAddButtonClick={onAddButtonClick}
-        addButtonIcon={<CarryOutOutlined />}
-        addButtonText="Add Asset"
+        addButtonIcon={<DollarOutlined />}
+        addButtonText="Add Payment"
         addButtonDisabled={addModalOpened}
-        renderItemMainContent={renderAssetMainContent}
-        renderItemAmount={renderAssetAmount}
-        renderItemDetails={renderAssetDetails}
-        renderItemActions={renderAssetActions}
+        renderItemMainContent={renderPaymentMainContent}
+        renderItemAmount={renderPaymentAmount}
+        renderItemDetails={renderPaymentDetails}
+        renderItemActions={renderPaymentActions}
       />
 
-      <AddAssetModal
+      <AddPaymentModal
         projectId={projectId}
         open={addModalOpened}
         onCancel={onAddCancel}
         onSuccess={onAddSuccess}
       />
 
-      <EditAssetModal
+      <EditPaymentModal
         projectId={projectId}
-        assetId={assetIdToEdit}
-        open={!!assetIdToEdit}
+        paymentId={paymentIdToEdit}
+        open={!!paymentIdToEdit}
         onCancel={onEditCancel}
         onSuccess={onEditSuccess}
       />
