@@ -19,4 +19,25 @@ export class CategoriesRepository {
       description,
     })), total];
   }
+
+  async addCategory(projectId, categoryData) {
+    const resourceUrl = `/projects/${projectId}/categories`;
+    const response = await this.#request.post(resourceUrl, {
+      name: categoryData.name,
+      description: categoryData.description
+    });
+
+    const { category_id, name, description } = response;
+    return {
+      key: category_id,
+      id: category_id,
+      name,
+      description,
+    };
+  }
+
+  async removeCategory(projectId, categoryId) {
+    const resourceUrl = `/projects/${projectId}/categories/${categoryId}`;
+    await this.#request.delete(resourceUrl);
+  }
 }
