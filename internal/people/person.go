@@ -31,7 +31,7 @@ func (p *Person) Identify(credentials Credentials) (bool, error) {
 		}
 	}
 
-	return false, fmt.Errorf("invalid credentials for a person %s", p.ID)
+	return false, fmt.Errorf("invalid credentials for a person %s", p.ID())
 }
 
 func (p *Person) DisplayName() string {
