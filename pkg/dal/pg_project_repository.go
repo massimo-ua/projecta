@@ -2,6 +2,7 @@ package dal
 
 import (
 	"context"
+	types "database/sql"
 	"errors"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
@@ -66,7 +67,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		endedAt     time.Time
 		firstName   string
 		lastName    string
-		displayName string
+		displayName types.NullString
 	)
 
 	if err := r.db.QueryRow(
@@ -91,7 +92,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		return nil, err
 	}
 
-	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName, startedAt, endedAt)
+	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt)
 }
 
 func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
@@ -207,7 +208,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			endedAt     time.Time
 			firstName   string
 			lastName    string
-			displayName string
+			displayName types.NullString
 		)
 
 		if err = rows.Scan(
@@ -224,7 +225,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			return nil, err
 		}
 
-		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName, startedAt, endedAt)
+		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt)
 
 		if err != nil {
 			return nil, err

@@ -2,6 +2,7 @@ package dal
 
 import (
 	"context"
+	types "database/sql"
 	"errors"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
@@ -111,7 +112,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 	var (
 		firstName   string
 		lastName    string
-		displayName string
+		displayName types.NullString
 	)
 
 	if err := r.db.QueryRow(
@@ -130,7 +131,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 		return nil, err
 	}
 
-	person, err := toPersonFromPg(personID.String(), firstName, lastName, displayName)
+	person, err := toPersonFromPg(personID.String(), firstName, lastName, displayName.String)
 
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to fetch person information", err)
