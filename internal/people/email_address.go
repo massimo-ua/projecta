@@ -1,18 +1,26 @@
 package people
 
 import (
-	"errors"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"net/mail"
 )
 
-type EmailAddress = string
+type EmailAddress struct {
+	address string
+}
 
-func NewEmailAddress(emailAddress string) (EmailAddress, error) {
-	email, err := mail.ParseAddress(emailAddress)
+func (e EmailAddress) String() string {
+	return e.address
+}
 
+func (e EmailAddress) Equals(other EmailAddress) bool {
+	return e.address == other.address
+}
+
+func NewEmailAddress(address string) (EmailAddress, error) {
+	email, err := mail.ParseAddress(address)
 	if err != nil {
-		return "", errors.New("invalid email address")
+		return EmailAddress{}, exceptions.NewValidationException("invalid email address", nil)
 	}
-
-	return email.String(), nil
+	return EmailAddress{address: email.Address}, nil
 }

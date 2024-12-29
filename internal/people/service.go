@@ -36,7 +36,17 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 	displayName := ""
 	token := command.Token
 
+	login := command.Login
+
 	if command.IdentityProvider == LOCAL {
+		email, err := NewEmailAddress(command.Login)
+
+		if err != nil {
+			return err
+		}
+
+		login = email.String()
+
 		hash, err := s.hasher.Hash(command.Token)
 		if err != nil {
 			return err
@@ -45,7 +55,7 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 		token = hash
 	}
 
-	credentials, err := NewCredentials(command.IdentityProvider, command.Login, token)
+	credentials, err := NewCredentials(command.IdentityProvider, login, token)
 
 	if err != nil {
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
