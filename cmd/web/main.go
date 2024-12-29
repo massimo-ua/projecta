@@ -69,10 +69,16 @@ func main() {
 
 	peopleRepository := dal.NewPgPeopleRepository(db)
 	hasher := crypto.NewBcryptHasher(0)
-	googleAuth := crypto.NewGoogleAuthProvider(
-		config.GoogleClientID,
-		config.GoogleCertTTL,
-	)
+	googleAuth, err := crypto.NewGoogleAuthProvider(crypto.GoogleAuthConfig{
+		ClientID:      config.GoogleClientID,
+		ClientSecret:  config.GoogleClientSecret,
+		CertsCacheTTL: config.GoogleCertTTL,
+	})
+
+	if err != nil {
+		handleError(err)
+	}
+
 	tokenProvider := crypto.NewJwtTokenProvider(
 		config.JwtSecret,
 		config.TokenTTL,

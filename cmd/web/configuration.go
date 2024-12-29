@@ -13,6 +13,7 @@ const (
 	dbUri                            = "DB_URI"
 	httpUri                          = "HTTP_URI"
 	googleClientID                   = "GOOGLE_CLIENT_ID"
+	googleClientSecret               = "GOOGLE_CLIENT_SECRET"
 	jwtSecret                        = "JWT_SECRET"
 	tokenTTL                         = "TOKEN_TTL"
 	googleCertCacheSecondsTTL        = "GOOGLE_CERT_CACHE_SECONDS_TTL"
@@ -25,13 +26,14 @@ const (
 
 func loadConfig() (*core.AppConfig, error) {
 	config := &core.AppConfig{
-		DbUri:            os.Getenv(dbUri),
-		HttpUri:          os.Getenv(httpUri),
-		GoogleClientID:   os.Getenv(googleClientID),
-		JwtSecret:        os.Getenv(jwtSecret),
-		HttpReadTimeout:  defaultHttpReadTimeout,
-		HttpWriteTimeout: defaultHttpWriteTimeout,
-		ShutdownTimeout:  shutdownTimeout,
+		DbUri:              os.Getenv(dbUri),
+		HttpUri:            os.Getenv(httpUri),
+		GoogleClientID:     os.Getenv(googleClientID),
+		GoogleClientSecret: os.Getenv(googleClientSecret),
+		JwtSecret:          os.Getenv(jwtSecret),
+		HttpReadTimeout:    defaultHttpReadTimeout,
+		HttpWriteTimeout:   defaultHttpWriteTimeout,
+		ShutdownTimeout:    shutdownTimeout,
 	}
 
 	var missingConfigs []string
@@ -46,6 +48,10 @@ func loadConfig() (*core.AppConfig, error) {
 
 	if config.GoogleClientID == "" {
 		missingConfigs = append(missingConfigs, googleClientID)
+	}
+
+	if config.GoogleClientSecret == "" {
+		missingConfigs = append(missingConfigs, googleClientSecret)
 	}
 
 	if config.JwtSecret == "" {
