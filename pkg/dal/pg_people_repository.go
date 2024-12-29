@@ -26,7 +26,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("people")
 	qb.Cols("person_id", "first_name", "last_name")
-	qb.Values(person.ID.String(), person.FirstName, person.LastName)
+	qb.Values(person.ID().String(), person.FirstName, person.LastName)
 
 	sql, args := qb.Build()
 
@@ -38,7 +38,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
-	if err := r.setCredentials(ctx, person.ID, person.Identities()); err != nil {
+	if err := r.setCredentials(ctx, person.ID(), person.Identities()); err != nil {
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
@@ -103,14 +103,15 @@ func (r *PgPeopleRepository) setCredentials(
 func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("people")
-	qb.Select("first_name", "last_name")
+	qb.Select("first_name", "last_name", "display_name")
 	qb.Where(qb.Equal("person_id", personID.String()))
 
 	sql, args := qb.Build()
 
 	var (
-		firstName string
-		lastName  string
+		firstName   string
+		lastName    string
+		displayName string
 	)
 
 	if err := r.db.QueryRow(
@@ -120,6 +121,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 	).Scan(
 		&firstName,
 		&lastName,
+		&displayName,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, exceptions.NewNotFoundException("person not found", err)
@@ -128,7 +130,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 		return nil, err
 	}
 
-	person, err := toPersonFromPg(personID.String(), firstName, lastName)
+	person, err := toPersonFromPg(personID.String(), firstName, lastName, displayName)
 
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to fetch person information", err)
@@ -137,8 +139,8 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 	return &person, nil
 }
 
-func toPersonFromPg(personID string, personFirstName string, personLastName string) (people.Person, error) {
-	p, err := people.NewPerson(uuid.MustParse(personID), personFirstName, personLastName, nil)
+func toPersonFromPg(personID string, personFirstName string, personLastName string, personDisplayName string) (people.Person, error) {
+	p, err := people.NewPerson(uuid.MustParse(personID), personFirstName, personLastName, personDisplayName, nil)
 
 	if err != nil {
 		return people.Person{}, err

@@ -41,6 +41,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		"ended_at",
 		"people.first_name",
 		"people.last_name",
+		"people.display_name",
 	)
 	qb.Join("people", "people.person_id = projecta_projects.owner_id")
 
@@ -65,6 +66,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		endedAt     time.Time
 		firstName   string
 		lastName    string
+		displayName string
 	)
 
 	if err := r.db.QueryRow(
@@ -80,6 +82,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		&endedAt,
 		&firstName,
 		&lastName,
+		&displayName,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
@@ -88,7 +91,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		return nil, err
 	}
 
-	return toProject(projectID, name, description, ownerID, firstName, lastName, startedAt, endedAt)
+	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName, startedAt, endedAt)
 }
 
 func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
@@ -169,6 +172,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 		"ended_at",
 		"people.first_name",
 		"people.last_name",
+		"people.display_name",
 	)
 	qb.Join("people", "people.person_id = projecta_projects.owner_id")
 
@@ -203,6 +207,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			endedAt     time.Time
 			firstName   string
 			lastName    string
+			displayName string
 		)
 
 		if err = rows.Scan(
@@ -214,11 +219,12 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			&endedAt,
 			&firstName,
 			&lastName,
+			&displayName,
 		); err != nil {
 			return nil, err
 		}
 
-		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, startedAt, endedAt)
+		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName, startedAt, endedAt)
 
 		if err != nil {
 			return nil, err
@@ -230,11 +236,12 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 	return projects, nil
 }
 
-func toProject(projectID, name, description, ownerID, firstName, lastName string, startedAt, enddedAt time.Time) (*projecta.Project, error) {
+func toProject(projectID, name, description, ownerID, firstName, lastName, displayName string, startedAt, enddedAt time.Time) (*projecta.Project, error) {
 	person, err := people.NewPerson(
 		uuid.MustParse(ownerID),
 		firstName,
 		lastName,
+		displayName,
 		nil,
 	)
 
@@ -247,7 +254,7 @@ func toProject(projectID, name, description, ownerID, firstName, lastName string
 		name,
 		description,
 		&projecta.Owner{
-			PersonID:    person.ID,
+			PersonID:    person.ID(),
 			DisplayName: person.DisplayName(),
 		},
 		startedAt,

@@ -33,6 +33,7 @@ func NewCustomerService(
 }
 
 func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) error {
+	displayName := ""
 	token := command.Token
 
 	if command.IdentityProvider == LOCAL {
@@ -50,7 +51,7 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
 	}
 
-	person, err := NewPerson(uuid.Nil, command.FirstName, command.LastName, []Credentials{credentials})
+	person, err := NewPerson(uuid.Nil, command.FirstName, command.LastName, displayName, []Credentials{credentials})
 
 	if err != nil {
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)

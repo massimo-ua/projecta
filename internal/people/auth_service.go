@@ -122,7 +122,7 @@ func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing
 	}
 
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
-		Sub:         person.ID.String(),
+		Sub:         person.ID().String(),
 		DisplayName: person.FullName(),
 		Roles:       nil,
 	})
