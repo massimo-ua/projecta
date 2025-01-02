@@ -66,21 +66,11 @@ export class PaymentRepository {
   async addPayment(projectId, payment) {
     const response = await this.#request.post(`/projects/${projectId}/payments`, toAddPaymentDTO(payment));
 
-    if (!response.ok) {
-      throw new Error('Failed to add payment');
-    }
-
-    const json = await response.json();
-
-    return toDomain(json);
+    return toDomain(response);
   }
 
   async removePayment(projectId, paymentId) {
-    const response = await this.#request.delete(`/projects/${projectId}/payments/${paymentId}`);
-
-    if (!response.ok) {
-      throw new Error('Failed to remove payment');
-    }
+    return await this.#request.delete(`/projects/${projectId}/payments/${paymentId}`);
   }
 
   async getPayment(projectId, paymentId) {
@@ -90,12 +80,8 @@ export class PaymentRepository {
   }
 
   async updatePayment(projectId, payment) {
-    const response = await this.#request.put(
+    return await this.#request.put(
       `/projects/${projectId}/payments/${payment.id}`,
       toUpdatePaymentDTO(payment));
-
-    if (!response.ok) {
-      throw new Error('Failed to update payment');
-    }
   }
 }

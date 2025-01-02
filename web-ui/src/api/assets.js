@@ -63,32 +63,18 @@ export class AssetRepository {
   }
 
   async updateAsset(projectId, asset) {
-    const response = await this.#request.put(
+    return await this.#request.put(
       `/projects/${projectId}/assets/${asset.id}`,
       toUpdateAssetDTO(asset));
-
-    if (!response.ok) {
-      throw new Error('Failed to update asset');
-    }
   }
 
   async addAsset(projectId, asset) {
     const response = await this.#request.post(`/projects/${projectId}/assets`, toAddAssetDTO(asset));
 
-    if (!response.ok) {
-      throw new Error('Failed to add asset');
-    }
-
-    const json = await response.json();
-
-    return toDomain(json);
+    return toDomain(response);
   }
 
   async removeAsset(projectId, assetId) {
-    const response = await this.#request.delete(`/projects/${projectId}/assets/${assetId}`);
-
-    if (!response.ok) {
-      throw new Error('Failed to remove asset');
-    }
+    return await this.#request.delete(`/projects/${projectId}/assets/${assetId}`);
   }
 }

@@ -22,21 +22,11 @@ export class TypesRepository {
       description,
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to add type');
-    }
-
-    const json = await response.json();
-
-    return this.toType(json);
+    return this.toType(response);
   }
 
   async removeType(projectId, typeId) {
-    const response = await this.#request.delete(`/projects/${projectId}/types/${typeId}`);
-
-    if (!response.ok) {
-      throw new Error('Failed to remove type');
-    }
+    return await this.#request.delete(`/projects/${projectId}/types/${typeId}`);
   }
 
   toType({ type_id, name, description, category }) {
