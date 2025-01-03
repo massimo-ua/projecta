@@ -3,6 +3,8 @@ import { differenceInMinutes } from 'date-fns';
 const ACCESS_TOKEN_KEY = 'access-token';
 const REFRESH_TOKEN_KEY = 'refresh-token';
 const TOKEN_EXPIRES_AT_KEY = 'access-token-expires-at';
+const STATUS_CHANGED_EVENT = 'auth-status-changed';
+const STORAGE_EVENT = 'storage';
 
 export class Auth {
   #baseUrl;
@@ -20,6 +22,15 @@ export class Auth {
     this.#tokenKey = ACCESS_TOKEN_KEY;
     this.#refreshTokenKey = REFRESH_TOKEN_KEY;
     this.#tokenExpiresAtKey = TOKEN_EXPIRES_AT_KEY;
+
+    window.addEventListener(STORAGE_EVENT, this.#handleStorageChange.bind(this));
+  }
+
+  #handleStorageChange({ key, newValue}) {
+    if (key === this.#tokenKey && !newValue) {
+      this.logout();
+      window.dispatchEvent(new CustomEvent(STATUS_CHANGED_EVENT));
+    }
   }
 
   #isTokenExpired() {
@@ -78,6 +89,8 @@ export class Auth {
     localStorage.setItem(this.#tokenKey, accessToken);
     localStorage.setItem(this.#refreshTokenKey, refreshToken);
     localStorage.setItem(this.#tokenExpiresAtKey, String(expiresAt * 1000));
+
+    window.dispatchEvent(new CustomEvent(STATUS_CHANGED_EVENT));
     return accessToken;
   }
 
