@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [ react() ],
   build: {
     minify: 'esbuild',
-    target: 'es2015',
+    target: 'es2020',
     rollupOptions: {
       output: {
         manualChunks: {
@@ -21,27 +21,23 @@ export default defineConfig({
             'react-dom',
             'react-router-dom',
             'styled-components',
-          ],
+          ]
         },
         chunkFileNames: 'assets/[hash].js',
         entryFileNames: 'assets/[hash].js',
         assetFileNames: 'assets/[hash].[ext]',
-        compact: true,
+        compact: true
       }
     },
     cssCodeSplit: true,
     sourcemap: false,
     chunkSizeWarningLimit: 500,
     assetsInlineLimit: 4096,
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      },
-      format: {
-        comments: false,
-      }
-    },
+    minifyIdentifiers: true,
+    minifySyntax: true,
+    minifyWhitespace: true,
+    treeShaking: true,
+    dropLabels: ['DEBUG']
   },
   server: {
     proxy: {
