@@ -1,6 +1,13 @@
+stages:
+  - dependabot-gomod
+  - build
+  - deploy
+
 variables:
   DEPENDABOT_GITLAB_IMAGE: docker.io/andrcuns/dependabot-gitlab
   DEPENDABOT_GITLAB_VERSION: 3.38.0-alpha.1
+  BINARY_NAME: "projecta-web"
+  REMOTE_BIN_DIR: "~/bin"
 
 .dependabot-gitlab:
   image:
@@ -18,14 +25,8 @@ variables:
     - cd /home/dependabot/app
     - bundle exec rake "dependabot:update[${PROJECT_PATH:-$CI_PROJECT_PATH},${PACKAGE_MANAGER?},${DIRECTORY?}]"
 
-npm:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /(\bnpm|yarn|pnpm\b)/'
-
 gomod:
+  name: dependabot-gomod
   extends: .dependabot-gitlab
   rules:
     - if: $DEPENDENCY_UPDATES_DISABLED
@@ -39,17 +40,8 @@ include:
     rules:
       - if: $CI_PROJECT_PATH == 'dependabot-gitlab/dependabot-standalone'
 
-image: golang:1.24
-
-stages:
-  - build
-  - deploy
-
-variables:
-  BINARY_NAME: "projecta-web"
-  REMOTE_BIN_DIR: "~/bin"
-
 build:
+  image: golang:1.24
   stage: build
   script:
     - cd cmd/web
