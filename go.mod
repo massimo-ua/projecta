@@ -9,7 +9,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
-	github.com/huandu/go-sqlbuilder v1.33.1
+	github.com/huandu/go-sqlbuilder v1.34.0
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/rabbitmq/amqp091-go v1.10.0
 	golang.org/x/crypto v0.32.0
