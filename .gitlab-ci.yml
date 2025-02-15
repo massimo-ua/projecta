@@ -1,24 +1,3 @@
-# GitLab CI configuration for Dependabot
-#
-# Usage:
-# * Set the required global variables required for dependabot-gitlab
-#   https://docs.gitlab.com/ee/ci/variables/#variables
-#
-#    SETTINGS__GITLAB_ACCESS_TOKEN = gitlab personal access token with `api`, `read_repository` access scope and at least `Developer` role
-#    SETTINGS__GITHUB_ACCESS_TOKEN = github personal access token with repository read scope
-#
-# * Create a pipeline schedule for each managed repository, package manager and directory
-#   https://docs.gitlab.com/ee/user/project/pipelines/schedules.html
-#
-# * Set in the schedule required variables
-#
-#     PROJECT_PATH = group/repository
-#     PACKAGE_MANAGER_SET = bundler,composer,npm
-#     DIRECTORY = /
-#
-# https://gitlab.com/dependabot-gitlab/dependabot
-# https://docs.gitlab.com/ee/ci/yaml/
-
 variables:
   DEPENDABOT_GITLAB_IMAGE: docker.io/andrcuns/dependabot-gitlab
   DEPENDABOT_GITLAB_VERSION: 3.38.0-alpha.1
@@ -39,68 +18,12 @@ variables:
     - cd /home/dependabot/app
     - bundle exec rake "dependabot:update[${PROJECT_PATH:-$CI_PROJECT_PATH},${PACKAGE_MANAGER?},${DIRECTORY?}]"
 
-bundler:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bbundler\b/'
-
-pip:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bpip\b/'
-
 npm:
   extends: .dependabot-gitlab
   rules:
     - if: $DEPENDENCY_UPDATES_DISABLED
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /(\bnpm|yarn|pnpm\b)/'
-
-maven:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bmaven\b/'
-
-gradle:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bgradle\b/'
-
-cargo:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bcargo\b/'
-
-mix:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bmix\b/'
-
-composer:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bcomposer\b/'
-
-nuget:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bnuget\b/'
 
 gomod:
   extends: .dependabot-gitlab
@@ -109,44 +32,56 @@ gomod:
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bgomod\b/'
 
-elm:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\belm\b/'
-
-gitsubmodule:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bgitsubmodule\b/'
-
-docker:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bdocker\b/'
-
-terraform:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bterraform\b/'
-
-pub:
-  extends: .dependabot-gitlab
-  rules:
-    - if: $DEPENDENCY_UPDATES_DISABLED
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bpub\b/'
-
 # Used for CI/CD component release and test
 #
 include:
   - local: .gitlab/ci/*.gitlab-ci.yml
     rules:
       - if: $CI_PROJECT_PATH == 'dependabot-gitlab/dependabot-standalone'
+
+image: golang:1.24
+
+stages:
+  - build
+  - deploy
+
+variables:
+  BINARY_NAME: "projecta-web"
+  REMOTE_BIN_DIR: "~/bin"
+
+build:
+  stage: build
+  script:
+    - cd cmd/web
+    - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s -X main.Version=${CI_COMMIT_SHA}" -o ../../builds/${BINARY_NAME}-${CI_COMMIT_SHA} .
+  artifacts:
+    paths:
+      - builds/${BINARY_NAME}-${CI_COMMIT_SHA}
+
+deploy:
+  stage: deploy
+  needs: [build]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  script:
+    # Install SSH client
+    - apt-get update && apt-get install -y openssh-client
+    
+    # Set up SSH
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - echo "$SSH_PUBLIC_KEY" > ~/.ssh/id_rsa.pub
+    - chmod 600 ~/.ssh/id_rsa.pub
+    
+    # Add server to known hosts
+    - ssh-keyscan -H ${HOSTING_SERVER} >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+    
+    # Upload binary and update symlink
+    - scp builds/${BINARY_NAME}-${CI_COMMIT_SHA} ${HOSTING_USER}@${HOSTING_SERVER}:${REMOTE_BIN_DIR}/
+    - |
+      ssh ${HOSTING_USER}@${HOSTING_SERVER} "cd ${REMOTE_BIN_DIR} && \
+      ln -sf ${BINARY_NAME}-${CI_COMMIT_SHA} ${BINARY_NAME} && \
+      ls -t ${BINARY_NAME}-* | tail -n +6 | xargs -r rm"
