@@ -80,4 +80,4 @@ deploy:
     - |
       ssh ${HOSTING_USER}@${HOSTING_SERVER} "cd ${REMOTE_BIN_DIR} && \
       ln -sf ${BINARY_NAME}-${CI_COMMIT_SHA} ${BINARY_NAME} && \
-      ls -t ${BINARY_NAME}-* | tail -n +6 | xargs -r rm"
+      ls -t ${BINARY_NAME}-* | tail -n +3 | xargs -r rm"
