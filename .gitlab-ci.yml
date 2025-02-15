@@ -18,6 +18,13 @@ variables:
     - cd /home/dependabot/app
     - bundle exec rake "dependabot:update[${PROJECT_PATH:-$CI_PROJECT_PATH},${PACKAGE_MANAGER?},${DIRECTORY?}]"
 
+npm:
+  extends: .dependabot-gitlab
+  rules:
+    - if: $DEPENDENCY_UPDATES_DISABLED
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /(\bnpm|yarn|pnpm\b)/'
+
 gomod:
   extends: .dependabot-gitlab
   rules:
