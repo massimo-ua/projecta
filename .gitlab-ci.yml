@@ -66,8 +66,8 @@ deploy:
     # Set up SSH
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - echo "$SSH_PUBLIC_KEY" > ~/.ssh/id_rsa.pub
+    - echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - echo "$SSH_PUBLIC_KEY" | base64 -d > ~/.ssh/id_rsa.pub
     - chmod 600 ~/.ssh/id_rsa.pub
     
     # Add server to known hosts
