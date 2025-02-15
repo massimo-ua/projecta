@@ -6,6 +6,8 @@ stages:
 variables:
   DEPENDABOT_GITLAB_IMAGE: docker.io/andrcuns/dependabot-gitlab
   DEPENDABOT_GITLAB_VERSION: 3.38.0-alpha.1
+  BINARY_NAME: "projecta-web"
+  REMOTE_BIN_DIR: "~/bin"
 
 .dependabot-gitlab:
   image:
@@ -37,10 +39,6 @@ include:
   - local: .gitlab/ci/*.gitlab-ci.yml
     rules:
       - if: $CI_PROJECT_PATH == 'dependabot-gitlab/dependabot-standalone'
-
-variables:
-  BINARY_NAME: "projecta-web"
-  REMOTE_BIN_DIR: "~/bin"
 
 build:
   image: golang:1.24
