@@ -1,9 +1,7 @@
 stages:
   - dependabot-gomod
-  - backend-build
-  - backend-deploy
-  - frontend-build
-  - frontend-deploy
+  - build
+  - backenddeploy
 
 variables:
   DEPENDABOT_GITLAB_IMAGE: docker.io/andrcuns/dependabot-gitlab
@@ -44,7 +42,7 @@ include:
 
 backend-build:
   image: golang:1.24
-  stage: backend-build
+  stage: build
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
@@ -57,7 +55,7 @@ backend-build:
 
 backend-deploy:
   stage: backend-deploy
-  needs: [backend-build]
+  needs: [build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
@@ -86,7 +84,7 @@ backend-deploy:
 
 frontend-build:
   image: node:22.12.0
-  stage: frontend-build
+  stage: build
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
@@ -102,7 +100,7 @@ frontend-build:
 frontend-deploy:
   image: debian:bookworm
   stage: frontend-deploy
-  needs: [frontend-build]
+  needs: [build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
