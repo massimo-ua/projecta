@@ -55,7 +55,7 @@ backend-build:
 
 backend-deploy:
   stage: deploy
-  needs: [build]
+  needs: [backend-build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
@@ -100,7 +100,7 @@ frontend-build:
 frontend-deploy:
   image: debian:bookworm
   stage: deploy
-  needs: [build]
+  needs: [frontend-build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
