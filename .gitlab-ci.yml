@@ -1,7 +1,9 @@
 stages:
   - dependabot-gomod
-  - build
-  - deploy
+  - backend-build
+  - backend-deploy
+  - frontend-build
+  - frontend-deploy
 
 variables:
   DEPENDABOT_GITLAB_IMAGE: docker.io/andrcuns/dependabot-gitlab
@@ -40,9 +42,9 @@ include:
     rules:
       - if: $CI_PROJECT_PATH == 'dependabot-gitlab/dependabot-standalone'
 
-build:
+backend-build:
   image: golang:1.24
-  stage: build
+  stage: backend-build
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
@@ -53,8 +55,8 @@ build:
     paths:
       - builds/${BINARY_NAME}-${CI_COMMIT_SHA}
 
-deploy:
-  stage: deploy
+backend-deploy:
+  stage: backend-deploy
   needs: [build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -81,3 +83,35 @@ deploy:
       ssh ${HOSTING_USER}@${HOSTING_SERVER} "cd ${REMOTE_BIN_DIR} && \
       ln -sf ${BINARY_NAME}-${CI_COMMIT_SHA} ${BINARY_NAME} && \
       ls -t ${BINARY_NAME}-* | tail -n +3 | xargs -r rm"
+
+frontend-build:
+  image: node:22.12.0
+  stage: frontend-build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  script:
+    - cd web-ui
+    - npm install
+    - npm run build
+  artifacts:
+    paths:
+      - web-ui/dist/
+    expire_in: 1 hour
+
+frontend-deploy:
+  image: debian:bookworm
+  stage: frontend-deploy
+  needs: [frontend-build]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  script:
+    - apt-get update && apt-get install -y openssh-client
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - ssh-keyscan -H ${HOSTING_SERVER} >> ~/.ssh/known_hosts
+    # Deploy frontend files
+    - scp -r web-ui/dist/* ${HOSTING_USER}@${HOSTING_SERVER}:/var/www/html/projecta/
