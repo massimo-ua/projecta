@@ -54,7 +54,7 @@ backend-build:
       - builds/${BINARY_NAME}-${CI_COMMIT_SHA}
 
 backend-deploy:
-  stage: backend-deploy
+  stage: deploy
   needs: [build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -99,7 +99,7 @@ frontend-build:
 
 frontend-deploy:
   image: debian:bookworm
-  stage: frontend-deploy
+  stage: deploy
   needs: [build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
