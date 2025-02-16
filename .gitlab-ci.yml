@@ -1,7 +1,7 @@
 stages:
   - dependabot-gomod
   - build
-  - backenddeploy
+  - deploy
 
 variables:
   DEPENDABOT_GITLAB_IMAGE: docker.io/andrcuns/dependabot-gitlab
