@@ -57,7 +57,7 @@ backend-build:
 
 backend-deploy:
   stage: backend-deploy
-  needs: [build]
+  needs: [backend-build]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
