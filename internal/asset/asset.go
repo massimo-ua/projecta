@@ -1,22 +1,23 @@
 package asset
 
 import (
+	"time"
+
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"time"
 )
 
 type Asset struct {
-	ID          uuid.UUID
-	Name        string
-	Description string
-	Project     *projecta.Project
-	Type        *projecta.CostType
-	Price       *money.Money
-	AcquiredAt  time.Time
-	Owner       *projecta.Owner
+	id          uuid.UUID
+	name        string
+	description string
+	project     *projecta.Project
+	costType    *projecta.CostType
+	price       *money.Money
+	acquiredAt  time.Time
+	owner       *projecta.Owner
 }
 
 func NewAsset(
@@ -29,15 +30,75 @@ func NewAsset(
 	acquiredAt time.Time,
 	owner *projecta.Owner) *Asset {
 	return &Asset{
-		ID:          id,
-		Name:        name,
-		Description: description,
-		Project:     project,
-		Type:        costType,
-		Price:       price,
-		AcquiredAt:  acquiredAt,
-		Owner:       owner,
+		id:          id,
+		name:        name,
+		description: description,
+		project:     project,
+		costType:    costType,
+		price:       price,
+		acquiredAt:  acquiredAt,
+		owner:       owner,
 	}
+}
+
+func (a *Asset) ID() uuid.UUID {
+	return a.id
+}
+
+func (a *Asset) Name() string {
+	return a.name
+}
+
+func (a *Asset) Description() string {
+	return a.description
+}
+
+func (a *Asset) Project() *projecta.Project {
+	return a.project
+}
+
+func (a *Asset) Type() *projecta.CostType {
+	return a.costType
+}
+
+func (a *Asset) Price() *money.Money {
+	return a.price
+}
+
+func (a *Asset) AcquiredAt() time.Time {
+	return a.acquiredAt
+}
+
+func (a *Asset) Owner() *projecta.Owner {
+	return a.owner
+}
+
+func (a *Asset) SetName(name string) {
+	a.name = name
+}
+
+func (a *Asset) SetDescription(description string) {
+	a.description = description
+}
+
+func (a *Asset) SetProject(project *projecta.Project) {
+	a.project = project
+}
+
+func (a *Asset) SetType(costType *projecta.CostType) {
+	a.costType = costType
+}
+
+func (a *Asset) SetPrice(price *money.Money) {
+	a.price = price
+}
+
+func (a *Asset) SetAcquiredAt(acquiredAt time.Time) {
+	a.acquiredAt = acquiredAt
+}
+
+func (a *Asset) SetOwner(owner *projecta.Owner) {
+	a.owner = owner
 }
 
 type Collection = core.PaginatedCollection[*Asset]

@@ -2,6 +2,7 @@ package asset
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -198,11 +199,11 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		return exceptions.NewInternalException(failedToUpdateAsset, err)
 	}
 
-	asset.Name = command.Name
-	asset.Description = command.Description
-	asset.Type = costType
-	asset.Price = command.Price
-	asset.AcquiredAt = command.AcquiredAt
+	asset.SetName(command.Name)
+	asset.SetDescription(command.Description)
+	asset.SetType(costType)
+	asset.SetPrice(command.Price)
+	asset.SetAcquiredAt(command.AcquiredAt)
 
 	return s.assets.Save(ctx, asset)
 }

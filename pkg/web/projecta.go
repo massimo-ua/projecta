@@ -3,6 +3,9 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"time"
+
 	"github.com/Rhymond/go-money"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
@@ -11,8 +14,6 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"net/http"
-	"time"
 )
 
 type CreateProjectDTO struct {
@@ -570,13 +571,13 @@ func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asse
 
 			for _, e := range page.Elements() {
 				if totalAssets == nil {
-					totalAssets = e.Price
+					totalAssets = e.Price()
 				} else {
-					if totalAssets.Currency() != e.Price.Currency() {
+					if totalAssets.Currency() != e.Price().Currency() {
 						return nil, exceptions.NewInternalException("project assets currencies mismatch", nil)
 					}
 
-					totalAssets, err = totalAssets.Add(e.Price)
+					totalAssets, err = totalAssets.Add(e.Price())
 
 					if err != nil {
 						return nil, err

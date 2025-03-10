@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"time"
 )
 
 var FailedToSaveAssetError = errors.New("failed to save asset")
@@ -28,7 +29,7 @@ func NewPgAssetRepository(conn *PgDbConnection) *PgAssetRepository {
 
 func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) error {
 	_, err := r.FindOne(ctx, asset.Filter{
-		ID: anAsset.ID,
+		ID: anAsset.ID(),
 	})
 
 	if err != nil {
@@ -58,15 +59,15 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 		"owner_id")
 
 	qb.Values(
-		asset.ID.String(),
+		asset.ID().String(),
 		asset.Name,
 		asset.Description,
-		asset.Project.ProjectID.String(),
-		asset.Type.ID.String(),
-		asset.Price.Amount(),
-		asset.Price.Currency().Code,
-		asset.AcquiredAt,
-		asset.Owner.PersonID.String())
+		asset.Project().ProjectID.String(),
+		asset.Type().ID.String(),
+		asset.Price().Amount(),
+		asset.Price().Currency().Code,
+		asset.AcquiredAt(),
+		asset.Owner().PersonID.String())
 
 	sql, args := qb.Build()
 
@@ -84,13 +85,13 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 	qb.Set(
 		qb.Assign("name", asset.Name),
 		qb.Assign("description", asset.Description),
-		qb.Assign("type_id", asset.Type.ID.String()),
-		qb.Assign("price", asset.Price.Amount()),
-		qb.Assign("currency", asset.Price.Currency().Code),
+		qb.Assign("type_id", asset.Type().ID.String()),
+		qb.Assign("price", asset.Price().Amount()),
+		qb.Assign("currency", asset.Price().Currency().Code),
 		qb.Assign("acquired_at", asset.AcquiredAt),
 	)
-	qb.Where(qb.Equal("asset_id", asset.ID.String()))
-	qb.Where(qb.Equal("owner_id", asset.Owner.PersonID.String()))
+	qb.Where(qb.Equal("asset_id", asset.ID().String()))
+	qb.Where(qb.Equal("owner_id", asset.Owner().PersonID.String()))
 
 	sql, args := qb.Build()
 
@@ -104,8 +105,8 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) error {
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_assets")
-	qb.Where(qb.Equal("asset_id", asset.ID.String()))
-	qb.Where(qb.Equal("owner_id", asset.Owner.PersonID.String()))
+	qb.Where(qb.Equal("asset_id", asset.ID().String()))
+	qb.Where(qb.Equal("owner_id", asset.Owner().PersonID.String()))
 
 	sql, args := qb.Build()
 
