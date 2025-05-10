@@ -14,8 +14,8 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
-var FailedToSaveAssetError = errors.New("failed to save asset")
-var AssetNotFoundError = errors.New("asset not found")
+var ErrFailedToSaveAsset = errors.New("failed to save asset")
+var ErrAssetNotFound = errors.New("asset not found")
 
 type PgAssetRepository struct {
 	db *PgRepository
@@ -33,7 +33,7 @@ func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) erro
 	})
 
 	if err != nil {
-		if errors.Is(err, AssetNotFoundError) {
+		if errors.Is(err, ErrAssetNotFound) {
 			return r.create(ctx, anAsset)
 		}
 
@@ -60,8 +60,8 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 
 	qb.Values(
 		asset.ID().String(),
-		asset.Name,
-		asset.Description,
+		asset.Name(),
+		asset.Description(),
 		asset.Project().ProjectID.String(),
 		asset.Type().ID.String(),
 		asset.Price().Amount(),
@@ -72,7 +72,7 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 	sql, args := qb.Build()
 
 	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
-		return errors.Join(FailedToSaveAssetError, err)
+		return errors.Join(ErrFailedToSaveAsset, err)
 	}
 
 	return nil
@@ -83,12 +83,12 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 
 	qb.Update("projecta_assets")
 	qb.Set(
-		qb.Assign("name", asset.Name),
-		qb.Assign("description", asset.Description),
+		qb.Assign("name", asset.Name()),
+		qb.Assign("description", asset.Description()),
 		qb.Assign("type_id", asset.Type().ID.String()),
 		qb.Assign("price", asset.Price().Amount()),
 		qb.Assign("currency", asset.Price().Currency().Code),
-		qb.Assign("acquired_at", asset.AcquiredAt),
+		qb.Assign("acquired_at", asset.AcquiredAt()),
 	)
 	qb.Where(qb.Equal("asset_id", asset.ID().String()))
 	qb.Where(qb.Equal("owner_id", asset.Owner().PersonID.String()))
@@ -96,7 +96,7 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 	sql, args := qb.Build()
 
 	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
-		return errors.Join(FailedToSaveAssetError, err)
+		return errors.Join(ErrFailedToSaveAsset, err)
 	}
 
 	return nil
@@ -117,7 +117,7 @@ func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) erro
 	}
 
 	if res.RowsAffected() == 0 {
-		return AssetNotFoundError
+		return ErrAssetNotFound
 	}
 
 	return nil
@@ -187,7 +187,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		&categoryDescription,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, AssetNotFoundError
+			return nil, ErrAssetNotFound
 		}
 
 		return nil, err
@@ -215,7 +215,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	)
 
 	if err != nil {
-		return nil, errors.Join(AssetNotFoundError, err)
+		return nil, errors.Join(ErrAssetNotFound, err)
 	}
 
 	return a, nil
