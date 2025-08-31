@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/Rhymond/go-money v1.0.15
 	github.com/go-kit/kit v0.13.0
-	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
