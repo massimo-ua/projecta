@@ -3,3 +3,6 @@
 .DS_Store
 builds/
 *.out
+.env
+.env.local
+.env.*.local

@@ -36,7 +36,7 @@ services:
       - HTTP_URI=0.0.0.0:8000
       - JWT_SECRET=dev_jwt_secret_key
       - GOOGLE_CLIENT_ID=871272346015-ubr29kl8rdib8njh66sanhfl9ffikhml.apps.googleusercontent.com
-      - GOOGLE_CLIENT_SECRET=dummy_secret_value
+      - GOOGLE_CLIENT_SECRET=your_google_client_secret_here
     depends_on:
       projecta_db:
         condition: service_healthy

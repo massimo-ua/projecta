@@ -22,7 +22,6 @@ var (
 	googleCertsURL = "https://www.googleapis.com/oauth2/v3/certs"
 	tokenURL       = "https://oauth2.googleapis.com/token"
 )
-
 const (
 	acceptedIssuer = "accounts.google.com"
 	// redirectURI is magic value for Google OAuth2 token exchange
