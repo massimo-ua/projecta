@@ -98,6 +98,14 @@ export class Request {
     });
   }
 
+  async patch(url, data, options = {}) {
+    return await this.#call(url, {
+      ...options,
+      method: 'PATCH',
+      body: data,
+    });
+  }
+
   async delete(url, options = {}) {
     return await this.#call(url, {
       ...options,
