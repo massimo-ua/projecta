@@ -101,7 +101,8 @@ backend-deploy:
     - |
       ssh ${HOSTING_USER}@${HOSTING_SERVER} "cd ${REMOTE_BIN_DIR} && \
       chmod +x projecta-migrate ${BINARY_NAME}-${CI_COMMIT_SHA} && \
-      DB_URI='${DB_URI}' MIGRATION_PATH='migrations' ./projecta-migrate && \
+      if [ -f /etc/projecta/projecta.env ]; then set -a; . /etc/projecta/projecta.env; set +a; fi && \
+      DB_URI=\"\${DB_URI:-${DB_URI}}\" MIGRATION_PATH=\"migrations\" ./projecta-migrate && \
       ln -sf ${BINARY_NAME}-${CI_COMMIT_SHA} ${BINARY_NAME} && \
       ls -t ${BINARY_NAME}-* | grep -v projecta-migrate | tail -n +3 | xargs -r rm"
 
