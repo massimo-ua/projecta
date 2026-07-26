@@ -1,98 +1,106 @@
-import { Button, Form, Input, message } from 'antd';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import HomeLayout from '../Layout';
 import { authProvider } from '../api';
 import { GoogleLoginBtn } from './GoogleLoginBtn';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from 'sonner';
+import { Loader2, Lock, User } from 'lucide-react';
 import './Login.css';
 
 export function Login() {
-  const [messageApi, contextHolder] = message.useMessage();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const onFinish = async (values) => {
-    authProvider.login(values.username, values.password).then(() => {
-      navigate('/');
-    });
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!username || !password) {
+      toast.error('Please input your username and password');
+      return;
+    }
 
-  const onFinishFailed = (error) => {
-    messageApi.open({
-      type: 'error',
-      content: `Login failed: ${error.message}`,
-    });
+    setLoading(true);
+    try {
+      await authProvider.login(username, password);
+      toast.success('Login successful');
+      navigate('/');
+    } catch (error) {
+      toast.error(`Login failed: ${error.message || 'Invalid credentials'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <HomeLayout>
-      {contextHolder}
-      <div className="login-container">
-        <div className="login-image-section" />
-
-        <div className="login-form-section">
-          <div className="login-form-container">
-            <div className="login-divider-section">
-              <div className="login-divider-text">Social</div>
-              <div className="login-social-section">
-                <GoogleLoginBtn />
-              </div>
-
-              <div className="login-divider-text">Login</div>
+      <div className="flex min-h-[80vh] items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <Card className="w-full max-w-md shadow-lg border-muted">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              Sign in to your Projecta account to continue
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <GoogleLoginBtn />
             </div>
 
-            <Form
-              name="basic"
-              labelCol={{
-                span: 8,
-              }}
-              wrapperCol={{
-                span: 16,
-              }}
-              initialValues={{
-                remember: true,
-              }}
-              onFinish={onFinish}
-              onFinishFailed={onFinishFailed}
-              autoComplete="off"
-            >
-              <Form.Item
-                label="Username"
-                name="username"
-                rules={[
-                  {
-                    required: true,
-                    message: 'Please input your username!',
-                  },
-                ]}
-              >
-                <Input />
-              </Form.Item>
+            <div className="relative flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-muted" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground font-medium">Or continue with</span>
+              </div>
+            </div>
 
-              <Form.Item
-                label="Password"
-                name="password"
-                rules={[
-                  {
-                    required: true,
-                    message: 'Please input your password!',
-                  },
-                ]}
-              >
-                <Input.Password />
-              </Form.Item>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="name@example.com"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="pl-9"
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              </div>
 
-              <Form.Item
-                wrapperCol={{
-                  offset: 8,
-                  span: 16,
-                }}
-              >
-                <Button type="primary" htmlType="submit">
-                  Submit
-                </Button>
-              </Form.Item>
-            </Form>
-          </div>
-        </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-9"
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button type="submit" className="w-full h-10 font-semibold" disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Sign In'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </HomeLayout>
   );

@@ -146,6 +146,10 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 			return nil, nil
 		})
 
+		if err != nil {
+			return nil, err
+		}
+
 		return asset, nil
 	}
 

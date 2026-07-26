@@ -1,5 +1,6 @@
 stages:
   - dependabot-gomod
+  - test
   - build
   - deploy
 
@@ -40,8 +41,23 @@ include:
     rules:
       - if: $CI_PROJECT_PATH == 'dependabot-gitlab/dependabot-standalone'
 
+unit-test:
+  image: golang:1.26
+  stage: test
+  script:
+    - go test -v -coverprofile=coverage.out ./internal/... ./pkg/...
+    - go tool cover -func=coverage.out
+    - |
+      COVERAGE=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}' | sed 's/%//')
+      echo "Total coverage: ${COVERAGE}%"
+      if (( $(echo "$COVERAGE < 95.0" | bc -l) )); then
+        echo "Coverage ${COVERAGE}% is below required 95.0% threshold!"
+        exit 1
+      fi
+  coverage: '/total:\s+\(statements\)\s+(\d+.\d+)%/'
+
 backend-build:
-  image: golang:1.24
+  image: golang:1.26
   stage: build
   rules:
     - if: $CI_COMMIT_BRANCH == "main"

@@ -2,9 +2,9 @@
 BINARY_NAME=projecta-web
 VERSION?=1.0.0
 BUILD_DIR=builds
-GOLANG_CROSS_VERSION?=1.24
+GOLANG_CROSS_VERSION?=1.26
 
-.PHONY: clean build build-linux
+.PHONY: clean build build-linux dev-up dev-down dev-logs dev-build
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -16,3 +16,16 @@ build-linux:
 
 # Build for all platforms
 build: clean build-linux
+
+# Docker local development commands
+dev-up:
+	docker compose up -d --build
+
+dev-down:
+	docker compose down
+
+dev-logs:
+	docker compose logs -f
+
+dev-build:
+	docker compose build

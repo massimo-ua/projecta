@@ -26,7 +26,7 @@ const routes = [{
   children: [{
     index: true,
     Component: AuthenticatedOnly(Payments),
-  },{
+  }, {
     path: 'types',
     Component: AuthenticatedOnly(Types),
   }, {

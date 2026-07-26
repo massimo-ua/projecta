@@ -5,20 +5,25 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"io"
 	"math/big"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+)
+
+var (
+	googleCertsURL = "https://www.googleapis.com/oauth2/v3/certs"
+	tokenURL       = "https://oauth2.googleapis.com/token"
 )
 
 const (
-	googleCertsURL = "https://www.googleapis.com/oauth2/v3/certs"
-	tokenURL       = "https://oauth2.googleapis.com/token"
 	acceptedIssuer = "accounts.google.com"
 	// redirectURI is magic value for Google OAuth2 token exchange
 	// https://github.com/MomenSherif/react-oauth/issues/12#issuecomment-1231202620
@@ -122,8 +127,9 @@ func (p *GoogleAuthProvider) exchangeCodeForToken(code string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return "", exceptions.NewInternalException(
-			fmt.Sprintf("token exchange failed with status: %d", resp.StatusCode),
+			fmt.Sprintf("token exchange failed with status %d: %s", resp.StatusCode, string(bodyBytes)),
 			nil,
 		)
 	}

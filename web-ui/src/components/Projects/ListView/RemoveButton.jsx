@@ -1,30 +1,48 @@
 import React from 'react';
-import { Button, Modal } from 'antd';
-import { WarningOutlined } from '@ant-design/icons';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Trash2 } from 'lucide-react';
 
 export function RemoveButton({ onRemove }) {
-  const [modal, contextHolder] = Modal.useModal();
-
-  const handleClick = () => {
-    modal.confirm({
-      title: 'Confirm removal',
-      icon: <WarningOutlined />,
-      content: 'Are you sure you want to remove this item?',
-      onOk: onRemove,
-    });
-  };
-
   return (
-    <>
-      <Button 
-        color="danger" 
-        variant="outlined" 
-        icon={<WarningOutlined />} 
-        onClick={handleClick}
-      >
-        Remove
-      </Button>
-      {contextHolder}
-    </>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirm removal</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to remove this item? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onRemove}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

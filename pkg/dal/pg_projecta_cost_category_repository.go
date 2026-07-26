@@ -98,10 +98,8 @@ func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.Cat
 }
 
 func (r *PgCostCategoryRepository) FindOne(ctx context.Context, filter projecta.CategoryFilter) (*projecta.CostCategory, error) {
-	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-
-	if personID == uuid.Nil {
-		return nil, core.FailedToIdentifyRequester
+	if _, err := core.AuthGuard(ctx); err != nil {
+		return nil, err
 	}
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()

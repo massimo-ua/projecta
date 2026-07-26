@@ -25,10 +25,10 @@ func NewPgProjectRepository(db *PgDbConnection) *PgProjectRepository {
 }
 
 func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
-	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
+	personID, err := core.AuthGuard(ctx)
 
-	if personID == uuid.Nil {
-		return nil, core.FailedToIdentifyRequester
+	if err != nil {
+		return nil, err
 	}
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()

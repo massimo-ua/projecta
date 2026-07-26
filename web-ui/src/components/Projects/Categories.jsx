@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Skeleton, Typography, notification } from 'antd';
-import { PieChartOutlined } from '@ant-design/icons';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PieChart } from 'lucide-react';
 import { ListView } from './ListView';
 import AddCategoryModal from './AddCategoryModal';
 import { categoriesRepository } from '../../api';
@@ -10,23 +10,22 @@ import useCategories from '../../hooks/categories';
 import { RemoveButton } from './ListView/RemoveButton';
 import { DetailItem } from './ListView/DetailItem';
 import { CopyableText } from './ListView/CopyableText';
+import { toast } from 'sonner';
 import './Payments.css';
-
-const { Text } = Typography;
 
 const renderCategoryMainContent = (category) => (
   <div>
-    <span>{category.name}</span>
+    <span className="font-semibold text-base text-foreground">{category.name}</span>
   </div>
 );
 
 const renderCategoryDetails = (category) => (
-  <div className="details-grid">
+  <div className="space-y-2">
     <DetailItem label="ID">
       <CopyableText text={category.id} truncate />
     </DetailItem>
     <DetailItem label="Description">
-      <Text>{category.description}</Text>
+      <span className="text-sm text-muted-foreground">{category.description || 'No description'}</span>
     </DetailItem>
   </div>
 );
@@ -77,12 +76,10 @@ export function Categories() {
   const handleRemoveCategory = async (categoryId) => {
     try {
       await categoriesRepository.removeCategory(projectId, categoryId);
+      toast.success('Category removed successfully');
       resetFilter();
     } catch (error) {
-      notification.error({
-        message: 'Failed to remove category',
-        description: `Category ${categoryId} could not be removed. ${error.message}`,
-      });
+      toast.error(`Failed to remove category: ${error.message}`);
       console.error('Failed to remove category:', error);
     }
   };
@@ -92,7 +89,7 @@ export function Categories() {
   );
 
   if (loading) {
-    return <Skeleton active />;
+    return <Skeleton className="h-48 w-full rounded-xl" />;
   }
 
   return (
@@ -105,7 +102,7 @@ export function Categories() {
         currentPage={currentPage}
         onPaginationChange={setCurrentPage}
         onAddButtonClick={onAddCategoryClick}
-        addButtonIcon={<PieChartOutlined />}
+        addButtonIcon={<PieChart className="h-4 w-4" />}
         addButtonText="Add Category"
         addButtonDisabled={addModalOpened}
         renderItemMainContent={renderCategoryMainContent}

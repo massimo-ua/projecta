@@ -1,118 +1,178 @@
-import { useEffect } from 'react';
-import { Button, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { assetRepository } from '../../api';
-
-const { TextArea } = Input;
-const { useForm } = Form;
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 export default function EditAssetModal(props) {
   const { projectId } = useParams();
-  const { onSuccess, onCancel, assetId, types } = props;
-  const [ form ] = useForm();
+  const { onSuccess, onCancel, assetId, types = [] } = props;
 
-  const handleUpdate = () => {
-    const {
-      typeId,
-      price,
-      currency,
-      acquiredAt,
-      name,
-      description,
-    } = form.getFieldsValue();
-    assetRepository.updateAsset(projectId, {
-      id: assetId,
-      typeId,
-      price,
-      currency,
-      acquiredAt: acquiredAt.toDate(),
-      name,
-      description,
-    }).then(() => {
-      onSuccess();
-    }).catch((e) => {
-      console.error('Failed to update asset', e.message);
-    });
-  };
-
-  const handleCancel = () => onCancel();
+  const [typeId, setTypeId] = useState('');
+  const [price, setPrice] = useState('');
+  const [currency, setCurrency] = useState('UAH');
+  const [acquiredAt, setAcquiredAt] = useState('');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!assetId) {
-      return;
-    }
+    if (!assetId) return;
 
     assetRepository
       .getAsset(projectId, assetId)
       .then((asset) => {
-      form.setFieldsValue({
-        typeId: asset.typeId,
-        price: asset.price,
-        currency: asset.currency,
-        acquiredAt: asset.acquiredAt,
-        name: asset.name,
-        description: asset.description,
+        setTypeId(asset.typeId || '');
+        setPrice(asset.price || '');
+        setCurrency(asset.currency || 'UAH');
+        setName(asset.name || '');
+        setDescription(asset.description || '');
+
+        if (asset.acquiredAt) {
+          const formattedDate = new Date(asset.acquiredAt).toISOString().split('T')[0];
+          setAcquiredAt(formattedDate);
+        }
+      })
+      .catch((err) => {
+        toast.error(`Failed to load asset details: ${err.message}`);
       });
-  })}, [ assetId ]);
+  }, [assetId, projectId]);
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!typeId || !price || !name || !acquiredAt) {
+      toast.error('Type, Price, Name, and Date are required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await assetRepository.updateAsset(projectId, {
+        id: assetId,
+        typeId,
+        price: Number(price),
+        currency,
+        acquiredAt: new Date(acquiredAt),
+        name,
+        description,
+      });
+      onSuccess();
+    } catch (e) {
+      toast.error(`Failed to update asset: ${e.message}`);
+      console.error('Failed to update asset', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancel = () => onCancel();
 
   return (
-    <Modal
-      title="Edit Asset"
-      open={ Boolean(assetId) }
-      onCancel={ handleCancel }
-      footer={ [
-        <Button key="edit" type="primary" onClick={ handleUpdate }>
-          Submit
-        </Button>,
-        <Button key="back" onClick={ handleCancel }>
-          Cancel
-        </Button>,
-      ] }
-    >
-      <Form
-        form={ form }
-        labelCol={ {
-          span: 6,
-        } }
-        wrapperCol={ {
-          span: 18,
-        } }
-        style={ {
-          maxWidth: 600,
-        } }
-        autoComplete="off"
-      >
-        <Form.Item label="Type" name="typeId">
-          <Select>
-            { types.map((type) => (
-              <Select.Option key={ type.key } value={ type.id }>
-                { `${ type.name } [${ type.category }]` }
-              </Select.Option>
-            )) }
-          </Select>
-        </Form.Item>
-        <Form.Item label="Price" name="price">
-          <InputNumber/>
-        </Form.Item>
-        <Form.Item label="Currency" name="currency">
-          <Select>
-            { [ 'UAH' ].map((code) => (
-              <Select.Option key={ code } value={ code }>
-                { code }
-              </Select.Option>
-            )) }
-          </Select>
-        </Form.Item>
-        <Form.Item label="Acquired At" name="acquiredAt">
-          <DatePicker/>
-        </Form.Item>
-        <Form.Item label="Name" name="name">
-          <Input/>
-        </Form.Item>
-        <Form.Item label="Description" name="description">
-          <TextArea rows={ 4 }/>
-        </Form.Item>
-      </Form>
-    </Modal>
+    <Dialog open={Boolean(assetId)} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Edit Asset</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleUpdate} className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-asset-type">Type</Label>
+            <Select value={typeId} onValueChange={setTypeId}>
+              <SelectTrigger id="edit-asset-type">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                {types.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.name} [{type.category}]
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="edit-asset-price">Price</Label>
+              <Input
+                id="edit-asset-price"
+                type="number"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-asset-currency">Currency</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger id="edit-asset-currency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UAH">UAH</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-asset-acquired">Acquired At</Label>
+            <Input
+              id="edit-asset-acquired"
+              type="date"
+              value={acquiredAt}
+              onChange={(e) => setAcquiredAt(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-asset-name">Name</Label>
+            <Input
+              id="edit-asset-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-asset-desc">Description</Label>
+            <Textarea
+              id="edit-asset-desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              Submit
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

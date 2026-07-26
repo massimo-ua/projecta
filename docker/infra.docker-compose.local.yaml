@@ -2,20 +2,32 @@ name: projecta_infra
 services:
   projecta_db:
     image: postgres:14-alpine
+    container_name: projecta_db
     restart: always
     environment:
       POSTGRES_USER: projecta
       POSTGRES_PASSWORD: projecta
       POSTGRES_DB: projecta
     ports:
-        - 5433:5432
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U projecta -d projecta"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   projecta_amqp:
     image: rabbitmq:3.12-management-alpine
+    container_name: projecta_amqp
     restart: always
     environment:
       RABBITMQ_DEFAULT_USER: projecta
       RABBITMQ_DEFAULT_PASS: projecta
     ports:
-      - 5673:5672
-      - 15673:15672
-
+      - "5673:5672"
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

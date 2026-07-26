@@ -1,33 +1,41 @@
 package main
 
 import (
-    "fmt"
-    "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
-    "gitlab.com/massimo-ua/projecta/pkg/env"
-    "log"
+	"errors"
+	"fmt"
+	"log"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"gitlab.com/massimo-ua/projecta/pkg/env"
 )
 
 const (
-    MigrationPath = "MIGRATION_PATH"
-    DbUri         = "DB_URI"
+	MigrationPath = "MIGRATION_PATH"
+	DbUri         = "DB_URI"
 )
 
 func main() {
-    migrationPath := env.GetEnv(MigrationPath, "migrations")
+	migrationPath := env.GetEnv(MigrationPath, "migrations")
 
-    dbUri := env.GetEnv(DbUri, "postgres://projecta:projecta@localhost:5432/projecta?sslmode=disable")
+	dbUri := env.GetEnv(DbUri, "postgres://projecta:projecta@localhost:5432/projecta?sslmode=disable")
 
-    m, err := migrate.New(fmt.Sprintf("file://%s", migrationPath), dbUri)
+	m, err := migrate.New(fmt.Sprintf("file://%s", migrationPath), dbUri)
 
-    if err != nil {
-        log.Fatalf("failed to create runner %v", err)
-    }
+	if err != nil {
+		log.Fatalf("failed to create runner %v", err)
+	}
 
-    err = m.Up()
+	err = m.Up()
 
-    if err != nil {
-        log.Fatalf("failed to run migrations %v", err)
-    }
+	if err != nil {
+		if errors.Is(err, migrate.ErrNoChange) {
+			log.Println("no new migrations to apply")
+		} else {
+			log.Fatalf("failed to run migrations %v", err)
+		}
+	} else {
+		log.Println("migrations applied successfully")
+	}
 }

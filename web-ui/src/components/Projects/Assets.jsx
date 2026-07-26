@@ -1,8 +1,7 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
-import { Space, Tag, Typography } from 'antd';
-import { CarryOutOutlined } from '@ant-design/icons';
-import styled from 'styled-components';
+import { Badge } from '@/components/ui/badge';
+import { Package } from 'lucide-react';
 import useAssets from '../../hooks/assets';
 import useTypes from '../../hooks/types';
 import AddAssetModal from './AddAssetModal';
@@ -14,28 +13,8 @@ import { RemoveButton } from './ListView/RemoveButton';
 import { CopyableText } from './ListView/CopyableText';
 import { DetailItem } from './ListView/DetailItem';
 import { assetRepository } from '../../api';
+import { toast } from 'sonner';
 import './Assets.css';
-
-const { Text } = Typography;
-
-const MainContent = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
-const HeaderRow = styled.div`
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: nowrap;
-`;
-
-const TagsRow = styled.div`
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-`;
 
 export function Assets() {
   const { projectId } = useParams();
@@ -77,6 +56,7 @@ export function Assets() {
   const onAddCancel = () => setAddModalOpen(false);
   const onAddSuccess = () => {
     setAddModalOpen(false);
+    toast.success('Asset added successfully');
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -86,6 +66,7 @@ export function Assets() {
 
   const onEditSuccess = () => {
     setAssetIdToEdit('');
+    toast.success('Asset updated successfully');
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -98,6 +79,7 @@ export function Assets() {
   const onRemoveButtonClick = (assetId) => {
     assetRepository.removeAsset(projectId, assetId)
       .then(() => {
+        toast.success('Asset removed successfully');
         setFilter({
           projectId,
           limit: PAGE_SIZE,
@@ -105,40 +87,45 @@ export function Assets() {
         });
       })
       .catch((error) => {
+        toast.error(`Failed to remove asset: ${error.message}`);
         console.error(error);
       });
   };
 
   const renderAssetMainContent = (asset) => (
-    <MainContent>
-      <HeaderRow>
-        <Text type="secondary" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           {asset.acquiredAt}
-        </Text>
-        <Text strong>{asset.name}</Text>
-      </HeaderRow>
-      <TagsRow>
-        <Tag>{asset.category}</Tag>
-        <Tag>{asset.type}</Tag>
-      </TagsRow>
-      <Text type="secondary">{asset.description}</Text>
-    </MainContent>
+        </span>
+        <span className="font-semibold text-base text-foreground">{asset.name}</span>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        <Badge variant="outline">{asset.category}</Badge>
+        <Badge variant="secondary">{asset.type}</Badge>
+      </div>
+      {asset.description && (
+        <span className="text-xs text-muted-foreground mt-0.5">{asset.description}</span>
+      )}
+    </div>
   );
 
   const renderAssetAmount = (asset) => (
-    `${asset.price} ${asset.currency}`
+    <span className="font-bold text-foreground">
+      {asset.price} {asset.currency}
+    </span>
   );
 
   const renderAssetDetails = (asset) => (
-    <div className="details-grid">
+    <div className="space-y-2">
       <DetailItem label="ID">
         <CopyableText text={asset.id} truncate />
       </DetailItem>
       <DetailItem label="Type">
-        <Text>{asset.type}</Text>
+        <span className="text-sm text-foreground">{asset.type}</span>
       </DetailItem>
       <DetailItem label="Category">
-        <Text>{asset.category}</Text>
+        <span className="text-sm text-foreground">{asset.category}</span>
       </DetailItem>
     </div>
   );
@@ -160,7 +147,7 @@ export function Assets() {
         currentPage={currentPage}
         onPaginationChange={onPaginationChange}
         onAddButtonClick={onAddButtonClick}
-        addButtonIcon={<CarryOutOutlined />}
+        addButtonIcon={<Package className="h-4 w-4" />}
         addButtonText="Add Asset"
         addButtonDisabled={addModalOpened}
         renderItemMainContent={renderAssetMainContent}

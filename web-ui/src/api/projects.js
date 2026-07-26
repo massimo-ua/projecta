@@ -10,25 +10,40 @@ export class ProjectsRepository {
     const url = query ? `/projects?${query}` : '/projects';
     const response = await this.#request.get(url);
 
-    const { projects } = response;
-    return projects.map(({ project_id, name, description }) => ({ id: project_id, name, description }));
+    const { projects = [] } = response;
+    return projects.map((item) => ({
+      id: item.project_id,
+      name: item.name,
+      description: item.description,
+    }));
+  }
+
+  async createProject({ name, description }) {
+    const response = await this.#request.post('/projects', { name, description });
+    return {
+      id: response.project_id,
+      name: response.name,
+      description: response.description,
+    };
   }
 
   async getTotals(projectId) {
     const response = await this.#request.get(`/projects/${projectId}/totals`)
       .catch(() => ({
         totals: [
-          { title: 'Total Expenses', amount: 1000000, currency: 'UAH' },
+          { title: 'Total Expenses', amount: 0, currency: 'UAH' },
         ],
       }));
 
     const { totals = [] } = response;
 
     return totals.map(({ title, amount, currency }) => ({
-      key: name.toLowerCase().replace(' ', '-'),
+      key: (title || 'total').toLowerCase().replace(/\s+/g, '-'),
       title,
       amount: new Intl.NumberFormat().format(amount / 100),
       currency,
     }));
   }
 }
+
+export default ProjectsRepository;

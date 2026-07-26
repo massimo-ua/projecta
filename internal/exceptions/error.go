@@ -49,7 +49,7 @@ func (e Exception) As(target any) bool {
     t, ok := target.(*Exception)
 
     if !ok {
-        return errors.As(e.err, &target)
+        return errors.As(e.err, target)
     }
 
     *t = e

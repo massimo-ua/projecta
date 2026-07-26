@@ -1,0 +1,103 @@
+name: projecta
+
+services:
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: projecta_proxy
+    restart: always
+    ports:
+      - "${PROXY_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+      - web-ui
+
+  db:
+    image: postgres:14-alpine
+    container_name: projecta_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-projecta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-projecta}
+      POSTGRES_DB: ${POSTGRES_DB:-projecta}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-projecta} -d ${POSTGRES_DB:-projecta}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  amqp:
+    image: rabbitmq:3.12-management-alpine
+    container_name: projecta_amqp
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-projecta}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-projecta}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: ./docker/migrate.dockerfile
+    container_name: projecta_migrate
+    environment:
+      DB_URI: postgres://${POSTGRES_USER:-projecta}:${POSTGRES_PASSWORD:-projecta}@db:5432/${POSTGRES_DB:-projecta}?sslmode=disable
+      MIGRATION_PATH: migrations
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/web.dockerfile
+    container_name: projecta_web
+    restart: always
+    environment:
+      DB_URI: postgres://${POSTGRES_USER:-projecta}:${POSTGRES_PASSWORD:-projecta}@db:5432/${POSTGRES_DB:-projecta}?sslmode=disable
+      AMQP_URI: amqp://${RABBITMQ_USER:-projecta}:${RABBITMQ_PASS:-projecta}@amqp:5672
+      HTTP_URI: 0.0.0.0:8000
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_key_change_me}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-871272346015-ubr29kl8rdib8njh66sanhfl9ffikhml.apps.googleusercontent.com}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-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}
+      TOKEN_TTL: ${TOKEN_TTL:-86400}
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      amqp:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: ./docker/web-ui.dockerfile
+    container_name: projecta_web_ui
+    restart: always
+    environment:
+      VITE_API_TARGET: http://web:8000
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    volumes:
+      - ./web-ui:/app
+      - /app/node_modules
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:

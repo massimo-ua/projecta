@@ -3,8 +3,11 @@ package people
 import (
 	"context"
 	"errors"
+	"log"
+
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 type AuthServiceImpl struct {
@@ -46,11 +49,11 @@ func (s *AuthServiceImpl) loginWithLocal(ctx context.Context, credentials Creden
 		credentials.RegistrationID())
 
 	if err != nil {
-		return nil, errors.Join(loginFailedError, err)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	if !s.hasher.Compare(credentials.Identifier(), hash) {
-		return nil, errors.Join(loginFailedError, err)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	return s.authorizePerson(ctx, personID)
@@ -60,7 +63,7 @@ func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUI
 	customer, err := s.peopleRepository.FindByID(ctx, personID)
 
 	if err != nil {
-		return nil, errors.Join(loginFailedError, err)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
@@ -70,7 +73,7 @@ func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUI
 	})
 
 	if err != nil {
-		return nil, errors.Join(loginFailedError, err)
+		return nil, exceptions.NewInternalException("failed to generate tokens", errors.Join(loginFailedError, err))
 	}
 
 	return authResponse, nil
@@ -80,13 +83,17 @@ func (s *AuthServiceImpl) loginWithGoogle(ctx context.Context, token string) (*c
 	claims, err := s.google.ValidateToken(token)
 
 	if err != nil {
-		return nil, errors.Join(loginFailedError, err)
+		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
+
+	log.Printf("[GOOGLE AUTH] Successfully validated Google token for Sub ID: %s (DisplayName: %s)", claims.Sub, claims.DisplayName)
 
 	personID, _, err := s.peopleRepository.FindCredentials(ctx, GOOGLE, claims.Sub)
 
 	if err != nil {
-		return nil, errors.Join(loginFailedError, err)
+		log.Printf("[GOOGLE AUTH ERROR] No user found for Google Sub ID: %s. To map this user, insert credentials with provider='GOOGLE' and registration_id='%s'", claims.Sub, claims.Sub)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	return s.authorizePerson(ctx, personID)

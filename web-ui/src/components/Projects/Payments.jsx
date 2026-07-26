@@ -1,8 +1,7 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
-import { Tag, Typography } from 'antd';
-import { DollarOutlined } from '@ant-design/icons';
-import styled from 'styled-components';
+import { Badge } from '@/components/ui/badge';
+import { DollarSign } from 'lucide-react';
 import usePayments from '../../hooks/payments';
 import useTypes from '../../hooks/types';
 import AddPaymentModal from './AddPaymentModal';
@@ -14,28 +13,8 @@ import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
 import { CopyableText } from './ListView/CopyableText';
 import { DetailItem } from './ListView/DetailItem';
+import { toast } from 'sonner';
 import './Payments.css';
-
-const { Text } = Typography;
-
-const MainContent = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
-const HeaderRow = styled.div`
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: nowrap;
-`;
-
-const TagsRow = styled.div`
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-`;
 
 export function Payments() {
   const { projectId } = useParams();
@@ -43,7 +22,7 @@ export function Payments() {
   const [addModalOpened, setAddModalOpen] = useState(false);
   const [paymentIdToEdit, setPaymentIdToEdit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [ , types, , setTypesFilter ] = useTypes();
+  const [, types, , setTypesFilter] = useTypes();
 
   const onPaginationChange = (nextPage) => {
     setCurrentPage(nextPage);
@@ -77,6 +56,7 @@ export function Payments() {
   const onAddCancel = () => setAddModalOpen(false);
   const onAddSuccess = () => {
     setAddModalOpen(false);
+    toast.success('Payment added successfully');
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -87,6 +67,7 @@ export function Payments() {
   const onRemoveButtonClick = (paymentId) => {
     paymentRepository.removePayment(projectId, paymentId)
       .then(() => {
+        toast.success('Payment removed successfully');
         setFilter({
           projectId,
           limit: PAGE_SIZE,
@@ -94,12 +75,14 @@ export function Payments() {
         });
       })
       .catch((error) => {
+        toast.error(`Failed to remove payment: ${error.message}`);
         console.error(error);
       });
   };
 
   const onEditSuccess = () => {
     setPaymentIdToEdit('');
+    toast.success('Payment updated successfully');
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -110,38 +93,42 @@ export function Payments() {
   const onEditCancel = () => setPaymentIdToEdit('');
 
   const renderPaymentMainContent = (payment) => (
-    <MainContent>
-      <HeaderRow>
-        <Text type="secondary" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           {payment.paymentDate}
-        </Text>
-        <Text strong>{payment.description}</Text>
-      </HeaderRow>
-      <TagsRow>
-        <Tag>{payment.category}</Tag>
-        <Tag>{payment.type}</Tag>
-      </TagsRow>
-    </MainContent>
+        </span>
+        <span className="font-semibold text-base text-foreground">{payment.description}</span>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        <Badge variant="outline">{payment.category}</Badge>
+        <Badge variant="secondary">{payment.type}</Badge>
+      </div>
+    </div>
   );
 
   const renderPaymentAmount = (payment) => (
-    <span style={{
-      color: payment.kind === 'DOWN_PAYMENT' ? 'red' : 'green',
-    }}>
+    <span
+      className={
+        payment.kind === 'DOWN_PAYMENT'
+          ? 'text-red-600 dark:text-red-400 font-bold'
+          : 'text-green-600 dark:text-green-400 font-bold'
+      }
+    >
       {payment.amount} {payment.currency}
     </span>
   );
 
   const renderPaymentDetails = (payment) => (
-    <div className="details-grid">
+    <div className="space-y-2">
       <DetailItem label="ID">
         <CopyableText text={payment.id} truncate />
       </DetailItem>
       <DetailItem label="Type">
-        <Text>{payment.type}</Text>
+        <span className="text-sm text-foreground">{payment.type}</span>
       </DetailItem>
       <DetailItem label="Category">
-        <Text>{payment.category}</Text>
+        <span className="text-sm text-foreground">{payment.category}</span>
       </DetailItem>
     </div>
   );
@@ -163,7 +150,7 @@ export function Payments() {
         currentPage={currentPage}
         onPaginationChange={onPaginationChange}
         onAddButtonClick={onAddButtonClick}
-        addButtonIcon={<DollarOutlined />}
+        addButtonIcon={<DollarSign className="h-4 w-4" />}
         addButtonText="Add Payment"
         addButtonDisabled={addModalOpened}
         renderItemMainContent={renderPaymentMainContent}

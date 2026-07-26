@@ -1,10 +1,14 @@
-import { FundViewOutlined } from '@ant-design/icons';
+import React from 'react';
+import { TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export function Logo() {
   return (
-    <div className="HomeLayout_logo">
-      <FundViewOutlined style={{ fontSize: '48px' }} />
-      <div>Projecta</div>
-    </div>
+    <Link to="/" className="flex items-center gap-2.5 font-bold text-xl tracking-tight text-primary hover:opacity-90 transition-opacity">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+        <TrendingUp className="h-5 w-5" />
+      </div>
+      <span>Projecta</span>
+    </Link>
   );
 }

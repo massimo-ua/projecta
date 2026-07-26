@@ -13,7 +13,7 @@ export class Request {
     this.#authProvider = authProvider;
     this.#abortControllers = new Map();
     window.addEventListener('unload', () => {
-      this.#abortControllers.forEach(controller => controller.abort());
+      this.#abortControllers.forEach((controller) => controller.abort());
     });
   }
 
@@ -24,7 +24,7 @@ export class Request {
       ...rest
     } = options;
 
-    const { headers = {}} = rest;
+    const { headers = {} } = rest;
     const { [CORRELATION_ID_HEADER]: requestId = crypto.randomUUID(), ...restOfHeaders } = headers;
 
     const token = await this.#authProvider.getToken();

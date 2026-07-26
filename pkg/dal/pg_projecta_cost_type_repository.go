@@ -20,10 +20,8 @@ func NewPgCostTypeRepository(db *PgDbConnection) *PgCostTypeRepository {
 }
 
 func (r *PgCostTypeRepository) FindOne(ctx context.Context, filter projecta.TypeFilter) (*projecta.CostType, error) {
-	personID := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-
-	if personID == uuid.Nil {
-		return nil, core.FailedToIdentifyRequester
+	if _, err := core.AuthGuard(ctx); err != nil {
+		return nil, err
 	}
 
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()

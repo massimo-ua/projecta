@@ -29,7 +29,9 @@ export class TypesRepository {
     return await this.#request.delete(`/projects/${projectId}/types/${typeId}`);
   }
 
-  toType({ type_id, name, description, category }) {
+  toType({
+    type_id, name, description, category,
+  }) {
     return {
       key: type_id,
       id: type_id,

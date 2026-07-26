@@ -24,7 +24,7 @@ export class CategoriesRepository {
     const resourceUrl = `/projects/${projectId}/categories`;
     const response = await this.#request.post(resourceUrl, {
       name: categoryData.name,
-      description: categoryData.description
+      description: categoryData.description,
     });
 
     const { category_id, name, description } = response;

@@ -26,47 +26,7 @@ func createErrorHandler(logger core.Logger) func(err error) {
 	}
 }
 
-func main() {
-	log := logger.New(dbUri, jwtSecret)
-	handleError := createErrorHandler(log)
-
-	config, err := loadConfig()
-
-	if err != nil {
-		handleError(err)
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-	defer stop()
-
-	db, err := dal.NewPgDbConnection(config.DbUri)
-
-	if err != nil {
-		handleError(exceptions.NewInternalException("failed to connect to the database", err))
-	}
-
-	defer db.Close()
-
-	if err != nil {
-		handleError(err)
-	}
-
-	startTime := time.Now()
-	if err = db.Ping(ctx); err != nil {
-		handleError(exceptions.NewInternalException("database ping failed", err))
-	}
-
-	log.Info("Database Connection Established", map[string]any{"connection_time": time.Since(startTime)})
-
-	//brk, err := broker.NewAMQPBroker(os.Getenv("AMQP_URI"))
-	//
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-
+func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handler, error) {
 	peopleRepository := dal.NewPgPeopleRepository(db)
 	hasher := crypto.NewBcryptHasher(0)
 	googleAuth, err := crypto.NewGoogleAuthProvider(crypto.GoogleAuthConfig{
@@ -76,7 +36,7 @@ func main() {
 	})
 
 	if err != nil {
-		handleError(err)
+		return nil, err
 	}
 
 	tokenProvider := crypto.NewJwtTokenProvider(
@@ -116,7 +76,7 @@ func main() {
 		paymentRepository,
 	)
 
-	webAPI, err := web.MakeHTTPHandler(
+	return web.MakeHTTPHandler(
 		customerService,
 		tokenProvider,
 		authService,
@@ -126,6 +86,48 @@ func main() {
 		paymentService,
 		assetService,
 	)
+}
+
+func main() {
+	log := logger.New(dbUri, jwtSecret)
+	handleError := createErrorHandler(log)
+
+	config, err := loadConfig()
+
+	if err != nil {
+		handleError(err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	db, err := dal.NewPgDbConnection(config.DbUri)
+
+	if err != nil {
+		handleError(exceptions.NewInternalException("failed to connect to the database", err))
+	}
+
+	defer db.Close()
+
+	if err != nil {
+		handleError(err)
+	}
+
+	startTime := time.Now()
+	if err = db.Ping(ctx); err != nil {
+		handleError(exceptions.NewInternalException("database ping failed", err))
+	}
+
+	log.Info("Database Connection Established", map[string]any{"connection_time": time.Since(startTime)})
+
+	webAPI, err := setupAppHandler(config, db)
+
+	if err != nil {
+		handleError(err)
+	}
 
 	server := &http.Server{
 		Addr:    config.HttpUri,

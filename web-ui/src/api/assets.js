@@ -1,8 +1,10 @@
-import { fromISO, toDateView, toISO, toPrice, toPriceView } from './mappers';
+import {
+  fromISO, toDateView, toISO, toPrice, toPriceView,
+} from './mappers';
 
 const toDomain = ({
-                    asset_id, price, currency, description, type, acquired_at, name,
-                  }) => ({
+  asset_id, price, currency, description, type, acquired_at, name,
+}) => ({
   key: asset_id,
   id: asset_id,
   description,
@@ -20,7 +22,9 @@ const toEditAssetView = ({
   id: asset_id, price: toPriceView(price), currency, description, typeId: type.type_id, acquiredAt: fromISO(acquired_at), name,
 });
 
-const toAddAssetDTO = ({ typeId, price, currency, acquiredAt, name, description, withPayment }) => ({
+const toAddAssetDTO = ({
+  typeId, price, currency, acquiredAt, name, description, withPayment,
+}) => ({
   type_id: typeId,
   price: toPrice(price),
   currency,
@@ -30,7 +34,9 @@ const toAddAssetDTO = ({ typeId, price, currency, acquiredAt, name, description,
   with_payment: withPayment,
 });
 
-const toUpdateAssetDTO = ({ typeId, price, currency, acquiredAt, name, description }) => ({
+const toUpdateAssetDTO = ({
+  typeId, price, currency, acquiredAt, name, description,
+}) => ({
   type_id: typeId,
   price: toPrice(price),
   currency,
@@ -65,7 +71,8 @@ export class AssetRepository {
   async updateAsset(projectId, asset) {
     return await this.#request.put(
       `/projects/${projectId}/assets/${asset.id}`,
-      toUpdateAssetDTO(asset));
+      toUpdateAssetDTO(asset),
+    );
   }
 
   async addAsset(projectId, asset) {

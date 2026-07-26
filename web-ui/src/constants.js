@@ -5,4 +5,4 @@ export const PaymentKind = {
   DOWN_PAYMENT: 'Down Payment',
   CREDIT_PAYMENT: 'Credit Payment',
   UPON_COMPLETION: 'Upon Completion',
-}
+};

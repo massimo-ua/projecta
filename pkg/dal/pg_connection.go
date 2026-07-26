@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -36,21 +35,39 @@ func NewPgDbConnection(connectionString string) (*PgDbConnection, error) {
 	}, nil
 }
 
-// GetConnection returns either active transaction or pool
+// GetConnection returns either active transaction, mock, or pool
 func (p *PgDbConnection) GetConnection(ctx context.Context) (PgDb, error) {
+	if p == nil {
+		return nil, errors.New("connection is nil")
+	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Check if there's a transaction in the context
-	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
-	if ok && tx != nil {
-		return tx, nil
+	// Check if there's a transaction or mock db in the context
+	if db, ok := ctx.Value(txKey{}).(PgDb); ok && db != nil {
+		return db, nil
+	}
+	if p.pool == nil {
+		return nil, errors.New("connection pool is nil")
 	}
 	return p.pool, nil
 }
 
 // Tx starts a transaction and executes the provided function
 func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+	if p == nil {
+		return nil, errors.New("connection pool is nil")
+	}
+
+	// Check if context already has a transaction or mock db in it
+	if db, ok := ctx.Value(txKey{}).(PgDb); ok && db != nil {
+		return fn(ctx)
+	}
+
+	if p.pool == nil {
+		return nil, errors.New("connection pool is nil")
+	}
+
 	p.mu.Lock()
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -90,10 +107,15 @@ func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (a
 
 // Close closes the connection pool
 func (p *PgDbConnection) Close() {
-	p.pool.Close()
+	if p != nil && p.pool != nil {
+		p.pool.Close()
+	}
 }
 
 // Ping checks if the connection is alive
 func (p *PgDbConnection) Ping(ctx context.Context) error {
+	if p == nil || p.pool == nil {
+		return errors.New("connection pool is nil")
+	}
 	return p.pool.Ping(ctx)
 }

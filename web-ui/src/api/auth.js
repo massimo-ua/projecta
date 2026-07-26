@@ -26,7 +26,7 @@ export class Auth {
     window.addEventListener(STORAGE_EVENT, this.#handleStorageChange.bind(this));
   }
 
-  #handleStorageChange({ key, newValue}) {
+  #handleStorageChange({ key, newValue }) {
     if (key === this.#tokenKey && !newValue) {
       this.logout();
       window.dispatchEvent(new CustomEvent(STATUS_CHANGED_EVENT));

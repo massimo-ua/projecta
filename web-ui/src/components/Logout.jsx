@@ -1,16 +1,25 @@
+import React from 'react';
 import { authProvider } from '../api';
 import { useNavigate } from 'react-router-dom';
-import { Button } from 'antd';
-import { LogoutOutlined } from '@ant-design/icons';
+import { Button } from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
 
 export default function Logout() {
   const navigate = useNavigate();
   const onClick = () => {
     authProvider.logout();
     navigate('/login');
-  }
+  };
 
-  return (authProvider.isAuthenticated()
-    ? <Button icon={<LogoutOutlined />} shape="circle" onClick={onClick} />
-    : null);
+  return authProvider.isAuthenticated() ? (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onClick}
+      title="Logout"
+      className="rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+    >
+      <LogOut className="h-4 w-4" />
+    </Button>
+  ) : null;
 }

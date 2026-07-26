@@ -6,9 +6,23 @@ import (
     amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type amqpConnection interface {
+	Channel() (*amqp.Channel, error)
+	Close() error
+}
+
+type amqpChannel interface {
+	ExchangeDeclare(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error
+	PublishWithContext(ctx context.Context, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error
+	QueueDeclare(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error)
+	QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error
+	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
+	Close() error
+}
+
 type AMQPBroker struct {
-    conn *amqp.Connection
-    ch   *amqp.Channel
+    conn amqpConnection
+    ch   amqpChannel
 }
 
 func (b *AMQPBroker) Publish(ctx context.Context, topic string, message []byte) error {
@@ -128,12 +142,16 @@ func (b *AMQPBroker) Close() {
     }
 }
 
-func NewAMQPBroker(connectionURL string) (*AMQPBroker, error) {
-    if connectionURL == "" {
-        return nil, fmt.Errorf("broker connection url is empty")
-    }
+var dialAMQP = func(url string) (amqpConnection, error) {
+	return amqp.Dial(url)
+}
 
-    conn, err := amqp.Dial(connectionURL)
+func NewAMQPBroker(connectionURL string) (*AMQPBroker, error) {
+	if connectionURL == "" {
+		return nil, fmt.Errorf("broker connection url is empty")
+	}
+
+	conn, err := dialAMQP(connectionURL)
 
     if err != nil {
         return nil, fmt.Errorf("failed to connect to broker: %s", err.Error())

@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [ react() ],
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     minify: 'esbuild',
     target: 'es2020',
@@ -11,23 +17,21 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: [
-            '@ant-design/icons',
             '@react-oauth/google',
-            'antd',
             'date-fns',
             'dayjs',
             'jwt-decode',
+            'lucide-react',
             'react',
             'react-dom',
             'react-router-dom',
-            'styled-components',
-          ]
+          ],
         },
         chunkFileNames: 'assets/[hash].js',
         entryFileNames: 'assets/[hash].js',
         assetFileNames: 'assets/[hash].[ext]',
-        compact: true
-      }
+        compact: true,
+      },
     },
     cssCodeSplit: true,
     sourcemap: false,
@@ -37,14 +41,16 @@ export default defineConfig({
     minifySyntax: true,
     minifyWhitespace: true,
     treeShaking: true,
-    dropLabels: ['DEBUG']
+    dropLabels: ['DEBUG'],
   },
   server: {
+    host: true,
+    port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (urlPath) => urlPath.replace(/^\/api/, ''),
       },
     },
   },

@@ -1,18 +1,1 @@
-.Projects_container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-    padding: 20px 20px 0 20px;
-}
-
-.ProjectCard_container {
-    height: 140px; /* Fixed height for all cards */
-    width: 100%;
-}
-
-/* Ensure proper spacing on mobile */
-@media screen and (max-width: 767px) {
-    .Projects_container {
-        grid-template-columns: 1fr;
-    }
-}
+/* Tailwind CSS handles Projects grid layout */

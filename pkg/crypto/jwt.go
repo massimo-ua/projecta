@@ -86,7 +86,16 @@ func (p *JwtTokenProvider) DecodeToken(token string) (*core.AuthTokenClaims, err
 func (p *JwtTokenProvider) toDomain(claims jwt.MapClaims) (*core.AuthTokenClaims, error) {
 	var roles []string
 	if claims["roles"] != nil {
-		roles = claims["roles"].([]string)
+		switch r := claims["roles"].(type) {
+		case []string:
+			roles = r
+		case []interface{}:
+			for _, item := range r {
+				if s, ok := item.(string); ok {
+					roles = append(roles, s)
+				}
+			}
+		}
 	}
 
 	return &core.AuthTokenClaims{

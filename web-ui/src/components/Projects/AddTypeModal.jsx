@@ -1,88 +1,135 @@
-import { Button, Form, Modal, Input, Select } from 'antd';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { typesRepository } from '../../api';
 import useCategories from '../../hooks/categories.js';
-import { useEffect } from 'react';
-
-const { TextArea } = Input;
-const { useForm } = Form;
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 export default function AddTypeModal(props) {
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
-  const [form] = useForm();
+  const [categoryId, setCategoryId] = useState('');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
   const [, categories, , setCategoriesFilter] = useCategories();
 
-  const handleAdd = () => {
-    const {
-      categoryId,
-      name,
-      description,
-    } = form.getFieldsValue();
-    typesRepository.addType(projectId, {
-      categoryId,
-      name,
-      description,
-    }).then(() => {
+  useEffect(() => {
+    if (open) {
+      setCategoriesFilter({
+        projectId,
+        limit: 100,
+        offset: 0,
+      });
+    }
+  }, [open, projectId, setCategoriesFilter]);
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!categoryId || !name) {
+      toast.error('Category and Name are required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await typesRepository.addType(projectId, {
+        categoryId,
+        name,
+        description,
+      });
+      toast.success('Type added successfully');
+      setCategoryId('');
+      setName('');
+      setDescription('');
       onSuccess();
-    }).catch((e) => {
-      console.error('Failed to add expense', e.message);
-    });
+    } catch (e) {
+      toast.error(`Failed to add type: ${e.message}`);
+      console.error('Failed to add type', e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCancel = () => onCancel();
-
-  useEffect(() => {
-    setCategoriesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
-  }, []);
+  const handleCancel = () => {
+    setCategoryId('');
+    setName('');
+    setDescription('');
+    onCancel();
+  };
 
   return (
-    <Modal
-        title="Add Type"
-        open={open}
-        onCancel={handleCancel}
-        footer={[
-          <Button key="add" type="primary" onClick={handleAdd}>
-            Submit
-          </Button>,
-          <Button key="back" onClick={handleCancel}>
-            Cancel
-          </Button>,
-        ]}
-      >
-        <Form
-          form={form}
-          labelCol={{
-            span: 6,
-          }}
-          wrapperCol={{
-            span: 18,
-          }}
-          style={{
-            maxWidth: 600,
-          }}
-          autoComplete="off"
-        >
-          <Form.Item label="Category" name="categoryId">
-            <Select>
-              {categories.map((category) => (
-                <Select.Option key={category.key} value={category.id}>
-                  {category.name}
-                </Select.Option>
-              ))}
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Add Type</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleAdd} className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="type-category">Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger id="type-category">
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </Form.Item>
-          <Form.Item label="Name" name="name">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Description" name="description">
-            <TextArea rows={4} />
-          </Form.Item>
-        </Form>
-      </Modal>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="type-name">Name</Label>
+            <Input
+              id="type-name"
+              placeholder="e.g. Materials"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="type-desc">Description</Label>
+            <Textarea
+              id="type-desc"
+              rows={3}
+              placeholder="Type description..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              Submit
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

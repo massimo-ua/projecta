@@ -1,9 +1,11 @@
 import { format, formatISO, parseISO } from 'date-fns';
-import { fromISO, toISO, toPrice, toPriceView } from './mappers';
+import {
+  fromISO, toISO, toPrice, toPriceView,
+} from './mappers';
 
 const toDomain = ({
-                    payment_id, amount, currency, description, type, payment_date, kind,
-                  }) => ({
+  payment_id, amount, currency, description, type, payment_date, kind,
+}) => ({
   key: payment_id,
   id: payment_id,
   description,
@@ -15,7 +17,9 @@ const toDomain = ({
   kind,
 });
 
-const toAddPaymentDTO = ({ typeId, amount, currency, paymentDate, description, paymentKind }) => ({
+const toAddPaymentDTO = ({
+  typeId, amount, currency, paymentDate, description, paymentKind,
+}) => ({
   type_id: typeId,
   amount: toPrice(amount),
   currency,
@@ -24,7 +28,9 @@ const toAddPaymentDTO = ({ typeId, amount, currency, paymentDate, description, p
   kind: paymentKind,
 });
 
-const toUpdatePaymentDTO = ({ typeId, amount, currency, paymentDate, description, paymentKind }) => ({
+const toUpdatePaymentDTO = ({
+  typeId, amount, currency, paymentDate, description, paymentKind,
+}) => ({
   type_id: typeId,
   amount: toPrice(amount),
   currency,
@@ -82,6 +88,7 @@ export class PaymentRepository {
   async updatePayment(projectId, payment) {
     return await this.#request.put(
       `/projects/${projectId}/payments/${payment.id}`,
-      toUpdatePaymentDTO(payment));
+      toUpdatePaymentDTO(payment),
+    );
   }
 }
