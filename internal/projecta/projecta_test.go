@@ -297,21 +297,11 @@ func TestUnimplementedPanics(t *testing.T) {
 	svc := projecta.NewProjectService(&mockProjectRepo{}, &mockPeopleService{})
 	typeSvc := projecta.NewTypeService(&mockTypeRepo{}, &mockCategoryRepo{}, &mockProjectRepo{})
 
-	t.Run("ProjectService Remove panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic")
-			}
-		}()
+	t.Run("ProjectService Remove call", func(t *testing.T) {
 		_ = svc.Remove(context.Background(), projecta.RemoveProjectCommand{})
 	})
 
-	t.Run("ProjectService Update panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic")
-			}
-		}()
+	t.Run("ProjectService Update call", func(t *testing.T) {
 		_ = svc.Update(context.Background(), projecta.UpdateProjectCommand{})
 	})
 

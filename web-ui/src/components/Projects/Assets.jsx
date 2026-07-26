@@ -110,11 +110,21 @@ export function Assets() {
     </div>
   );
 
-  const renderAssetAmount = (asset) => (
-    <span className="font-bold text-foreground">
-      {asset.price} {asset.currency}
-    </span>
-  );
+  const renderAssetAmount = (asset) => {
+    const isDiff = asset.currency !== asset.homeCurrency;
+    return (
+      <div className="flex flex-col items-end">
+        <span className="font-bold text-foreground">
+          {asset.price} {asset.currency}
+        </span>
+        {isDiff && asset.homeAmount && (
+          <span className="text-xs text-muted-foreground font-medium">
+            ≈ {asset.homeAmount} {asset.homeCurrency}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   const renderAssetDetails = (asset) => (
     <div className="space-y-2">

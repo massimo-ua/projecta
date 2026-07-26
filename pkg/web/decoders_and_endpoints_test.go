@@ -793,7 +793,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	})
 
 	t.Run("makeCreatePaymentEndpoint error", func(t *testing.T) {
-		ep := makeCreatePaymentEndpoint(paySvcErr)
+		ep := makeCreatePaymentEndpoint(paySvcErr, nil)
 		_, err := ep(context.Background(), projecta.CreatePaymentCommand{})
 		if err == nil {
 			t.Errorf("expected service error")
@@ -801,7 +801,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	})
 
 	t.Run("makeListPaymentsEndpoint error", func(t *testing.T) {
-		ep := makeListPaymentsEndpoint(paySvcErr)
+		ep := makeListPaymentsEndpoint(paySvcErr, nil)
 		_, err := ep(context.Background(), projecta.PaymentCollectionFilter{})
 		if err == nil {
 			t.Errorf("expected service error")
@@ -825,8 +825,9 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	})
 
 	t.Run("makeShowProjectTotalsEndpoint currency mismatch and service error", func(t *testing.T) {
+		mProjSvc := &mockProjectService{project: proj}
 		// Payments service error
-		epErr := makeShowProjectTotalsEndpoint(paySvcErr, astSvcErr)
+		epErr := makeShowProjectTotalsEndpoint(mProjSvc, paySvcErr, astSvcErr, nil)
 		_, err := epErr(context.Background(), uuid.New())
 		if err == nil {
 			t.Errorf("expected payments service error")
@@ -834,27 +835,26 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 		// Assets service error
 		paySvcOk := &mockPaymentService{pay: pay}
-		epAssetErr := makeShowProjectTotalsEndpoint(paySvcOk, astSvcErr)
+		epAssetErr := makeShowProjectTotalsEndpoint(mProjSvc, paySvcOk, astSvcErr, nil)
 		_, err = epAssetErr(context.Background(), uuid.New())
 		if err == nil {
 			t.Errorf("expected assets service error")
 		}
 
-		// Payments currency mismatch (USD vs EUR)
+		// Payments conversion
 		payEUR := projecta.NewPayment(uuid.New(), proj, owner, costType, "Pay EUR", money.New(50, money.EUR), time.Now(), projecta.DownPayment)
 		colMismatch := projecta.NewPaymentCollection(2)
 		colMismatch.Add(pay, payEUR)
-		// Mock payment service that returns colMismatch
 		mPaySvc := &mockPaymentServiceWithCol{col: colMismatch}
 		mAstSvc := &mockAssetService{asset: ast}
 
-		epMismatch := makeShowProjectTotalsEndpoint(mPaySvc, mAstSvc)
+		epMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mPaySvc, mAstSvc, nil)
 		_, err = epMismatch(context.Background(), uuid.New())
-		if err == nil {
-			t.Errorf("expected payments currency mismatch error")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
 		}
 
-		// Assets currency mismatch (USD vs EUR)
+		// Assets conversion
 		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj, costType, money.New(500, money.EUR), time.Now(), owner)
 		astColMismatch := asset.NewCollection(2)
 		astColMismatch.Add(ast, astEUR)
@@ -864,10 +864,10 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 		mAstSvcMismatch := &mockAssetServiceWithCol{col: astColMismatch}
 
-		epAstMismatch := makeShowProjectTotalsEndpoint(mPaySvcSingle, mAstSvcMismatch)
+		epAstMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mPaySvcSingle, mAstSvcMismatch, nil)
 		_, err = epAstMismatch(context.Background(), uuid.New())
-		if err == nil {
-			t.Errorf("expected assets currency mismatch error")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
 		}
 	})
 }

@@ -3,13 +3,15 @@ import {
 } from './mappers';
 
 const toDomain = ({
-  asset_id, price, currency, description, type, acquired_at, name,
+  asset_id, price, currency, home_amount, home_currency, description, type, acquired_at, name,
 }) => ({
   key: asset_id,
   id: asset_id,
   description,
   price: toPriceView(price),
   currency,
+  homeAmount: home_amount !== undefined ? toPriceView(home_amount) : toPriceView(price),
+  homeCurrency: home_currency || currency,
   type: type?.name,
   category: type?.category?.name,
   acquiredAt: toDateView(acquired_at),
@@ -85,3 +87,5 @@ export class AssetRepository {
     return await this.#request.delete(`/projects/${projectId}/assets/${assetId}`);
   }
 }
+
+export default AssetRepository;

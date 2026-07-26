@@ -4,6 +4,7 @@ import {
   Types,
   Categories,
   Total,
+  Settings,
   Login,
   AuthenticatedOnly,
   Assets,
@@ -32,6 +33,9 @@ const routes = [{
   }, {
     path: 'categories',
     Component: AuthenticatedOnly(Categories),
+  }, {
+    path: 'settings',
+    Component: AuthenticatedOnly(Settings),
   }, {
     path: 'payments',
     Component: AuthenticatedOnly(Payments),

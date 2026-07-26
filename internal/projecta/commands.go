@@ -1,9 +1,10 @@
 package projecta
 
 import (
+	"time"
+
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
-	"time"
 )
 
 type CreateCategoryCommand struct {
@@ -28,16 +29,18 @@ type RemoveCategoryCommand struct {
 }
 
 type CreateProjectCommand struct {
-	PersonID    uuid.UUID
-	Name        string
-	Description string
+	PersonID     uuid.UUID
+	Name         string
+	Description  string
+	MainCurrency string
 }
 
 type UpdateProjectCommand struct {
-	ProjectID   uuid.UUID
-	PersonID    uuid.UUID
-	Name        string
-	Description string
+	ProjectID    uuid.UUID
+	PersonID     uuid.UUID
+	Name         string
+	Description  string
+	MainCurrency string
 }
 
 type RemoveProjectCommand struct {

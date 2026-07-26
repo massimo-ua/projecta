@@ -107,17 +107,27 @@ export function Payments() {
     </div>
   );
 
-  const renderPaymentAmount = (payment) => (
-    <span
-      className={
-        payment.kind === 'DOWN_PAYMENT'
-          ? 'text-red-600 dark:text-red-400 font-bold'
-          : 'text-green-600 dark:text-green-400 font-bold'
-      }
-    >
-      {payment.amount} {payment.currency}
-    </span>
-  );
+  const renderPaymentAmount = (payment) => {
+    const isDiff = payment.currency !== payment.homeCurrency;
+    return (
+      <div className="flex flex-col items-end">
+        <span
+          className={
+            payment.kind === 'DOWN_PAYMENT'
+              ? 'text-red-600 dark:text-red-400 font-bold'
+              : 'text-green-600 dark:text-green-400 font-bold'
+          }
+        >
+          {payment.amount} {payment.currency}
+        </span>
+        {isDiff && payment.homeAmount && (
+          <span className="text-xs text-muted-foreground font-medium">
+            ≈ {payment.homeAmount} {payment.homeCurrency}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   const renderPaymentDetails = (payment) => (
     <div className="space-y-2">

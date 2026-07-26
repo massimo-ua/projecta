@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
+const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
+
 export default function EditPaymentModal(props) {
   const { projectId } = useParams();
   const { onSuccess, onCancel, paymentId, types = [] } = props;
@@ -156,7 +158,11 @@ export default function EditPaymentModal(props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="UAH">UAH</SelectItem>
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

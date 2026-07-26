@@ -16,6 +16,7 @@ import {
   Package,
   Menu,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,7 @@ export function ProjectDetails() {
       items: [
         { key: 'categories', label: 'Categories', icon: PieChart },
         { key: 'types', label: 'Types', icon: Boxes },
+        { key: 'settings', label: 'Settings', icon: Settings },
       ],
     },
     {

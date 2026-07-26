@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
+const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
+
 export default function EditAssetModal(props) {
   const { projectId } = useParams();
   const { onSuccess, onCancel, assetId, types = [] } = props;
@@ -58,7 +60,7 @@ export default function EditAssetModal(props) {
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!typeId || !price || !name || !acquiredAt) {
-      toast.error('Type, Price, Name, and Date are required');
+      toast.error('Type, Price, Name and Acquired Date are required');
       return;
     }
 
@@ -126,7 +128,11 @@ export default function EditAssetModal(props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="UAH">UAH</SelectItem>
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

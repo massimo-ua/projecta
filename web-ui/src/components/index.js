@@ -1,5 +1,6 @@
 import TypesComponent from './Projects/Types';
 import TotalComponent from './Projects/Total';
+import SettingsComponent from './Projects/Settings';
 import FooterComponent from './Footer';
 
 export * from './Projects/Projects';
@@ -15,4 +16,5 @@ export * from './Projects/Assets';
 
 export const Types = TypesComponent;
 export const Total = TotalComponent;
+export const Settings = SettingsComponent;
 export const AppFooter = FooterComponent;

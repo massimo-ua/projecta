@@ -4,13 +4,15 @@ import {
 } from './mappers';
 
 const toDomain = ({
-  payment_id, amount, currency, description, type, payment_date, kind,
+  payment_id, amount, currency, home_amount, home_currency, description, type, payment_date, kind,
 }) => ({
   key: payment_id,
   id: payment_id,
   description,
   amount: toPriceView(amount),
   currency,
+  homeAmount: home_amount !== undefined ? toPriceView(home_amount) : toPriceView(amount),
+  homeCurrency: home_currency || currency,
   type: type?.name,
   category: type.category?.name,
   paymentDate: format(parseISO(payment_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
@@ -92,3 +94,5 @@ export class PaymentRepository {
     );
   }
 }
+
+export default PaymentRepository;

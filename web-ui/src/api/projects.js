@@ -15,7 +15,18 @@ export class ProjectsRepository {
       id: item.project_id,
       name: item.name,
       description: item.description,
+      mainCurrency: item.main_currency || 'UAH',
     }));
+  }
+
+  async getProject(projectId) {
+    const response = await this.#request.get(`/projects/${projectId}`);
+    return {
+      id: response.project_id,
+      name: response.name,
+      description: response.description,
+      mainCurrency: response.main_currency || 'UAH',
+    };
   }
 
   async createProject({ name, description }) {
@@ -24,6 +35,19 @@ export class ProjectsRepository {
       id: response.project_id,
       name: response.name,
       description: response.description,
+      mainCurrency: response.main_currency || 'UAH',
+    };
+  }
+
+  async updateProjectSettings(projectId, { mainCurrency }) {
+    const response = await this.#request.patch(`/projects/${projectId}`, {
+      main_currency: mainCurrency,
+    });
+    return {
+      id: response.project_id,
+      name: response.name,
+      description: response.description,
+      mainCurrency: response.main_currency || 'UAH',
     };
   }
 

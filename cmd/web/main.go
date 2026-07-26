@@ -3,20 +3,22 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"gitlab.com/massimo-ua/projecta/pkg/dal"
 	"gitlab.com/massimo-ua/projecta/pkg/logger"
 	"gitlab.com/massimo-ua/projecta/pkg/web"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func createErrorHandler(logger core.Logger) func(err error) {
@@ -76,6 +78,11 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		paymentRepository,
 	)
 
+	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
+		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
+		CacheTTL:            30 * time.Minute,
+	})
+
 	return web.MakeHTTPHandler(
 		customerService,
 		tokenProvider,
@@ -85,6 +92,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		typeService,
 		paymentService,
 		assetService,
+		rateProvider,
 	)
 }
 
