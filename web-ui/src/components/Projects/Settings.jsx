@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import { projectsRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -23,6 +24,7 @@ const SUPPORTED_CURRENCIES = [
 ];
 
 export default function Settings() {
+  const content = useIntlayer('project-settings');
   const { projectId } = useParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,7 +41,7 @@ export default function Settings() {
         }
       })
       .catch((err) => {
-        toast.error(`Failed to load project settings: ${err.message}`);
+        toast.error(`${String(content.failedToLoad)}: ${err.message}`);
       })
       .finally(() => {
         setLoading(false);
@@ -51,9 +53,9 @@ export default function Settings() {
     setSaving(true);
     try {
       await projectsRepository.updateProjectSettings(projectId, { mainCurrency });
-      toast.success('Project home currency updated successfully');
+      toast.success(String(content.settingsUpdatedSuccess));
     } catch (err) {
-      toast.error(`Failed to update project settings: ${err.message}`);
+      toast.error(`${String(content.failedToUpdate)}: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -71,23 +73,23 @@ export default function Settings() {
     <div className="p-4 space-y-6 max-w-xl">
       <div className="flex items-center gap-2 pb-2 border-b">
         <Settings2 className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold tracking-tight">Project Settings</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{String(content.title)}</h2>
       </div>
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Home Currency</CardTitle>
+          <CardTitle className="text-base">{String(content.homeCurrencyTitle)}</CardTitle>
           <CardDescription>
-            Select the primary home currency for this project. All payments, assets, and summary totals will be converted to this currency using official National Bank of Ukraine (NBU) exchange rates.
+            {String(content.homeCurrencyDesc)}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="main-currency">Home Currency</Label>
+              <Label htmlFor="main-currency">{String(content.homeCurrencyTitle)}</Label>
               <Select value={mainCurrency} onValueChange={setMainCurrency} disabled={saving}>
                 <SelectTrigger id="main-currency" className="w-full">
-                  <SelectValue placeholder="Select currency" />
+                  <SelectValue placeholder={String(content.selectCurrencyPlaceholder)} />
                 </SelectTrigger>
                 <SelectContent>
                   {SUPPORTED_CURRENCIES.map((c) => (
@@ -102,7 +104,7 @@ export default function Settings() {
             <div className="flex justify-end pt-2">
               <Button type="submit" disabled={saving} className="gap-2 font-semibold">
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save Settings
+                {String(content.saveSettingsButton)}
               </Button>
             </div>
           </form>

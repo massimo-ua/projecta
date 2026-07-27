@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useIntlayer } from 'react-intlayer';
 import HomeLayout from '../../Layout';
 import { useProjects } from '../../hooks/projects';
 import { ProjectCard } from './ProjectCard';
@@ -9,6 +10,7 @@ import { FolderPlus, Plus } from 'lucide-react';
 import './Projects.css';
 
 export function Projects() {
+  const content = useIntlayer('projects');
   const [loading, projects, setPagination] = useProjects();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -30,12 +32,12 @@ export function Projects() {
       <div className="space-y-6">
         <div className="flex items-center justify-between border-b pb-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-            <p className="text-sm text-muted-foreground">Manage and track all your active projects</p>
+            <h1 className="text-2xl font-bold tracking-tight">{String(content.title)}</h1>
+            <p className="text-sm text-muted-foreground">{String(content.subtitle)}</p>
           </div>
           <Button onClick={() => setModalOpen(true)} className="gap-2 font-semibold shadow-sm">
             <Plus className="h-4 w-4" />
-            Create Project
+            {String(content.createProjectButton)}
           </Button>
         </div>
 
@@ -48,11 +50,11 @@ export function Projects() {
         ) : projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed bg-muted/20">
             <FolderPlus className="h-12 w-12 text-muted-foreground/50 mb-3" />
-            <h3 className="text-lg font-semibold">No projects found</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">Get started by creating your first project</p>
+            <h3 className="text-lg font-semibold">{String(content.noProjectsFound)}</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">{String(content.noProjectsDesc)}</p>
             <Button onClick={() => setModalOpen(true)} className="gap-2 font-semibold shadow-sm">
               <Plus className="h-4 w-4" />
-              Create Project
+              {String(content.createProjectButton)}
             </Button>
           </div>
         ) : (

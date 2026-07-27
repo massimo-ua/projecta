@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import HomeLayout from '../../Layout';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,25 +22,26 @@ import {
 import { cn } from '@/lib/utils';
 
 export function ProjectDetails() {
+  const content = useIntlayer('project-details');
   const navigate = useNavigate();
   const location = useLocation();
   const { projectId } = useParams();
 
   const navGroups = [
     {
-      title: 'Taxonomy',
+      title: String(content.taxonomy),
       items: [
-        { key: 'categories', label: 'Categories', icon: PieChart },
-        { key: 'types', label: 'Types', icon: Boxes },
-        { key: 'settings', label: 'Settings', icon: Settings },
+        { key: 'categories', label: String(content.categories), icon: PieChart },
+        { key: 'types', label: String(content.types), icon: Boxes },
+        { key: 'settings', label: String(content.settings), icon: Settings },
       ],
     },
     {
-      title: 'Operations',
+      title: String(content.operations),
       items: [
-        { key: 'total', label: 'Total', icon: FileText },
-        { key: 'payments', label: 'Payments', icon: DollarSign },
-        { key: 'assets', label: 'Assets', icon: Package },
+        { key: 'total', label: String(content.total), icon: FileText },
+        { key: 'payments', label: String(content.payments), icon: DollarSign },
+        { key: 'assets', label: String(content.assets), icon: Package },
       ],
     },
   ];
@@ -60,7 +62,7 @@ export function ProjectDetails() {
               <Button variant="outline" className="w-full justify-between">
                 <span className="flex items-center gap-2 capitalize">
                   <Menu className="h-4 w-4" />
-                  Menu: {currentTab}
+                  {String(content.menu)}: {currentTab}
                 </span>
                 <ChevronRight className="h-4 w-4" />
               </Button>

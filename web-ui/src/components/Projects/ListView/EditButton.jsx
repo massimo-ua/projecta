@@ -1,8 +1,11 @@
 import React from 'react';
+import { useIntlayer } from 'react-intlayer';
 import { Button } from '@/components/ui/button';
 import { Pencil } from 'lucide-react';
 
 export function EditButton({ onClick }) {
+  const content = useIntlayer('list-view');
+
   return (
     <Button
       variant="outline"
@@ -11,7 +14,7 @@ export function EditButton({ onClick }) {
       onClick={onClick}
     >
       <Pencil className="h-3.5 w-3.5" />
-      Edit
+      {String(content.edit)}
     </Button>
   );
 }

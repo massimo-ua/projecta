@@ -1,4 +1,5 @@
 import React from 'react';
+import { useIntlayer } from 'react-intlayer';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -14,6 +15,8 @@ import {
 import { Trash2 } from 'lucide-react';
 
 export function RemoveButton({ onRemove }) {
+  const content = useIntlayer('list-view');
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -23,23 +26,23 @@ export function RemoveButton({ onRemove }) {
           className="h-8 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
         >
           <Trash2 className="h-3.5 w-3.5" />
-          Remove
+          {String(content.remove)}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Confirm removal</AlertDialogTitle>
+          <AlertDialogTitle>{String(content.confirmRemoval)}</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to remove this item? This action cannot be undone.
+            {String(content.removeWarning)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{String(content.cancel)}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onRemove}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Remove
+            {String(content.remove)}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useIntlayer } from 'react-intlayer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,6 +27,7 @@ export function ListView({
   renderItemDetails,
   renderItemActions,
 }) {
+  const content = useIntlayer('list-view');
   const totalPages = Math.ceil(total / pageSize);
 
   if (loading) {
@@ -54,7 +56,7 @@ export function ListView({
 
         {total > 0 && (
           <span className="text-xs text-muted-foreground font-medium">
-            Total: {total} {total === 1 ? 'item' : 'items'}
+            {String(content.totalItemsLabel)}: {total}
           </span>
         )}
       </div>
@@ -62,7 +64,7 @@ export function ListView({
       {/* Item Cards List */}
       {!items || items.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed bg-muted/20">
-          <p className="text-sm text-muted-foreground">No records available</p>
+          <p className="text-sm text-muted-foreground">{String(content.noRecords)}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -83,7 +85,7 @@ export function ListView({
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="details" className="border-t mt-2 pt-1 border-b-0">
                     <AccordionTrigger className="py-2 text-xs font-medium text-muted-foreground hover:no-underline hover:text-foreground">
-                      Details & Actions
+                      {String(content.detailsAndActions)}
                     </AccordionTrigger>
                     <AccordionContent className="pt-2 space-y-4">
                       {renderItemDetails && (
@@ -116,10 +118,10 @@ export function ListView({
             className="gap-1 text-xs"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
-            Previous
+            {String(content.previous)}
           </Button>
           <span className="text-xs text-muted-foreground font-medium">
-            Page {currentPage} of {totalPages}
+            {String(content.pageOf)} {currentPage} {String(content.of)} {totalPages}
           </span>
           <Button
             variant="outline"
@@ -128,7 +130,7 @@ export function ListView({
             onClick={() => onPaginationChange(currentPage + 1)}
             className="gap-1 text-xs"
           >
-            Next
+            {String(content.next)}
             <ChevronRight className="h-3.5 w-3.5" />
           </Button>
         </div>

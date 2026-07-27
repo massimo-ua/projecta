@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
+import { useIntlayer } from 'react-intlayer';
 import { Badge } from '@/components/ui/badge';
 import { Package } from 'lucide-react';
 import useAssets from '../../hooks/assets';
@@ -17,6 +18,7 @@ import { toast } from 'sonner';
 import './Assets.css';
 
 export function Assets() {
+  const content = useIntlayer('assets');
   const { projectId } = useParams();
   const [loading, assets, total, setFilter] = useAssets();
   const [, types, , setTypesFilter] = useTypes();
@@ -56,7 +58,7 @@ export function Assets() {
   const onAddCancel = () => setAddModalOpen(false);
   const onAddSuccess = () => {
     setAddModalOpen(false);
-    toast.success('Asset added successfully');
+    toast.success(String(content.assetAddedSuccess));
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -66,7 +68,7 @@ export function Assets() {
 
   const onEditSuccess = () => {
     setAssetIdToEdit('');
-    toast.success('Asset updated successfully');
+    toast.success(String(content.assetUpdatedSuccess));
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -79,7 +81,7 @@ export function Assets() {
   const onRemoveButtonClick = (assetId) => {
     assetRepository.removeAsset(projectId, assetId)
       .then(() => {
-        toast.success('Asset removed successfully');
+        toast.success(String(content.assetRemovedSuccess));
         setFilter({
           projectId,
           limit: PAGE_SIZE,
@@ -87,7 +89,7 @@ export function Assets() {
         });
       })
       .catch((error) => {
-        toast.error(`Failed to remove asset: ${error.message}`);
+        toast.error(`${String(content.failedToRemove)}: ${error.message}`);
         console.error(error);
       });
   };
@@ -131,10 +133,10 @@ export function Assets() {
       <DetailItem label="ID">
         <CopyableText text={asset.id} truncate />
       </DetailItem>
-      <DetailItem label="Type">
+      <DetailItem label={String(content.typeLabel)}>
         <span className="text-sm text-foreground">{asset.type}</span>
       </DetailItem>
-      <DetailItem label="Category">
+      <DetailItem label={String(content.categoryLabel)}>
         <span className="text-sm text-foreground">{asset.category}</span>
       </DetailItem>
     </div>
@@ -158,7 +160,7 @@ export function Assets() {
         onPaginationChange={onPaginationChange}
         onAddButtonClick={onAddButtonClick}
         addButtonIcon={<Package className="h-4 w-4" />}
-        addButtonText="Add Asset"
+        addButtonText={String(content.addAsset)}
         addButtonDisabled={addModalOpened}
         renderItemMainContent={renderAssetMainContent}
         renderItemAmount={renderAssetAmount}

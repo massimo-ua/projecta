@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useIntlayer } from 'react-intlayer';
 import { projectsRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import {
 import { toast } from 'sonner';
 
 export function AddProjectModal({ open, onSuccess, onCancel }) {
+  const content = useIntlayer('projects');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,7 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) {
-      toast.error('Project name is required');
+      toast.error(String(content.nameRequiredError));
       return;
     }
 
@@ -31,11 +33,11 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
         name: name.trim(),
         description: description.trim(),
       });
-      toast.success('Project created successfully');
+      toast.success(String(content.projectCreatedSuccess));
       resetForm();
       onSuccess();
     } catch (error) {
-      toast.error(`Failed to create project: ${error.message || 'Unknown error'}`);
+      toast.error(`${String(content.failedToCreateProject)}: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -55,14 +57,14 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Project</DialogTitle>
+          <DialogTitle>{String(content.createNewProjectTitle)}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="project-name">Project Name</Label>
+            <Label htmlFor="project-name">{String(content.projectNameLabel)}</Label>
             <Input
               id="project-name"
-              placeholder="e.g. Apartment Renovation"
+              placeholder={String(content.projectNamePlaceholder)}
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={loading}
@@ -71,11 +73,11 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="project-description">Description</Label>
+            <Label htmlFor="project-description">{String(content.descriptionLabel)}</Label>
             <Textarea
               id="project-description"
               rows={3}
-              placeholder="Project goals, scope, and notes..."
+              placeholder={String(content.descriptionPlaceholder)}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={loading}
@@ -84,10 +86,10 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
-              Cancel
+              {String(content.cancelButton)}
             </Button>
             <Button type="submit" disabled={loading}>
-              Create Project
+              {String(content.createProjectButton)}
             </Button>
           </DialogFooter>
         </form>

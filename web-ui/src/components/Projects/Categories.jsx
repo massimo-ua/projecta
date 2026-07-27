@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PieChart } from 'lucide-react';
 import { ListView } from './ListView';
@@ -13,24 +14,8 @@ import { CopyableText } from './ListView/CopyableText';
 import { toast } from 'sonner';
 import './Payments.css';
 
-const renderCategoryMainContent = (category) => (
-  <div>
-    <span className="font-semibold text-base text-foreground">{category.name}</span>
-  </div>
-);
-
-const renderCategoryDetails = (category) => (
-  <div className="space-y-2">
-    <DetailItem label="ID">
-      <CopyableText text={category.id} truncate />
-    </DetailItem>
-    <DetailItem label="Description">
-      <span className="text-sm text-muted-foreground">{category.description || 'No description'}</span>
-    </DetailItem>
-  </div>
-);
-
 export function Categories() {
+  const content = useIntlayer('categories');
   const { projectId } = useParams();
   const [loading, categories, total, setFilter] = useCategories();
   const [addModalOpened, setAddModalOpen] = useState(false);
@@ -76,13 +61,30 @@ export function Categories() {
   const handleRemoveCategory = async (categoryId) => {
     try {
       await categoriesRepository.removeCategory(projectId, categoryId);
-      toast.success('Category removed successfully');
+      toast.success(String(content.categoryRemovedSuccess));
       resetFilter();
     } catch (error) {
-      toast.error(`Failed to remove category: ${error.message}`);
+      toast.error(`${String(content.failedToRemove)}: ${error.message}`);
       console.error('Failed to remove category:', error);
     }
   };
+
+  const renderCategoryMainContent = (category) => (
+    <div>
+      <span className="font-semibold text-base text-foreground">{category.name}</span>
+    </div>
+  );
+
+  const renderCategoryDetails = (category) => (
+    <div className="space-y-2">
+      <DetailItem label="ID">
+        <CopyableText text={category.id} truncate />
+      </DetailItem>
+      <DetailItem label={String(content.descriptionLabel)}>
+        <span className="text-sm text-muted-foreground">{category.description || String(content.noDescription)}</span>
+      </DetailItem>
+    </div>
+  );
 
   const renderCategoryActions = (category) => (
     <RemoveButton onRemove={() => handleRemoveCategory(category.id)} />
@@ -103,7 +105,7 @@ export function Categories() {
         onPaginationChange={setCurrentPage}
         onAddButtonClick={onAddCategoryClick}
         addButtonIcon={<PieChart className="h-4 w-4" />}
-        addButtonText="Add Category"
+        addButtonText={String(content.addCategory)}
         addButtonDisabled={addModalOpened}
         renderItemMainContent={renderCategoryMainContent}
         renderItemDetails={renderCategoryDetails}

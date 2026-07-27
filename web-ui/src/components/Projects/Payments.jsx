@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
+import { useIntlayer } from 'react-intlayer';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign } from 'lucide-react';
 import usePayments from '../../hooks/payments';
@@ -17,6 +18,7 @@ import { toast } from 'sonner';
 import './Payments.css';
 
 export function Payments() {
+  const content = useIntlayer('payments');
   const { projectId } = useParams();
   const [loading, payments, total, setFilter] = usePayments();
   const [addModalOpened, setAddModalOpen] = useState(false);
@@ -56,7 +58,7 @@ export function Payments() {
   const onAddCancel = () => setAddModalOpen(false);
   const onAddSuccess = () => {
     setAddModalOpen(false);
-    toast.success('Payment added successfully');
+    toast.success(String(content.paymentAddedSuccess));
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -67,7 +69,7 @@ export function Payments() {
   const onRemoveButtonClick = (paymentId) => {
     paymentRepository.removePayment(projectId, paymentId)
       .then(() => {
-        toast.success('Payment removed successfully');
+        toast.success(String(content.paymentRemovedSuccess));
         setFilter({
           projectId,
           limit: PAGE_SIZE,
@@ -75,14 +77,14 @@ export function Payments() {
         });
       })
       .catch((error) => {
-        toast.error(`Failed to remove payment: ${error.message}`);
+        toast.error(`${String(content.failedToRemove)}: ${error.message}`);
         console.error(error);
       });
   };
 
   const onEditSuccess = () => {
     setPaymentIdToEdit('');
-    toast.success('Payment updated successfully');
+    toast.success(String(content.paymentUpdatedSuccess));
     setFilter({
       projectId,
       limit: PAGE_SIZE,
@@ -134,10 +136,10 @@ export function Payments() {
       <DetailItem label="ID">
         <CopyableText text={payment.id} truncate />
       </DetailItem>
-      <DetailItem label="Type">
+      <DetailItem label={String(content.typeLabel)}>
         <span className="text-sm text-foreground">{payment.type}</span>
       </DetailItem>
-      <DetailItem label="Category">
+      <DetailItem label={String(content.categoryLabel)}>
         <span className="text-sm text-foreground">{payment.category}</span>
       </DetailItem>
     </div>
@@ -161,7 +163,7 @@ export function Payments() {
         onPaginationChange={onPaginationChange}
         onAddButtonClick={onAddButtonClick}
         addButtonIcon={<DollarSign className="h-4 w-4" />}
-        addButtonText="Add Payment"
+        addButtonText={String(content.addPayment)}
         addButtonDisabled={addModalOpened}
         renderItemMainContent={renderPaymentMainContent}
         renderItemAmount={renderPaymentAmount}

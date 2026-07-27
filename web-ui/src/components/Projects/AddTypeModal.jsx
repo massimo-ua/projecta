@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import { typesRepository } from '../../api';
 import useCategories from '../../hooks/categories.js';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
 import { toast } from 'sonner';
 
 export default function AddTypeModal(props) {
+  const content = useIntlayer('types');
   const { projectId } = useParams();
   const { open, onSuccess, onCancel } = props;
   const [categoryId, setCategoryId] = useState('');
@@ -44,7 +46,7 @@ export default function AddTypeModal(props) {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!categoryId || !name) {
-      toast.error('Category and Name are required');
+      toast.error(String(content.categoryAndNameRequiredError));
       return;
     }
 
@@ -55,13 +57,13 @@ export default function AddTypeModal(props) {
         name,
         description,
       });
-      toast.success('Type added successfully');
+      toast.success(String(content.typeAddedSuccess));
       setCategoryId('');
       setName('');
       setDescription('');
       onSuccess();
     } catch (e) {
-      toast.error(`Failed to add type: ${e.message}`);
+      toast.error(`${String(content.failedToAddType)}: ${e.message}`);
       console.error('Failed to add type', e.message);
     } finally {
       setLoading(false);
@@ -79,14 +81,14 @@ export default function AddTypeModal(props) {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add Type</DialogTitle>
+          <DialogTitle>{String(content.addType)}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="type-category">Category</Label>
+            <Label htmlFor="type-category">{String(content.categoryLabel)}</Label>
             <Select value={categoryId} onValueChange={setCategoryId}>
               <SelectTrigger id="type-category">
-                <SelectValue placeholder="Select a category" />
+                <SelectValue placeholder={String(content.selectCategoryPlaceholder)} />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((category) => (
@@ -99,10 +101,10 @@ export default function AddTypeModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="type-name">Name</Label>
+            <Label htmlFor="type-name">{String(content.nameLabel)}</Label>
             <Input
               id="type-name"
-              placeholder="e.g. Materials"
+              placeholder={String(content.namePlaceholder)}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -110,11 +112,11 @@ export default function AddTypeModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="type-desc">Description</Label>
+            <Label htmlFor="type-desc">{String(content.descriptionLabel)}</Label>
             <Textarea
               id="type-desc"
               rows={3}
-              placeholder="Type description..."
+              placeholder={String(content.descriptionPlaceholder)}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -122,10 +124,10 @@ export default function AddTypeModal(props) {
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
-              Cancel
+              {String(content.cancelButton)}
             </Button>
             <Button type="submit" disabled={loading}>
-              Submit
+              {String(content.submitButton)}
             </Button>
           </DialogFooter>
         </form>

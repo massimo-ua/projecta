@@ -2,8 +2,13 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { FolderKanban, ArrowRight } from 'lucide-react';
+import { useLocale } from 'react-intlayer';
+import { getLocalizedUrl } from 'intlayer';
 
 export function ProjectCard({ project }) {
+  const { locale } = useLocale();
+  const projectUrl = getLocalizedUrl(`/projects/${project.id}`, locale);
+
   return (
     <Card className="group h-full flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:border-primary/50">
       <CardHeader className="p-5 pb-3">
@@ -12,7 +17,7 @@ export function ProjectCard({ project }) {
             <FolderKanban className="h-5 w-5" />
           </div>
           <CardTitle className="text-lg font-semibold line-clamp-1 group-hover:text-primary transition-colors">
-            <Link to={`/projects/${project.id}`} title={project.name}>
+            <Link to={projectUrl} title={project.name}>
               {project.name}
             </Link>
           </CardTitle>
@@ -23,7 +28,7 @@ export function ProjectCard({ project }) {
       </CardHeader>
       <CardContent className="p-5 pt-0 flex justify-end">
         <Link
-          to={`/projects/${project.id}`}
+          to={projectUrl}
           className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
           View details
