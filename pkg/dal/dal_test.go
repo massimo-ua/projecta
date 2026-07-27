@@ -855,4 +855,25 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 			t.Errorf("expected Find asset count error")
 		}
 	})
+
+	t.Run("toProject invalid UUID panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("expected panic for bad project UUID")
+			}
+		}()
+		_, _ = toProject("bad-uuid", "Name", "Desc", ownerID.String(), "UAH", "John", "Doe", "J.D.", now, now)
+	})
+
+	t.Run("toCostCategory invalid UUID errors", func(t *testing.T) {
+		_, err := toCostCategory("bad-uuid", pID.String(), "Cat", "Desc")
+		if err == nil {
+			t.Errorf("expected error for bad category UUID")
+		}
+
+		_, err = toCostCategory(catID.String(), "bad-uuid", "Cat", "Desc")
+		if err == nil {
+			t.Errorf("expected error for bad project UUID in category")
+		}
+	})
 }
