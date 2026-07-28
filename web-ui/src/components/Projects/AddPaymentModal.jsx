@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import { paymentRepository } from '../../api';
 import { PaymentKind } from '../../constants';
 import { Button } from '@/components/ui/button';
@@ -24,9 +26,14 @@ import { toast } from 'sonner';
 
 const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
 
-export default function AddPaymentModal(props) {
+export default function AddPaymentModal({
+  open,
+  onSuccess,
+  onCancel,
+  types = [],
+}) {
+  const content = useIntlayer('payments');
   const { projectId } = useParams();
-  const { open, onSuccess, onCancel, types = [] } = props;
 
   const [typeId, setTypeId] = useState('');
   const [paymentKind, setPaymentKind] = useState('UPON_COMPLETION');
@@ -36,10 +43,23 @@ export default function AddPaymentModal(props) {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const getPaymentKindLabel = (kindKey) => {
+    switch (kindKey) {
+      case 'DOWN_PAYMENT':
+        return String(content?.kindDownPayment || PaymentKind.DOWN_PAYMENT);
+      case 'CREDIT_PAYMENT':
+        return String(content?.kindCreditPayment || PaymentKind.CREDIT_PAYMENT);
+      case 'UPON_COMPLETION':
+        return String(content?.kindUponCompletion || PaymentKind.UPON_COMPLETION);
+      default:
+        return PaymentKind[kindKey] || kindKey;
+    }
+  };
+
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!typeId || !amount || !paymentDate) {
-      toast.error('Type, Amount, and Payment Date are required');
+      toast.error(String(content?.validationRequiredFields || 'Type, Amount, and Payment Date are required'));
       return;
     }
 
@@ -53,11 +73,11 @@ export default function AddPaymentModal(props) {
         description,
         paymentKind,
       });
-      toast.success('Payment added successfully');
+      toast.success(String(content?.paymentAddedSuccess || 'Payment added successfully'));
       resetForm();
       onSuccess();
     } catch (e) {
-      toast.error(`Failed to add payment: ${e.message}`);
+      toast.error(`${String(content?.failedToAdd || 'Failed to add payment')}: ${e.message}`);
       console.error('Failed to add payment', e.message);
     } finally {
       setLoading(false);
@@ -82,14 +102,14 @@ export default function AddPaymentModal(props) {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Add Payment</DialogTitle>
+          <DialogTitle>{String(content?.addPaymentTitle || 'Add Payment')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="payment-type">Type</Label>
+            <Label htmlFor="payment-type">{String(content?.typeLabel || 'Type')}</Label>
             <Select value={typeId} onValueChange={setTypeId}>
               <SelectTrigger id="payment-type">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
               </SelectTrigger>
               <SelectContent>
                 {types.map((type) => (
@@ -103,15 +123,15 @@ export default function AddPaymentModal(props) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="payment-kind">Kind</Label>
+              <Label htmlFor="payment-kind">{String(content?.kindLabel || 'Kind')}</Label>
               <Select value={paymentKind} onValueChange={setPaymentKind}>
                 <SelectTrigger id="payment-kind">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(PaymentKind).map(([id, label]) => (
+                  {Object.keys(PaymentKind).map((id) => (
                     <SelectItem key={id} value={id}>
-                      {label}
+                      {getPaymentKindLabel(id)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -119,7 +139,7 @@ export default function AddPaymentModal(props) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="payment-date">Date</Label>
+              <Label htmlFor="payment-date">{String(content?.dateLabel || 'Date')}</Label>
               <Input
                 id="payment-date"
                 type="date"
@@ -132,19 +152,19 @@ export default function AddPaymentModal(props) {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="payment-amount">Amount</Label>
+              <Label htmlFor="payment-amount">{String(content?.amountLabel || 'Amount')}</Label>
               <Input
                 id="payment-amount"
                 type="number"
                 step="0.01"
-                placeholder="0.00"
+                placeholder={String(content?.amountPlaceholder || '0.00')}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="payment-currency">Currency</Label>
+              <Label htmlFor="payment-currency">{String(content?.currencyLabel || 'Currency')}</Label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger id="payment-currency">
                   <SelectValue />
@@ -161,11 +181,11 @@ export default function AddPaymentModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="payment-desc">Description</Label>
+            <Label htmlFor="payment-desc">{String(content?.descriptionLabel || 'Description')}</Label>
             <Textarea
               id="payment-desc"
               rows={3}
-              placeholder="Payment description..."
+              placeholder={String(content?.descriptionPlaceholder || 'Payment description...')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -173,10 +193,10 @@ export default function AddPaymentModal(props) {
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
-              Cancel
+              {String(content?.cancelButton || 'Cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              Submit
+              {String(content?.submitButton || 'Submit')}
             </Button>
           </DialogFooter>
         </form>
@@ -184,3 +204,16 @@ export default function AddPaymentModal(props) {
     </Dialog>
   );
 }
+
+AddPaymentModal.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onSuccess: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+  types: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      category: PropTypes.string,
+    }),
+  ),
+};
