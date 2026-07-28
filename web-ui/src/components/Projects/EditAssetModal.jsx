@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import { assetRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,9 +25,14 @@ import { toast } from 'sonner';
 
 const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
 
-export default function EditAssetModal(props) {
+export default function EditAssetModal({
+  onSuccess,
+  onCancel,
+  assetId = null,
+  types = [],
+}) {
+  const content = useIntlayer('assets');
   const { projectId } = useParams();
-  const { onSuccess, onCancel, assetId, types = [] } = props;
 
   const [typeId, setTypeId] = useState('');
   const [price, setPrice] = useState('');
@@ -53,14 +60,14 @@ export default function EditAssetModal(props) {
         }
       })
       .catch((err) => {
-        toast.error(`Failed to load asset details: ${err.message}`);
+        toast.error(`${String(content?.failedToLoadDetails || 'Failed to load asset details')}: ${err.message}`);
       });
-  }, [assetId, projectId]);
+  }, [assetId, projectId, content]);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!typeId || !price || !name || !acquiredAt) {
-      toast.error('Type, Price, Name and Acquired Date are required');
+      toast.error(String(content?.validationRequiredFields || 'Type, Price, Name and Acquired Date are required'));
       return;
     }
 
@@ -75,9 +82,10 @@ export default function EditAssetModal(props) {
         name,
         description,
       });
+      toast.success(String(content?.assetUpdatedSuccess || 'Asset updated successfully'));
       onSuccess();
     } catch (e) {
-      toast.error(`Failed to update asset: ${e.message}`);
+      toast.error(`${String(content?.failedToUpdate || 'Failed to update asset')}: ${e.message}`);
       console.error('Failed to update asset', e.message);
     } finally {
       setLoading(false);
@@ -90,14 +98,14 @@ export default function EditAssetModal(props) {
     <Dialog open={Boolean(assetId)} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Edit Asset</DialogTitle>
+          <DialogTitle>{String(content?.editAssetTitle || 'Edit Asset')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleUpdate} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-type">Type</Label>
+            <Label htmlFor="edit-asset-type">{String(content?.typeLabel || 'Type')}</Label>
             <Select value={typeId} onValueChange={setTypeId}>
               <SelectTrigger id="edit-asset-type">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
               </SelectTrigger>
               <SelectContent>
                 {types.map((type) => (
@@ -111,18 +119,19 @@ export default function EditAssetModal(props) {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="edit-asset-price">Price</Label>
+              <Label htmlFor="edit-asset-price">{String(content?.priceLabel || 'Price')}</Label>
               <Input
                 id="edit-asset-price"
                 type="number"
                 step="0.01"
+                placeholder={String(content?.pricePlaceholder || '0.00')}
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-asset-currency">Currency</Label>
+              <Label htmlFor="edit-asset-currency">{String(content?.currencyLabel || 'Currency')}</Label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger id="edit-asset-currency">
                   <SelectValue />
@@ -139,7 +148,7 @@ export default function EditAssetModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-acquired">Acquired At</Label>
+            <Label htmlFor="edit-asset-acquired">{String(content?.acquiredAtLabel || 'Acquired At')}</Label>
             <Input
               id="edit-asset-acquired"
               type="date"
@@ -150,9 +159,10 @@ export default function EditAssetModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-name">Name</Label>
+            <Label htmlFor="edit-asset-name">{String(content?.nameLabel || 'Name')}</Label>
             <Input
               id="edit-asset-name"
+              placeholder={String(content?.namePlaceholder || 'Asset name')}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -160,10 +170,11 @@ export default function EditAssetModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-desc">Description</Label>
+            <Label htmlFor="edit-asset-desc">{String(content?.descriptionLabel || 'Description')}</Label>
             <Textarea
               id="edit-asset-desc"
               rows={3}
+              placeholder={String(content?.descriptionPlaceholder || 'Asset description...')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -171,10 +182,10 @@ export default function EditAssetModal(props) {
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
-              Cancel
+              {String(content?.cancelButton || 'Cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              Submit
+              {String(content?.submitButton || 'Submit')}
             </Button>
           </DialogFooter>
         </form>
@@ -182,3 +193,16 @@ export default function EditAssetModal(props) {
     </Dialog>
   );
 }
+
+EditAssetModal.propTypes = {
+  assetId: PropTypes.string,
+  onSuccess: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+  types: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      category: PropTypes.string,
+    }),
+  ),
+};

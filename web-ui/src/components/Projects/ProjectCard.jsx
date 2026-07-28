@@ -1,11 +1,13 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { FolderKanban, ArrowRight } from 'lucide-react';
-import { useLocale } from 'react-intlayer';
+import { useIntlayer, useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
 
 export function ProjectCard({ project }) {
+  const content = useIntlayer('projects');
   const { locale } = useLocale();
   const projectUrl = getLocalizedUrl(`/projects/${project.id}`, locale);
 
@@ -23,7 +25,7 @@ export function ProjectCard({ project }) {
           </CardTitle>
         </div>
         <CardDescription className="line-clamp-2 text-sm text-muted-foreground leading-relaxed">
-          {project.description || 'No description provided.'}
+          {project.description || String(content?.noDescription || 'No description provided.')}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex justify-end">
@@ -31,10 +33,18 @@ export function ProjectCard({ project }) {
           to={projectUrl}
           className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
-          View details
+          {String(content?.viewDetailsLink || 'View details')}
           <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
         </Link>
       </CardContent>
     </Card>
   );
 }
+
+ProjectCard.propTypes = {
+  project: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    description: PropTypes.string,
+  }).isRequired,
+};

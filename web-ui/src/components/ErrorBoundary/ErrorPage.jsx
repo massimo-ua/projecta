@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export function ErrorPage({ error: errorProp, resetErrorBoundary }) {
+export function ErrorPage({ error: errorProp = null, resetErrorBoundary = null }) {
   let routeError = null;
   try {
     routeError = useRouteError();
@@ -103,9 +103,4 @@ ErrorPage.propTypes = {
     PropTypes.string,
   ]),
   resetErrorBoundary: PropTypes.func,
-};
-
-ErrorPage.defaultProps = {
-  error: null,
-  resetErrorBoundary: null,
 };

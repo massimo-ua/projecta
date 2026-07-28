@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
+import { useIntlayer } from 'react-intlayer';
 import { assetRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,9 +26,14 @@ import { toast } from 'sonner';
 
 const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
 
-export default function AddAssetModal(props) {
+export default function AddAssetModal({
+  open,
+  onSuccess,
+  onCancel,
+  types = [],
+}) {
+  const content = useIntlayer('assets');
   const { projectId } = useParams();
-  const { open, onSuccess, onCancel, types = [] } = props;
 
   const [typeId, setTypeId] = useState('');
   const [withPayment, setWithPayment] = useState(false);
@@ -40,7 +47,7 @@ export default function AddAssetModal(props) {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!typeId || !price || !name || !acquiredAt) {
-      toast.error('Type, Price, Name and Acquired Date are required');
+      toast.error(String(content?.validationRequiredFields || 'Type, Price, Name and Acquired Date are required'));
       return;
     }
 
@@ -55,11 +62,11 @@ export default function AddAssetModal(props) {
         description,
         withPayment,
       });
-      toast.success('Asset added successfully');
+      toast.success(String(content?.assetAddedSuccess || 'Asset added successfully'));
       resetForm();
       onSuccess();
     } catch (e) {
-      toast.error(`Failed to add asset: ${e.message}`);
+      toast.error(`${String(content?.failedToAdd || 'Failed to add asset')}: ${e.message}`);
       console.error('Failed to add asset', e.message);
     } finally {
       setLoading(false);
@@ -85,14 +92,14 @@ export default function AddAssetModal(props) {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Add Asset</DialogTitle>
+          <DialogTitle>{String(content?.addAssetTitle || 'Add Asset')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="asset-type">Type</Label>
+            <Label htmlFor="asset-type">{String(content?.typeLabel || 'Type')}</Label>
             <Select value={typeId} onValueChange={setTypeId}>
               <SelectTrigger id="asset-type">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
               </SelectTrigger>
               <SelectContent>
                 {types.map((type) => (
@@ -106,8 +113,12 @@ export default function AddAssetModal(props) {
 
           <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
             <div className="space-y-0.5">
-              <Label htmlFor="with-payment" className="text-sm font-medium">Create Payment</Label>
-              <p className="text-xs text-muted-foreground">Automatically record an associated payment entry</p>
+              <Label htmlFor="with-payment" className="text-sm font-medium">
+                {String(content?.createPaymentLabel || 'Create Payment')}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {String(content?.createPaymentDescription || 'Automatically record an associated payment entry')}
+              </p>
             </div>
             <Switch
               id="with-payment"
@@ -118,19 +129,19 @@ export default function AddAssetModal(props) {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="asset-price">Price</Label>
+              <Label htmlFor="asset-price">{String(content?.priceLabel || 'Price')}</Label>
               <Input
                 id="asset-price"
                 type="number"
                 step="0.01"
-                placeholder="0.00"
+                placeholder={String(content?.pricePlaceholder || '0.00')}
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="asset-currency">Currency</Label>
+              <Label htmlFor="asset-currency">{String(content?.currencyLabel || 'Currency')}</Label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger id="asset-currency">
                   <SelectValue />
@@ -147,7 +158,7 @@ export default function AddAssetModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="asset-acquired">Acquired At</Label>
+            <Label htmlFor="asset-acquired">{String(content?.acquiredAtLabel || 'Acquired At')}</Label>
             <Input
               id="asset-acquired"
               type="date"
@@ -158,10 +169,10 @@ export default function AddAssetModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="asset-name">Name</Label>
+            <Label htmlFor="asset-name">{String(content?.nameLabel || 'Name')}</Label>
             <Input
               id="asset-name"
-              placeholder="Asset name"
+              placeholder={String(content?.namePlaceholder || 'Asset name')}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -169,11 +180,11 @@ export default function AddAssetModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="asset-desc">Description</Label>
+            <Label htmlFor="asset-desc">{String(content?.descriptionLabel || 'Description')}</Label>
             <Textarea
               id="asset-desc"
               rows={3}
-              placeholder="Asset description..."
+              placeholder={String(content?.descriptionPlaceholder || 'Asset description...')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -181,10 +192,10 @@ export default function AddAssetModal(props) {
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
-              Cancel
+              {String(content?.cancelButton || 'Cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              Submit
+              {String(content?.submitButton || 'Submit')}
             </Button>
           </DialogFooter>
         </form>
@@ -192,3 +203,16 @@ export default function AddAssetModal(props) {
     </Dialog>
   );
 }
+
+AddAssetModal.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onSuccess: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+  types: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      category: PropTypes.string,
+    }),
+  ),
+};
