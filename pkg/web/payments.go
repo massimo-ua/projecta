@@ -3,16 +3,14 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"time"
-
 	"github.com/Rhymond/go-money"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
+	"net/http"
+	"time"
 )
 
 type UpdatePaymentDTO struct {
@@ -138,7 +136,7 @@ func decodeGetPaymentRequest(_ context.Context, r *http.Request) (interface{}, e
 	}, nil
 }
 
-func makeGetPaymentEndpoint(svc projecta.PaymentService, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeGetPaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(projecta.PaymentFilter)
 
@@ -148,29 +146,12 @@ func makeGetPaymentEndpoint(svc projecta.PaymentService, rateProvider currency.C
 			return nil, err
 		}
 
-		homeCurrency := p.Project.MainCurrency
-		if homeCurrency == "" {
-			homeCurrency = "UAH"
-		}
-
-		homeAmount := p.Amount.Amount()
-		if rateProvider != nil && p.Amount.Currency().Code != homeCurrency {
-			converted, err := rateProvider.Convert(
-				currency.NewCurrency(p.Amount.Amount(), p.Amount.Currency().Code),
-				currency.NewCurrency(0, homeCurrency),
-			)
-			if err == nil {
-				homeAmount = converted.Amount
-			}
-		}
-
 		return PaymentDTO{
 			PaymentID: p.ID.String(),
 			Project: ProjectDTO{
-				ProjectID:    p.Project.ProjectID.String(),
-				Name:         p.Project.Name,
-				Description:  p.Project.Description,
-				MainCurrency: p.Project.MainCurrency,
+				ProjectID:   p.Project.ProjectID.String(),
+				Name:        p.Project.Name,
+				Description: p.Project.Description,
 				Owner: OwnerDTO{
 					PersonID:    p.Owner.PersonID.String(),
 					DisplayName: p.Owner.DisplayName,
@@ -189,13 +170,11 @@ func makeGetPaymentEndpoint(svc projecta.PaymentService, rateProvider currency.C
 					Name:       p.Type.Category.Name,
 				},
 			},
-			Description:  p.Description,
-			Amount:       p.Amount.Amount(),
-			Currency:     p.Amount.Currency().Code,
-			HomeAmount:   homeAmount,
-			HomeCurrency: homeCurrency,
-			PaymentDate:  p.Date.Format(time.RFC3339),
-			Kind:         p.Kind.String(),
+			Description: p.Description,
+			Amount:      p.Amount.Amount(),
+			Currency:    p.Amount.Currency().Code,
+			PaymentDate: p.Date.Format(time.RFC3339),
+			Kind:        p.Kind.String(),
 		}, nil
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	types "database/sql"
 	"errors"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +11,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"time"
 )
 
 type PgProjectRepository struct {
@@ -39,7 +38,6 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		"name",
 		"description",
 		"owner_id",
-		"main_currency",
 		"started_at",
 		"ended_at",
 		"people.first_name",
@@ -61,16 +59,15 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 	sql, args := qb.Build()
 
 	var (
-		projectID    string
-		name         string
-		description  string
-		ownerID      string
-		mainCurrency string
-		startedAt    time.Time
-		endedAt      time.Time
-		firstName    string
-		lastName     string
-		displayName  types.NullString
+		projectID   string
+		name        string
+		description string
+		ownerID     string
+		startedAt   time.Time
+		endedAt     time.Time
+		firstName   string
+		lastName    string
+		displayName types.NullString
 	)
 
 	if err := r.db.QueryRow(
@@ -82,7 +79,6 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		&name,
 		&description,
 		&ownerID,
-		&mainCurrency,
 		&startedAt,
 		&endedAt,
 		&firstName,
@@ -96,15 +92,10 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		return nil, err
 	}
 
-	return toProject(projectID, name, description, ownerID, mainCurrency, firstName, lastName, displayName.String, startedAt, endedAt)
+	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt)
 }
 
 func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
-	mainCurrency := project.MainCurrency
-	if mainCurrency == "" {
-		mainCurrency = "UAH"
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_projects")
 	qb.Cols(
@@ -112,7 +103,6 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 		"name",
 		"description",
 		"owner_id",
-		"main_currency",
 		"started_at",
 		"ended_at",
 	)
@@ -121,7 +111,6 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 		project.Name,
 		project.Description,
 		project.Owner.PersonID.String(),
-		mainCurrency,
 		project.StartDate,
 		project.EndDate,
 	)
@@ -134,18 +123,12 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 }
 
 func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
-	mainCurrency := project.MainCurrency
-	if mainCurrency == "" {
-		mainCurrency = "UAH"
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_projects")
 	qb.Set(
 		qb.Assign("name", project.Name),
 		qb.Assign("description", project.Description),
 		qb.Assign("owner_id", project.Owner.PersonID.String()),
-		qb.Assign("main_currency", mainCurrency),
 		qb.Assign("started_at", project.StartDate),
 		qb.Assign("ended_at", project.EndDate),
 	)
@@ -186,7 +169,6 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 		"name",
 		"description",
 		"owner_id",
-		"main_currency",
 		"started_at",
 		"ended_at",
 		"people.first_name",
@@ -218,16 +200,15 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 
 	for rows.Next() {
 		var (
-			projectID    string
-			name         string
-			description  string
-			ownerID      string
-			mainCurrency string
-			startedAt    time.Time
-			endedAt      time.Time
-			firstName    string
-			lastName     string
-			displayName  types.NullString
+			projectID   string
+			name        string
+			description string
+			ownerID     string
+			startedAt   time.Time
+			endedAt     time.Time
+			firstName   string
+			lastName    string
+			displayName types.NullString
 		)
 
 		if err = rows.Scan(
@@ -235,7 +216,6 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			&name,
 			&description,
 			&ownerID,
-			&mainCurrency,
 			&startedAt,
 			&endedAt,
 			&firstName,
@@ -245,7 +225,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			return nil, err
 		}
 
-		p, err := toProject(projectID, name, description, ownerID, mainCurrency, firstName, lastName, displayName.String, startedAt, endedAt)
+		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt)
 
 		if err != nil {
 			return nil, err
@@ -257,7 +237,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 	return projects, nil
 }
 
-func toProject(projectID, name, description, ownerID, mainCurrency, firstName, lastName, displayName string, startedAt, enddedAt time.Time) (*projecta.Project, error) {
+func toProject(projectID, name, description, ownerID, firstName, lastName, displayName string, startedAt, enddedAt time.Time) (*projecta.Project, error) {
 	person, err := people.NewPerson(
 		uuid.MustParse(ownerID),
 		firstName,
@@ -270,7 +250,7 @@ func toProject(projectID, name, description, ownerID, mainCurrency, firstName, l
 		return nil, err
 	}
 
-	p, err := projecta.NewProject(
+	return projecta.NewProject(
 		uuid.MustParse(projectID),
 		name,
 		description,
@@ -281,13 +261,4 @@ func toProject(projectID, name, description, ownerID, mainCurrency, firstName, l
 		startedAt,
 		enddedAt,
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	if mainCurrency != "" {
-		p.MainCurrency = mainCurrency
-	}
-
-	return p, nil
 }

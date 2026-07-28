@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-
 	ht "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
@@ -14,7 +12,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
+	"net/http"
 )
 
 func errorCodeToHttpStatus(e exceptions.Exception) int {
@@ -56,7 +54,6 @@ func MakeHTTPHandler(
 	typeService projecta.TypeService,
 	expenseService projecta.PaymentService,
 	assetService asset.Service,
-	rateProvider currency.CurrencyRateProvider,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
@@ -67,7 +64,6 @@ func MakeHTTPHandler(
 		typeService,
 		expenseService,
 		assetService,
-		rateProvider,
 	)
 
 	if err != nil {
@@ -75,6 +71,8 @@ func MakeHTTPHandler(
 	}
 
 	options := []ht.ServerOption{
+		// TODO: add logging
+		// ht.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		ht.ServerErrorEncoder(encodeErrorResponse),
 	}
 
@@ -112,13 +110,6 @@ func MakeHTTPHandler(
 		loggedInOnly(projectEndpoints.CreateProject),
 		DecodeCreateProjectRequest,
 		encodeJSON(http.StatusCreated),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodPatch).Path("/projects/{project_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.UpdateProjectSettings),
-		DecodeUpdateProjectRequest,
-		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 

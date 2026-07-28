@@ -3,10 +3,9 @@ package projecta
 import (
 	"context"
 	"errors"
-	"time"
-
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"time"
 )
 
 type ProjectServiceImpl struct {
@@ -15,6 +14,7 @@ type ProjectServiceImpl struct {
 }
 
 func (s *ProjectServiceImpl) Save(ctx context.Context, expense *Payment) error {
+	//TODO implement me
 	panic("implement me")
 }
 
@@ -27,30 +27,13 @@ func (s *ProjectServiceImpl) Find(ctx context.Context, filter ProjectCollectionF
 }
 
 func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCommand) error {
-	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID})
-	if err != nil {
-		return err
-	}
-	return s.repository.Remove(ctx, p)
+	//TODO implement me
+	panic("implement me")
 }
 
 func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCommand) error {
-	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID})
-	if err != nil {
-		return err
-	}
-
-	if command.Name != "" {
-		p.Name = command.Name
-	}
-	if command.Description != "" {
-		p.Description = command.Description
-	}
-	if command.MainCurrency != "" {
-		p.MainCurrency = command.MainCurrency
-	}
-
-	return s.repository.Update(ctx, p)
+	//TODO implement me
+	panic("implement me")
 }
 
 func NewProjectService(repository ProjectRepository, peopleService PeopleService) *ProjectServiceImpl {
@@ -81,10 +64,6 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 		)
 		if err != nil {
 			return nil, exceptions.NewInternalException("failed to create project", err)
-		}
-
-		if command.MainCurrency != "" {
-			p.MainCurrency = command.MainCurrency
 		}
 
 		err = s.repository.Create(ctx, p)

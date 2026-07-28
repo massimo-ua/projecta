@@ -59,14 +59,6 @@ const projectsContent = {
       en: 'Failed to create project',
       uk: 'Не вдалося створити проєкт',
     }),
-    viewDetails: t({
-      en: 'View details',
-      uk: 'Переглянути деталі',
-    }),
-    noDescriptionProvided: t({
-      en: 'No description provided.',
-      uk: 'Опис відсутній.',
-    }),
   },
 };
 

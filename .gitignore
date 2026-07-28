@@ -6,3 +6,6 @@ builds/
 .env
 .env.local
 .env.*.local
+web-ui/node_modules/
+web-ui/dist/
+web-ui/.intlayer/

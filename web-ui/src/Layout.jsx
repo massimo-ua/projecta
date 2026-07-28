@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
 import { User } from 'lucide-react';
+import PropTypes from 'prop-types';
 import { Logo } from './components/Logo';
 import Logout from './components/Logout';
-import { AppFooter } from './components/index.js';
+import { AppFooter, ErrorBoundary } from './components/index.js';
 import { Toaster } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
 import { authProvider } from './api';
@@ -45,7 +46,9 @@ export default function HomeLayout({ children }) {
         </div>
       </header>
       <main className="flex-1 container px-4 sm:px-8 py-6">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </main>
       <footer className="border-t py-4 px-4 sm:px-8 bg-muted/30">
         <AppFooter />
@@ -54,3 +57,7 @@ export default function HomeLayout({ children }) {
     </div>
   );
 }
+
+HomeLayout.propTypes = {
+  children: PropTypes.node.isRequired,
+};

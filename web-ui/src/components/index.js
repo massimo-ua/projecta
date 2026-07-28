@@ -14,6 +14,7 @@ export * from './AuthGuard';
 export * from './GoogleLoginBtn';
 export * from './Projects/Assets';
 export * from './Profile/UserProfileSettings';
+export * from './ErrorBoundary';
 
 export const Types = TypesComponent;
 export const Total = TotalComponent;

@@ -2,11 +2,10 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { FolderKanban, ArrowRight } from 'lucide-react';
-import { useIntlayer, useLocale } from 'react-intlayer';
+import { useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
 
 export function ProjectCard({ project }) {
-  const content = useIntlayer('projects');
   const { locale } = useLocale();
   const projectUrl = getLocalizedUrl(`/projects/${project.id}`, locale);
 
@@ -24,7 +23,7 @@ export function ProjectCard({ project }) {
           </CardTitle>
         </div>
         <CardDescription className="line-clamp-2 text-sm text-muted-foreground leading-relaxed">
-          {project.description || String(content.noDescriptionProvided)}
+          {project.description || 'No description provided.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex justify-end">
@@ -32,7 +31,7 @@ export function ProjectCard({ project }) {
           to={projectUrl}
           className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
-          {String(content.viewDetails)}
+          View details
           <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
         </Link>
       </CardContent>

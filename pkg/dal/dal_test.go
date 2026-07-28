@@ -431,7 +431,7 @@ func TestPgProjectRepository(t *testing.T) {
 	})
 
 	t.Run("toProject test", func(t *testing.T) {
-		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "UAH", "John", "Doe", "J.D.", now, now)
+		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now)
 		if err != nil || p == nil {
 			t.Errorf("toProject error: %v", err)
 		}
@@ -766,7 +766,7 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		}
 
 		// toProject with valid fields
-		p1, err := toProject(pID.String(), "Project 1", "Description", ownerID.String(), "UAH", "John", "Doe", "J.D.", now, now)
+		p1, err := toProject(pID.String(), "Project 1", "Description", ownerID.String(), "John", "Doe", "J.D.", now, now)
 		if err != nil || p1 == nil {
 			t.Errorf("toProject error: %v", err)
 		}
@@ -853,27 +853,6 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		_, err = astRepo.Find(ctxCountErr, asset.CollectionFilter{ProjectID: pID})
 		if err == nil {
 			t.Errorf("expected Find asset count error")
-		}
-	})
-
-	t.Run("toProject invalid UUID panics", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic for bad project UUID")
-			}
-		}()
-		_, _ = toProject("bad-uuid", "Name", "Desc", ownerID.String(), "UAH", "John", "Doe", "J.D.", now, now)
-	})
-
-	t.Run("toCostCategory invalid UUID errors", func(t *testing.T) {
-		_, err := toCostCategory("bad-uuid", pID.String(), "Cat", "Desc")
-		if err == nil {
-			t.Errorf("expected error for bad category UUID")
-		}
-
-		_, err = toCostCategory(catID.String(), "bad-uuid", "Cat", "Desc")
-		if err == nil {
-			t.Errorf("expected error for bad project UUID in category")
 		}
 	})
 }

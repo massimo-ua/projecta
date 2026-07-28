@@ -237,7 +237,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	paySvc := &mockPaymentService{pay: pay}
 	astSvc := &mockAssetService{asset: ast}
 
-	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, projSvc, catSvc, typeSvc, paySvc, astSvc, nil)
+	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, projSvc, catSvc, typeSvc, paySvc, astSvc)
 	if err != nil || handler == nil {
 		t.Fatalf("failed to create http handler: %v", err)
 	}

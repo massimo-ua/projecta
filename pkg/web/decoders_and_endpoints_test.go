@@ -16,16 +16,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
-
-type mockProjectServiceErrOnFindOne struct {
-	mockProjectService
-}
-
-func (m *mockProjectServiceErrOnFindOne) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
-	return nil, errors.New("findOne error")
-}
 
 func TestAuthMiddlewareAndErrorEncoder(t *testing.T) {
 	t.Run("jwtMiddleware branches", func(t *testing.T) {
@@ -801,121 +792,19 @@ func TestEndpointsErrorBranches(t *testing.T) {
 		}
 	})
 
-	t.Run("makeCreatePaymentEndpoint error and success", func(t *testing.T) {
-		ep := makeCreatePaymentEndpoint(paySvcErr, nil)
+	t.Run("makeCreatePaymentEndpoint error", func(t *testing.T) {
+		ep := makeCreatePaymentEndpoint(paySvcErr)
 		_, err := ep(context.Background(), projecta.CreatePaymentCommand{})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
-
-		mRate := &mockRateProvider{}
-		mPaySvcOk := &mockPaymentService{pay: pay}
-		epSuccess := makeCreatePaymentEndpoint(mPaySvcOk, mRate)
-		resAny, err := epSuccess(context.Background(), projecta.CreatePaymentCommand{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, ok := resAny.(PaymentDTO); !ok {
-			t.Errorf("expected PaymentDTO response")
-		}
 	})
 
-	t.Run("makeListPaymentsEndpoint error and success", func(t *testing.T) {
-		ep := makeListPaymentsEndpoint(paySvcErr, nil)
+	t.Run("makeListPaymentsEndpoint error", func(t *testing.T) {
+		ep := makeListPaymentsEndpoint(paySvcErr)
 		_, err := ep(context.Background(), projecta.PaymentCollectionFilter{})
 		if err == nil {
 			t.Errorf("expected service error")
-		}
-
-		mRate := &mockRateProvider{}
-		payCol := projecta.NewPaymentCollection(1)
-		payCol.Add(pay)
-		mPaySvcCol := &mockPaymentServiceWithCol{col: payCol}
-		epSuccess := makeListPaymentsEndpoint(mPaySvcCol, mRate)
-		resAny, err := epSuccess(context.Background(), projecta.PaymentCollectionFilter{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if resp, ok := resAny.(ListPaymentsResponse); !ok || len(resp.Payments) != 1 {
-			t.Errorf("expected 1 PaymentDTO item in ListPaymentsResponse")
-		}
-	})
-
-	t.Run("makeGetPaymentEndpoint error and success", func(t *testing.T) {
-		epErr := makeGetPaymentEndpoint(paySvcErr, nil)
-		_, err := epErr(context.Background(), projecta.PaymentFilter{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-
-		mRate := &mockRateProvider{}
-		mPaySvcOk := &mockPaymentService{pay: pay}
-		epSuccess := makeGetPaymentEndpoint(mPaySvcOk, mRate)
-		resAny, err := epSuccess(context.Background(), projecta.PaymentFilter{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, ok := resAny.(PaymentDTO); !ok {
-			t.Errorf("expected PaymentDTO response")
-		}
-	})
-
-	t.Run("makeListAssetsEndpoint error and success", func(t *testing.T) {
-		epErr := makeListAssetsEndpoint(astSvcErr, nil)
-		_, err := epErr(context.Background(), asset.CollectionFilter{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-
-		mRate := &mockRateProvider{}
-		astCol := asset.NewCollection(1)
-		astCol.Add(ast)
-		mAstSvcCol := &mockAssetServiceWithCol{col: astCol}
-		epSuccess := makeListAssetsEndpoint(mAstSvcCol, mRate)
-		resAny, err := epSuccess(context.Background(), asset.CollectionFilter{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if resp, ok := resAny.(ListAssetsResponse); !ok || len(resp.Assets) != 1 {
-			t.Errorf("expected 1 AssetDTO item in ListAssetsResponse")
-		}
-	})
-
-	t.Run("makeCreateAssetEndpoint error and success", func(t *testing.T) {
-		epErr := makeCreateAssetEndpoint(astSvcErr, nil)
-		_, err := epErr(context.Background(), asset.CreateAssetCommand{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-
-		mRate := &mockRateProvider{}
-		mAstSvcOk := &mockAssetService{asset: ast}
-		epSuccess := makeCreateAssetEndpoint(mAstSvcOk, mRate)
-		resAny, err := epSuccess(context.Background(), asset.CreateAssetCommand{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, ok := resAny.(AssetDTO); !ok {
-			t.Errorf("expected AssetDTO response")
-		}
-	})
-
-	t.Run("makeGetAssetEndpoint error and success", func(t *testing.T) {
-		epErr := makeGetAssetEndpoint(astSvcErr, nil)
-		_, err := epErr(context.Background(), asset.Filter{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-
-		mRate := &mockRateProvider{}
-		mAstSvcOk := &mockAssetService{asset: ast}
-		epSuccess := makeGetAssetEndpoint(mAstSvcOk, mRate)
-		resAny, err := epSuccess(context.Background(), asset.Filter{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, ok := resAny.(AssetDTO); !ok {
-			t.Errorf("expected AssetDTO response")
 		}
 	})
 
@@ -936,9 +825,8 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	})
 
 	t.Run("makeShowProjectTotalsEndpoint currency mismatch and service error", func(t *testing.T) {
-		mProjSvc := &mockProjectService{project: proj}
 		// Payments service error
-		epErr := makeShowProjectTotalsEndpoint(mProjSvc, paySvcErr, astSvcErr, nil)
+		epErr := makeShowProjectTotalsEndpoint(paySvcErr, astSvcErr)
 		_, err := epErr(context.Background(), uuid.New())
 		if err == nil {
 			t.Errorf("expected payments service error")
@@ -946,26 +834,27 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 		// Assets service error
 		paySvcOk := &mockPaymentService{pay: pay}
-		epAssetErr := makeShowProjectTotalsEndpoint(mProjSvc, paySvcOk, astSvcErr, nil)
+		epAssetErr := makeShowProjectTotalsEndpoint(paySvcOk, astSvcErr)
 		_, err = epAssetErr(context.Background(), uuid.New())
 		if err == nil {
 			t.Errorf("expected assets service error")
 		}
 
-		// Payments conversion
+		// Payments currency mismatch (USD vs EUR)
 		payEUR := projecta.NewPayment(uuid.New(), proj, owner, costType, "Pay EUR", money.New(50, money.EUR), time.Now(), projecta.DownPayment)
 		colMismatch := projecta.NewPaymentCollection(2)
 		colMismatch.Add(pay, payEUR)
+		// Mock payment service that returns colMismatch
 		mPaySvc := &mockPaymentServiceWithCol{col: colMismatch}
 		mAstSvc := &mockAssetService{asset: ast}
 
-		epMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mPaySvc, mAstSvc, nil)
+		epMismatch := makeShowProjectTotalsEndpoint(mPaySvc, mAstSvc)
 		_, err = epMismatch(context.Background(), uuid.New())
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
+		if err == nil {
+			t.Errorf("expected payments currency mismatch error")
 		}
 
-		// Assets conversion
+		// Assets currency mismatch (USD vs EUR)
 		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj, costType, money.New(500, money.EUR), time.Now(), owner)
 		astColMismatch := asset.NewCollection(2)
 		astColMismatch.Add(ast, astEUR)
@@ -975,107 +864,10 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 		mAstSvcMismatch := &mockAssetServiceWithCol{col: astColMismatch}
 
-		epAstMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mPaySvcSingle, mAstSvcMismatch, nil)
+		epAstMismatch := makeShowProjectTotalsEndpoint(mPaySvcSingle, mAstSvcMismatch)
 		_, err = epAstMismatch(context.Background(), uuid.New())
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
-}
-
-func TestDecodeUpdateProjectRequest(t *testing.T) {
-	validUUID := uuid.New().String()
-	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, uuid.New())
-
-	t.Run("missing project_id", func(t *testing.T) {
-		req, _ := http.NewRequest("PATCH", "/", nil)
-		_, err := DecodeUpdateProjectRequest(authedCtx, req)
 		if err == nil {
-			t.Errorf("expected missing project_id error")
-		}
-	})
-
-	t.Run("invalid project_id", func(t *testing.T) {
-		req, _ := http.NewRequest("PATCH", "/", nil)
-		req = mux.SetURLVars(req, map[string]string{"project_id": "invalid"})
-		_, err := DecodeUpdateProjectRequest(authedCtx, req)
-		if err == nil {
-			t.Errorf("expected invalid project_id error")
-		}
-	})
-
-	t.Run("unauthorized", func(t *testing.T) {
-		req, _ := http.NewRequest("PATCH", "/", nil)
-		req = mux.SetURLVars(req, map[string]string{"project_id": validUUID})
-		_, err := DecodeUpdateProjectRequest(context.Background(), req)
-		if err == nil {
-			t.Errorf("expected unauthorized error")
-		}
-	})
-
-	t.Run("invalid json", func(t *testing.T) {
-		req, _ := http.NewRequest("PATCH", "/", bytes.NewReader([]byte("invalid json")))
-		req = mux.SetURLVars(req, map[string]string{"project_id": validUUID})
-		_, err := DecodeUpdateProjectRequest(authedCtx, req)
-		if err == nil {
-			t.Errorf("expected invalid json error")
-		}
-	})
-
-	t.Run("valid request", func(t *testing.T) {
-		body, _ := json.Marshal(UpdateProjectDTO{
-			Name:         "New Name",
-			Description:  "New Desc",
-			MainCurrency: "USD",
-		})
-		req, _ := http.NewRequest("PATCH", "/", bytes.NewReader(body))
-		req = mux.SetURLVars(req, map[string]string{"project_id": validUUID})
-		cmdAny, err := DecodeUpdateProjectRequest(authedCtx, req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		cmd, ok := cmdAny.(projecta.UpdateProjectCommand)
-		if !ok {
-			t.Fatalf("expected UpdateProjectCommand type")
-		}
-		if cmd.Name != "New Name" || cmd.MainCurrency != "USD" {
-			t.Errorf("unexpected command values: %+v", cmd)
-		}
-	})
-}
-
-func TestMakeUpdateProjectSettingsEndpoint(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
-	proj, _ := projecta.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-
-	t.Run("update error", func(t *testing.T) {
-		svc := &mockProjectService{err: errors.New("update failed")}
-		ep := makeUpdateProjectSettingsEndpoint(svc)
-		_, err := ep(context.Background(), projecta.UpdateProjectCommand{ProjectID: proj.ProjectID})
-		if err == nil {
-			t.Errorf("expected update error")
-		}
-	})
-
-	t.Run("findOne error", func(t *testing.T) {
-		svc := &mockProjectServiceErrOnFindOne{}
-		ep := makeUpdateProjectSettingsEndpoint(svc)
-		_, err := ep(context.Background(), projecta.UpdateProjectCommand{ProjectID: proj.ProjectID})
-		if err == nil {
-			t.Errorf("expected findOne error")
-		}
-	})
-
-	t.Run("success", func(t *testing.T) {
-		svc := &mockProjectService{project: proj}
-		ep := makeUpdateProjectSettingsEndpoint(svc)
-		resAny, err := ep(context.Background(), projecta.UpdateProjectCommand{ProjectID: proj.ProjectID})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		dto, ok := resAny.(ProjectDTO)
-		if !ok || dto.ProjectID != proj.ProjectID.String() {
-			t.Errorf("unexpected DTO response: %+v", dto)
+			t.Errorf("expected assets currency mismatch error")
 		}
 	})
 }
@@ -1097,15 +889,3 @@ type mockAssetServiceWithCol struct {
 func (m *mockAssetServiceWithCol) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
 	return m.col, nil
 }
-
-type mockRateProvider struct {
-	err error
-}
-
-func (m *mockRateProvider) Convert(from currency.Currency, to currency.Currency) (currency.Currency, error) {
-	if m.err != nil {
-		return currency.Currency{}, m.err
-	}
-	return currency.Currency{Amount: from.Amount * 2, Code: to.Code}, nil
-}
-

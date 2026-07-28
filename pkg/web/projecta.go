@@ -14,19 +14,11 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type CreateProjectDTO struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	MainCurrency string `json:"main_currency,omitempty"`
-}
-
-type UpdateProjectDTO struct {
-	Name         string `json:"name,omitempty"`
-	Description  string `json:"description,omitempty"`
-	MainCurrency string `json:"main_currency,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 type CreateCategoryDTO struct {
@@ -50,11 +42,10 @@ type OwnerDTO struct {
 }
 
 type ProjectDTO struct {
-	ProjectID    string   `json:"project_id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	MainCurrency string   `json:"main_currency"`
-	Owner        OwnerDTO `json:"owner"`
+	ProjectID   string   `json:"project_id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Owner       OwnerDTO `json:"owner"`
 }
 
 type CategoryDTO struct {
@@ -76,40 +67,37 @@ type TypeDTO struct {
 }
 
 type PaymentDTO struct {
-	PaymentID    string      `json:"payment_id"`
-	Project      ProjectDTO  `json:"project"`
-	Owner        OwnerDTO    `json:"owner"`
-	Type         TypeDTO     `json:"type"`
-	Category     CategoryDTO `json:"category"`
-	Description  string      `json:"description"`
-	Amount       int64       `json:"amount"`
-	Currency     string      `json:"currency"`
-	HomeAmount   int64       `json:"home_amount"`
-	HomeCurrency string      `json:"home_currency"`
-	PaymentDate  string      `json:"payment_date"`
-	Kind         string      `json:"kind"`
+	PaymentID   string      `json:"payment_id"`
+	Project     ProjectDTO  `json:"project"`
+	Owner       OwnerDTO    `json:"owner"`
+	Type        TypeDTO     `json:"type"`
+	Category    CategoryDTO `json:"category"`
+	Description string      `json:"description"`
+	Amount      int64       `json:"amount"`
+	Currency    string      `json:"currency"`
+	PaymentDate string      `json:"payment_date"`
+	Kind        string      `json:"kind"`
 }
 
 type ProjectEndpoints struct {
-	CreateProject         endpoint.Endpoint
-	UpdateProjectSettings endpoint.Endpoint
-	CreateCategory        endpoint.Endpoint
-	CreateType            endpoint.Endpoint
-	CreatePayment         endpoint.Endpoint
-	ListProjects          endpoint.Endpoint
-	ListTypes             endpoint.Endpoint
-	ListCategories        endpoint.Endpoint
-	ListPayments          endpoint.Endpoint
-	ShowProjectTotals     endpoint.Endpoint
-	RemoveType            endpoint.Endpoint
-	RemovePayment         endpoint.Endpoint
-	CreateAsset           endpoint.Endpoint
-	RemoveAsset           endpoint.Endpoint
-	ListAssets            endpoint.Endpoint
-	UpdateAsset           endpoint.Endpoint
-	GetAsset              endpoint.Endpoint
-	UpdatePayment         endpoint.Endpoint
-	GetPayment            endpoint.Endpoint
+	CreateProject     endpoint.Endpoint
+	CreateCategory    endpoint.Endpoint
+	CreateType        endpoint.Endpoint
+	CreatePayment     endpoint.Endpoint
+	ListProjects      endpoint.Endpoint
+	ListTypes         endpoint.Endpoint
+	ListCategories    endpoint.Endpoint
+	ListPayments      endpoint.Endpoint
+	ShowProjectTotals endpoint.Endpoint
+	RemoveType        endpoint.Endpoint
+	RemovePayment     endpoint.Endpoint
+	CreateAsset       endpoint.Endpoint
+	RemoveAsset       endpoint.Endpoint
+	ListAssets        endpoint.Endpoint
+	UpdateAsset       endpoint.Endpoint
+	GetAsset          endpoint.Endpoint
+	UpdatePayment     endpoint.Endpoint
+	GetPayment        endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -127,42 +115,10 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}
 
 	return projecta.CreateProjectCommand{
-		PersonID:     personID,
-		Name:         req.Name,
-		Description:  req.Description,
-		MainCurrency: req.MainCurrency,
+		PersonID:    personID,
+		Name:        req.Name,
+		Description: req.Description,
 	}, err
-}
-
-func DecodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
-	vars := mux.Vars(r)
-	projectIDStr, ok := vars["project_id"]
-	if !ok {
-		return nil, exceptions.NewValidationException("missing project_id", nil)
-	}
-
-	projectUUID, err := uuid.Parse(projectIDStr)
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid project_id", err)
-	}
-
-	personID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
-	}
-
-	var req UpdateProjectDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, exceptions.NewValidationException("invalid request", err)
-	}
-
-	return projecta.UpdateProjectCommand{
-		ProjectID:    projectUUID,
-		PersonID:     personID,
-		Name:         req.Name,
-		Description:  req.Description,
-		MainCurrency: req.MainCurrency,
-	}, nil
 }
 
 func DecodeCreateCategoryRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -309,39 +265,12 @@ func makeCreateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 		}
 
 		return ProjectDTO{
-			ProjectID:    project.ProjectID.String(),
-			Name:         project.Name,
-			Description:  project.Description,
-			MainCurrency: project.MainCurrency,
+			ProjectID:   project.ProjectID.String(),
+			Name:        project.Name,
+			Description: project.Description,
 			Owner: OwnerDTO{
 				PersonID:    project.Owner.PersonID.String(),
 				DisplayName: project.Owner.DisplayName,
-			},
-		}, nil
-	}
-}
-
-func makeUpdateProjectSettingsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.UpdateProjectCommand)
-
-		if err := svc.Update(ctx, command); err != nil {
-			return nil, err
-		}
-
-		p, err := svc.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
-		if err != nil {
-			return nil, err
-		}
-
-		return ProjectDTO{
-			ProjectID:    p.ProjectID.String(),
-			Name:         p.Name,
-			Description:  p.Description,
-			MainCurrency: p.MainCurrency,
-			Owner: OwnerDTO{
-				PersonID:    p.Owner.PersonID.String(),
-				DisplayName: p.Owner.DisplayName,
 			},
 		}, nil
 	}
@@ -383,7 +312,7 @@ func makeCreateTypeEndpoint(svc projecta.TypeService) endpoint.Endpoint {
 	}
 }
 
-func makeCreatePaymentEndpoint(svc projecta.PaymentService, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeCreatePaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		command := request.(projecta.CreatePaymentCommand)
 
@@ -393,29 +322,12 @@ func makeCreatePaymentEndpoint(svc projecta.PaymentService, rateProvider currenc
 			return nil, err
 		}
 
-		homeCurrency := expense.Project.MainCurrency
-		if homeCurrency == "" {
-			homeCurrency = "UAH"
-		}
-
-		homeAmount := expense.Amount.Amount()
-		if rateProvider != nil && expense.Amount.Currency().Code != homeCurrency {
-			converted, err := rateProvider.Convert(
-				currency.NewCurrency(expense.Amount.Amount(), expense.Amount.Currency().Code),
-				currency.NewCurrency(0, homeCurrency),
-			)
-			if err == nil {
-				homeAmount = converted.Amount
-			}
-		}
-
 		return PaymentDTO{
 			PaymentID: expense.ID.String(),
 			Project: ProjectDTO{
-				ProjectID:    expense.Project.ProjectID.String(),
-				Name:         expense.Project.Name,
-				Description:  expense.Project.Description,
-				MainCurrency: expense.Project.MainCurrency,
+				ProjectID:   expense.Project.ProjectID.String(),
+				Name:        expense.Project.Name,
+				Description: expense.Project.Description,
 				Owner: OwnerDTO{
 					PersonID:    expense.Owner.PersonID.String(),
 					DisplayName: expense.Owner.DisplayName,
@@ -434,13 +346,11 @@ func makeCreatePaymentEndpoint(svc projecta.PaymentService, rateProvider currenc
 					Name:       expense.Type.Category.Name,
 				},
 			},
-			Description:  expense.Description,
-			Amount:       expense.Amount.Amount(),
-			Currency:     expense.Amount.Currency().Code,
-			HomeAmount:   homeAmount,
-			HomeCurrency: homeCurrency,
-			PaymentDate:  expense.Date.Format(time.RFC3339),
-			Kind:         expense.Kind.String(),
+			Description: expense.Description,
+			Amount:      expense.Amount.Amount(),
+			Currency:    expense.Amount.Currency().Code,
+			PaymentDate: expense.Date.Format(time.RFC3339),
+			Kind:        expense.Kind.String(),
 		}, nil
 	}
 }
@@ -455,10 +365,9 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 
 		for _, p := range projects {
 			list = append(list, ProjectDTO{
-				ProjectID:    p.ProjectID.String(),
-				Name:         p.Name,
-				Description:  p.Description,
-				MainCurrency: p.MainCurrency,
+				ProjectID:   p.ProjectID.String(),
+				Name:        p.Name,
+				Description: p.Description,
 				Owner: OwnerDTO{
 					PersonID:    p.Owner.PersonID.String(),
 					DisplayName: p.Owner.DisplayName,
@@ -534,7 +443,7 @@ func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint 
 	}
 }
 
-func makeListPaymentsEndpoint(svc projecta.PaymentService, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeListPaymentsEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(projecta.PaymentCollectionFilter)
 
@@ -547,29 +456,12 @@ func makeListPaymentsEndpoint(svc projecta.PaymentService, rateProvider currency
 		var list []PaymentDTO = make([]PaymentDTO, 0)
 
 		for _, e := range collection.Elements() {
-			homeCurrency := e.Project.MainCurrency
-			if homeCurrency == "" {
-				homeCurrency = "UAH"
-			}
-
-			homeAmount := e.Amount.Amount()
-			if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
-				converted, err := rateProvider.Convert(
-					currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
-					currency.NewCurrency(0, homeCurrency),
-				)
-				if err == nil {
-					homeAmount = converted.Amount
-				}
-			}
-
 			list = append(list, PaymentDTO{
 				PaymentID: e.ID.String(),
 				Project: ProjectDTO{
-					ProjectID:    e.Project.ProjectID.String(),
-					Name:         e.Project.Name,
-					Description:  e.Project.Description,
-					MainCurrency: e.Project.MainCurrency,
+					ProjectID:   e.Project.ProjectID.String(),
+					Name:        e.Project.Name,
+					Description: e.Project.Description,
 					Owner: OwnerDTO{
 						PersonID:    e.Owner.PersonID.String(),
 						DisplayName: e.Owner.DisplayName,
@@ -588,13 +480,11 @@ func makeListPaymentsEndpoint(svc projecta.PaymentService, rateProvider currency
 						Name:       e.Type.Category.Name,
 					},
 				},
-				Description:  e.Description,
-				Amount:       e.Amount.Amount(),
-				Currency:     e.Amount.Currency().Code,
-				HomeAmount:   homeAmount,
-				HomeCurrency: homeCurrency,
-				PaymentDate:  e.Date.Format(time.RFC3339),
-				Kind:         e.Kind.String(),
+				Description: e.Description,
+				Amount:      e.Amount.Amount(),
+				Currency:    e.Amount.Currency().Code,
+				PaymentDate: e.Date.Format(time.RFC3339),
+				Kind:        e.Kind.String(),
 			})
 		}
 
@@ -609,27 +499,15 @@ func makeListPaymentsEndpoint(svc projecta.PaymentService, rateProvider currency
 	}
 }
 
-func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments projecta.PaymentService, assets asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeShowProjectTotalsEndpoint(payments projecta.PaymentService, assets asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		projectID := request.(uuid.UUID)
-
-		proj, err := projectSvc.FindOne(ctx, projecta.ProjectFilter{ProjectID: projectID})
-		if err != nil {
-			return nil, err
-		}
-
-		homeCurrency := proj.MainCurrency
-		if homeCurrency == "" {
-			homeCurrency = "UAH"
-		}
 
 		offset := 0
 		limit := 100
 		next := true
-		var totalPaymentsAmount int64
-		var totalAssetsAmount int64
-		hasPayments := false
-		hasAssets := false
+		var totalPayments *money.Money
+		var totalAssets *money.Money
 
 		for next {
 			page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
@@ -649,18 +527,19 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 			}
 
 			for _, e := range page.Elements() {
-				hasPayments = true
-				amount := e.Amount.Amount()
-				if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
-					converted, err := rateProvider.Convert(
-						currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
-						currency.NewCurrency(0, homeCurrency),
-					)
-					if err == nil {
-						amount = converted.Amount
+				if totalPayments == nil {
+					totalPayments = e.Amount
+				} else {
+					if totalPayments.Currency() != e.Amount.Currency() {
+						return nil, exceptions.NewInternalException("project payments currencies mismatch", nil)
+					}
+
+					totalPayments, err = totalPayments.Add(e.Amount)
+
+					if err != nil {
+						return nil, err
 					}
 				}
-				totalPaymentsAmount += amount
 			}
 
 			if len(page.Elements()) < limit {
@@ -691,18 +570,19 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 			}
 
 			for _, e := range page.Elements() {
-				hasAssets = true
-				price := e.Price().Amount()
-				if rateProvider != nil && e.Price().Currency().Code != homeCurrency {
-					converted, err := rateProvider.Convert(
-						currency.NewCurrency(e.Price().Amount(), e.Price().Currency().Code),
-						currency.NewCurrency(0, homeCurrency),
-					)
-					if err == nil {
-						price = converted.Amount
+				if totalAssets == nil {
+					totalAssets = e.Price()
+				} else {
+					if totalAssets.Currency() != e.Price().Currency() {
+						return nil, exceptions.NewInternalException("project assets currencies mismatch", nil)
+					}
+
+					totalAssets, err = totalAssets.Add(e.Price())
+
+					if err != nil {
+						return nil, err
 					}
 				}
-				totalAssetsAmount += price
 			}
 
 			if len(page.Elements()) < limit {
@@ -714,19 +594,25 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 
 		totals := make([]TotalDTO, 0)
 
-		if hasPayments {
+		if totalPayments != nil {
 			totals = append(totals, TotalDTO{
 				Title:    "Total Payments",
-				Amount:   totalPaymentsAmount,
-				Currency: homeCurrency,
+				Amount:   totalPayments.Amount(),
+				Currency: totalPayments.Currency().Code,
 			})
 		}
 
-		if hasAssets || hasPayments {
+		if totalAssets != nil {
+			var toalPaymentsAmount int64
+
+			if totalPayments != nil {
+				toalPaymentsAmount = totalPayments.Amount()
+			}
+
 			totals = append(totals, TotalDTO{
 				Title:    "Project Balance",
-				Amount:   totalPaymentsAmount - totalAssetsAmount,
-				Currency: homeCurrency,
+				Amount:   toalPaymentsAmount - totalAssets.Amount(),
+				Currency: totalAssets.Currency().Code,
 			})
 		}
 
@@ -769,27 +655,25 @@ func MakeProjectEndpoints(
 	typeService projecta.TypeService,
 	expenseService projecta.PaymentService,
 	assetService asset.Service,
-	rateProvider currency.CurrencyRateProvider,
 ) (ProjectEndpoints, error) {
 	return ProjectEndpoints{
-		CreateProject:         makeCreateProjectEndpoint(projectService),
-		UpdateProjectSettings: makeUpdateProjectSettingsEndpoint(projectService),
-		CreateCategory:        makeCreateCategoryEndpoint(categoryService),
-		CreateType:            makeCreateTypeEndpoint(typeService),
-		CreatePayment:         makeCreatePaymentEndpoint(expenseService, rateProvider),
-		ListProjects:          makeListProjectsEndpoint(projectService),
-		ListTypes:             makeListProjectTypesEndpoint(typeService),
-		ListCategories:        makeListCategoriesEndpoint(categoryService),
-		ListPayments:          makeListPaymentsEndpoint(expenseService, rateProvider),
-		ShowProjectTotals:     makeShowProjectTotalsEndpoint(projectService, expenseService, assetService, rateProvider),
-		RemoveType:            makeRemoveTypeEndpoint(typeService),
-		RemovePayment:         makeRemovePaymentEndpoint(expenseService),
-		CreateAsset:           makeCreateAssetEndpoint(assetService, rateProvider),
-		RemoveAsset:           makeRemoveAssetEndpoint(assetService),
-		ListAssets:            makeListAssetsEndpoint(assetService, rateProvider),
-		UpdateAsset:           makeUpdateAssetEndpoint(assetService),
-		GetAsset:              makeGetAssetEndpoint(assetService, rateProvider),
-		UpdatePayment:         makeUpdatePaymentEndpoint(expenseService),
-		GetPayment:            makeGetPaymentEndpoint(expenseService, rateProvider),
+		CreateProject:     makeCreateProjectEndpoint(projectService),
+		CreateCategory:    makeCreateCategoryEndpoint(categoryService),
+		CreateType:        makeCreateTypeEndpoint(typeService),
+		CreatePayment:     makeCreatePaymentEndpoint(expenseService),
+		ListProjects:      makeListProjectsEndpoint(projectService),
+		ListTypes:         makeListProjectTypesEndpoint(typeService),
+		ListCategories:    makeListCategoriesEndpoint(categoryService),
+		ListPayments:      makeListPaymentsEndpoint(expenseService),
+		ShowProjectTotals: makeShowProjectTotalsEndpoint(expenseService, assetService),
+		RemoveType:        makeRemoveTypeEndpoint(typeService),
+		RemovePayment:     makeRemovePaymentEndpoint(expenseService),
+		CreateAsset:       makeCreateAssetEndpoint(assetService),
+		RemoveAsset:       makeRemoveAssetEndpoint(assetService),
+		ListAssets:        makeListAssetsEndpoint(assetService),
+		UpdateAsset:       makeUpdateAssetEndpoint(assetService),
+		GetAsset:          makeGetAssetEndpoint(assetService),
+		UpdatePayment:     makeUpdatePaymentEndpoint(expenseService),
+		GetPayment:        makeGetPaymentEndpoint(expenseService),
 	}, nil
 }

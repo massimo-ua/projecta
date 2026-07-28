@@ -287,56 +287,35 @@ func TestProjectService(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error when repo FindOne returns unknown error")
 	}
+
+	// Test unimplemented method panics
+	defer func() { _ = recover() }()
+	_ = svc.Save(context.Background(), nil)
 }
 
-func TestProjectServiceUpdateAndRemove(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John"}
-	proj, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
+func TestUnimplementedPanics(t *testing.T) {
+	svc := projecta.NewProjectService(&mockProjectRepo{}, &mockPeopleService{})
+	typeSvc := projecta.NewTypeService(&mockTypeRepo{}, &mockCategoryRepo{}, &mockProjectRepo{})
 
-	projRepo := &mockProjectRepo{project: proj}
-	peopleSvc := &mockPeopleService{owner: owner}
-	svc := projecta.NewProjectService(projRepo, peopleSvc)
-
-	t.Run("Update success", func(t *testing.T) {
-		err := svc.Update(context.Background(), projecta.UpdateProjectCommand{
-			ProjectID:    proj.ProjectID,
-			Name:         "Updated Name",
-			Description:  "Updated Desc",
-			MainCurrency: "USD",
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if proj.Name != "Updated Name" || proj.Description != "Updated Desc" || proj.MainCurrency != "USD" {
-			t.Errorf("project fields were not updated: %+v", proj)
-		}
+	t.Run("ProjectService Remove panic", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("expected panic")
+			}
+		}()
+		_ = svc.Remove(context.Background(), projecta.RemoveProjectCommand{})
 	})
 
-	t.Run("Update FindOne error", func(t *testing.T) {
-		svcErr := projecta.NewProjectService(&mockProjectRepo{findErr: errors.New("find error")}, peopleSvc)
-		err := svcErr.Update(context.Background(), projecta.UpdateProjectCommand{ProjectID: proj.ProjectID})
-		if err == nil {
-			t.Errorf("expected findOne error")
-		}
-	})
-
-	t.Run("Remove success", func(t *testing.T) {
-		err := svc.Remove(context.Background(), projecta.RemoveProjectCommand{ProjectID: proj.ProjectID})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("Remove FindOne error", func(t *testing.T) {
-		svcErr := projecta.NewProjectService(&mockProjectRepo{findErr: errors.New("find error")}, peopleSvc)
-		err := svcErr.Remove(context.Background(), projecta.RemoveProjectCommand{ProjectID: proj.ProjectID})
-		if err == nil {
-			t.Errorf("expected findOne error")
-		}
+	t.Run("ProjectService Update panic", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("expected panic")
+			}
+		}()
+		_ = svc.Update(context.Background(), projecta.UpdateProjectCommand{})
 	})
 
 	t.Run("TypeService Update panic", func(t *testing.T) {
-		typeSvc := projecta.NewTypeService(&mockTypeRepo{}, &mockCategoryRepo{}, &mockProjectRepo{})
 		defer func() {
 			if r := recover(); r == nil {
 				t.Errorf("expected panic")
@@ -345,7 +324,6 @@ func TestProjectServiceUpdateAndRemove(t *testing.T) {
 		_ = typeSvc.Update(context.Background(), projecta.UpdateTypeCommand{})
 	})
 }
-
 
 func TestCategoryService(t *testing.T) {
 	owner := &projecta.Owner{PersonID: uuid.New()}
