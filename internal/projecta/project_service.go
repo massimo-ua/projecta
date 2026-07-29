@@ -77,3 +77,26 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 
 	return nil, exceptions.NewInternalException("failed to create project", err)
 }
+
+func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*Project, error) {
+	if token == uuid.Nil {
+		return nil, exceptions.NewValidationException("invalid share token", nil)
+	}
+
+	project, err := s.repository.FindByShareToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Owner.PersonID == personID {
+		return project, nil
+	}
+
+	err = s.repository.CreateShareRecord(ctx, project.ProjectID, personID)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to record project share", err)
+	}
+
+	project.IsShared = true
+	return project, nil
+}

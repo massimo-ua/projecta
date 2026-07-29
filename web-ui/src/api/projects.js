@@ -16,6 +16,9 @@ export class ProjectsRepository {
       name: item.name,
       description: item.description,
       mainCurrency: item.main_currency || 'UAH',
+      shareToken: item.share_token,
+      isShared: Boolean(item.is_shared),
+      owner: item.owner ? { id: item.owner.person_id, name: item.owner.display_name } : null,
     }));
   }
 
@@ -26,6 +29,9 @@ export class ProjectsRepository {
       name: response.name,
       description: response.description,
       mainCurrency: response.main_currency || 'UAH',
+      shareToken: response.share_token,
+      isShared: Boolean(response.is_shared),
+      owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
     };
   }
 
@@ -36,6 +42,22 @@ export class ProjectsRepository {
       name: response.name,
       description: response.description,
       mainCurrency: response.main_currency || 'UAH',
+      shareToken: response.share_token,
+      isShared: Boolean(response.is_shared),
+      owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
+    };
+  }
+
+  async acceptShare(shareToken) {
+    const response = await this.#request.post(`/projects/share/${shareToken}`);
+    return {
+      id: response.project_id,
+      name: response.name,
+      description: response.description,
+      mainCurrency: response.main_currency || 'UAH',
+      shareToken: response.share_token,
+      isShared: Boolean(response.is_shared),
+      owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
     };
   }
 
@@ -48,6 +70,9 @@ export class ProjectsRepository {
       name: response.name,
       description: response.description,
       mainCurrency: response.main_currency || 'UAH',
+      shareToken: response.share_token,
+      isShared: Boolean(response.is_shared),
+      owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
     };
   }
 

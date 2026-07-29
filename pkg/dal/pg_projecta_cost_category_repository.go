@@ -31,7 +31,7 @@ func (r *PgCostCategoryRepository) Find(ctx context.Context, filter projecta.Cat
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_cost_categories")
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_cost_categories.project_id")
-	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
+	qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(personID.String()), qb.Var(personID.String())))
 	if filter.Name != "" {
 		qb.Where(qb.Like("projecta_cost_categories.name", fmt.Sprintf("%s%%", filter.Name)))
 	}

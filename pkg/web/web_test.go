@@ -102,6 +102,12 @@ func (m *mockProjectService) Remove(ctx context.Context, command projecta.Remove
 func (m *mockProjectService) Update(ctx context.Context, command projecta.UpdateProjectCommand) error {
 	return m.err
 }
+func (m *mockProjectService) AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*projecta.Project, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.project, nil
+}
 
 type mockCategoryService struct {
 	cat *projecta.CostCategory

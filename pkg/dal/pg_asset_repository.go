@@ -226,7 +226,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	qb.From("projecta_assets")
 
 	if filter.OwnerID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_assets.owner_id", filter.OwnerID.String()))
+		qb.Where(fmt.Sprintf("(projecta_assets.owner_id = %s OR projecta_assets.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
 	}
 
 	if filter.ProjectID != uuid.Nil {

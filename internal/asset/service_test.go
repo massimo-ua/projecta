@@ -96,6 +96,15 @@ func (m *mockProjectRepo) FindOne(ctx context.Context, filter projecta.ProjectFi
 	}
 	return m.project, nil
 }
+func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.project, nil
+}
+func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+	return m.err
+}
 
 type mockPaymentRepo struct {
 	saveErr error

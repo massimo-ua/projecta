@@ -62,7 +62,7 @@ func (r *PgPaymentRepository) FindOne(ctx context.Context, filter projecta.Payme
 		qb.Where(qb.Equal("payment_id", filter.PaymentID.String()))
 	}
 
-	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
+	qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(personID.String()), qb.Var(personID.String())))
 
 	sql, args := qb.Build()
 
@@ -148,7 +148,7 @@ func (r *PgPaymentRepository) Save(ctx context.Context, expense *projecta.Paymen
 	)
 
 	qb.Where(qb.Equal("payment_id", expense.ID.String()))
-	qb.Where(qb.Equal("owner_id", personID.String()))
+	qb.Where(fmt.Sprintf("project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)", qb.Var(personID.String()), qb.Var(personID.String())))
 
 	sql, args := qb.Build()
 
@@ -232,7 +232,7 @@ func (r *PgPaymentRepository) Remove(ctx context.Context, expense *projecta.Paym
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_payments")
 	qb.Where(qb.Equal("payment_id", expense.ID.String()))
-	qb.Where(qb.Equal("owner_id", personID.String()))
+	qb.Where(fmt.Sprintf("project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)", qb.Var(personID.String()), qb.Var(personID.String())))
 	qb.Where(qb.Equal("project_id", expense.Project.ProjectID.String()))
 
 	sql, args := qb.Build()
@@ -256,7 +256,7 @@ func (r *PgPaymentRepository) Find(ctx context.Context, filter projecta.PaymentC
 	qb.Join("people", "people.person_id = projecta_payments.owner_id")
 	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 
-	qb.Where(qb.Equal("projecta_payments.owner_id", personID.String()))
+	qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(personID.String()), qb.Var(personID.String())))
 	qb.Where(qb.Equal("projecta_payments.project_id", filter.ProjectID.String()))
 
 	if filter.CategoryID != uuid.Nil {

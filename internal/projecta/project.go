@@ -18,6 +18,8 @@ type Project struct {
     Owner       *Owner
     StartDate   time.Time
     EndDate     time.Time
+    ShareToken  uuid.UUID
+    IsShared    bool
 }
 
 func (p *Project) IsOwnedBy(owner *Owner) bool {
@@ -36,5 +38,6 @@ func NewProject(id uuid.UUID, name string, description string, owner *Owner, sta
         Owner:       owner,
         StartDate:   startDate,
         EndDate:     endDate,
+        ShareToken:  uuid.New(),
     }, nil
 }

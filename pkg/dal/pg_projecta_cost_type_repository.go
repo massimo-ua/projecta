@@ -119,7 +119,7 @@ func (r *PgCostTypeRepository) Find(ctx context.Context, filter projecta.TypeCol
 	qb.From("projecta_cost_types")
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_cost_types.project_id")
 	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
-	qb.Where(qb.Equal("projecta_projects.owner_id", personID.String()))
+	qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(personID.String()), qb.Var(personID.String())))
 
 	if filter.ProjectID != uuid.Nil {
 		qb.Where(qb.Equal("projecta_cost_types.project_id", filter.ProjectID.String()))
