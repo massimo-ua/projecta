@@ -35,6 +35,34 @@ const projectSettingsContent = {
       en: 'Failed to update project settings',
       uk: 'Не вдалося оновити налаштування проєкту',
     }),
+    projectSharingTitle: t({
+      en: 'Project Sharing',
+      uk: 'Поширення проєкту',
+    }),
+    projectSharingDesc: t({
+      en: 'Share this link with team members to grant them access to this project.',
+      uk: 'Поділіться цим посиланням із членами команди, щоб надати їм доступ до цього проєкту.',
+    }),
+    shareableLinkLabel: t({
+      en: 'Shareable Link',
+      uk: 'Посилання для доступу',
+    }),
+    copyButton: t({
+      en: 'Copy',
+      uk: 'Скопіювати',
+    }),
+    copiedButton: t({
+      en: 'Copied',
+      uk: 'Скопійовано',
+    }),
+    shareLinkCopied: t({
+      en: 'Share link copied to clipboard!',
+      uk: 'Посилання на проєкт скопійовано в буфер обміну!',
+    }),
+    failedToCopyLink: t({
+      en: 'Failed to copy link',
+      uk: 'Не вдалося скопіювати посилання',
+    }),
   },
 };
 

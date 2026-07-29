@@ -5,13 +5,14 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Share2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { useLocale } from 'react-intlayer';
+import { useIntlayer, useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
 
 export function AcceptShare() {
   const { shareToken } = useParams();
   const navigate = useNavigate();
   const { locale } = useLocale();
+  const content = useIntlayer('accept-share');
   const [status, setStatus] = useState('loading'); // 'loading' | 'success' | 'error'
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -21,7 +22,7 @@ export function AcceptShare() {
     async function handleAcceptShare() {
       if (!shareToken) {
         setStatus('error');
-        setErrorMsg('No share token provided.');
+        setErrorMsg(String(content.noTokenProvided));
         return;
       }
 
@@ -29,7 +30,7 @@ export function AcceptShare() {
         const project = await projectsRepository.acceptShare(shareToken);
         if (isMounted) {
           setStatus('success');
-          toast.success(`Project "${project.name}" added to your list!`);
+          toast.success(`${String(content.projectWord)} "${project.name}" ${String(content.addedToList)}`);
           setTimeout(() => {
             navigate(getLocalizedUrl(`/projects/${project.id}`, locale), { replace: true });
           }, 1200);
@@ -37,7 +38,7 @@ export function AcceptShare() {
       } catch (err) {
         if (isMounted) {
           setStatus('error');
-          setErrorMsg(err.message || 'Failed to accept project share.');
+          setErrorMsg(err.message || String(content.failedToAcceptShare));
         }
       }
     }
@@ -47,7 +48,7 @@ export function AcceptShare() {
     return () => {
       isMounted = false;
     };
-  }, [shareToken, navigate, locale]);
+  }, [shareToken, navigate, locale, content]);
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-4">
@@ -59,14 +60,14 @@ export function AcceptShare() {
             {status === 'error' && <AlertCircle className="h-8 w-8 text-red-500" />}
           </div>
           <CardTitle className="text-xl font-bold">
-            {status === 'loading' && 'Joining Project...'}
-            {status === 'success' && 'Project Shared!'}
-            {status === 'error' && 'Unable to Join Project'}
+            {status === 'loading' && String(content.joiningProject)}
+            {status === 'success' && String(content.projectShared)}
+            {status === 'error' && String(content.unableToJoinProject)}
           </CardTitle>
           <CardDescription>
-            {status === 'loading' && 'Processing your invitation to collaborate on this project.'}
-            {status === 'success' && 'You now have access to this project. Redirecting...'}
-            {status === 'error' && (errorMsg || 'The share link may be invalid or expired.')}
+            {status === 'loading' && String(content.processingInvitation)}
+            {status === 'success' && String(content.accessGrantedRedirecting)}
+            {status === 'error' && (errorMsg || String(content.invalidOrExpiredLink))}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-2">
@@ -75,7 +76,7 @@ export function AcceptShare() {
               onClick={() => navigate(getLocalizedUrl('/projects', locale))}
               className="w-full"
             >
-              Back to Projects
+              {String(content.backToProjectsButton)}
             </Button>
           )}
         </CardContent>

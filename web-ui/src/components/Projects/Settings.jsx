@@ -77,10 +77,10 @@ export default function Settings() {
     if (!shareUrl) return;
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
-      toast.success('Share link copied to clipboard!');
+      toast.success(String(content.shareLinkCopied));
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
-      toast.error('Failed to copy link');
+      toast.error(String(content.failedToCopyLink));
     });
   };
 
@@ -138,15 +138,15 @@ export default function Settings() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Share2 className="h-4 w-4 text-primary" />
-            <CardTitle className="text-base">Project Sharing</CardTitle>
+            <CardTitle className="text-base">{String(content.projectSharingTitle)}</CardTitle>
           </div>
           <CardDescription>
-            Share this link with team members to grant them access to this project.
+            {String(content.projectSharingDesc)}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="share-url">Shareable Link</Label>
+            <Label htmlFor="share-url">{String(content.shareableLinkLabel)}</Label>
             <div className="flex gap-2">
               <Input
                 id="share-url"
@@ -161,7 +161,7 @@ export default function Settings() {
                 className="gap-2 shrink-0"
               >
                 {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? String(content.copiedButton) : String(content.copyButton)}
               </Button>
             </div>
           </div>

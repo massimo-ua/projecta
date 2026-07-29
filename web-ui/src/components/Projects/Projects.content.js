@@ -67,6 +67,30 @@ const projectsContent = {
       en: 'No description provided.',
       uk: 'Опис відсутній.',
     }),
+    shareTokenNotAvailable: t({
+      en: 'Share token not available',
+      uk: 'Токен поширення недоступний',
+    }),
+    shareLinkCopied: t({
+      en: 'Share link copied to clipboard!',
+      uk: 'Посилання на проєкт скопійовано в буфер обміну!',
+    }),
+    failedToCopyShareLink: t({
+      en: 'Failed to copy share link',
+      uk: 'Не вдалося скопіювати посилання',
+    }),
+    copyShareLinkTooltip: t({
+      en: 'Copy project share link',
+      uk: 'Скопіювати посилання на проєкт',
+    }),
+    sharedTag: t({
+      en: 'Shared',
+      uk: 'Спільний',
+    }),
+    sharedBy: t({
+      en: 'by',
+      uk: 'від',
+    }),
   },
 };
 

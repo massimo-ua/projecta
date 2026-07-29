@@ -19,16 +19,16 @@ export function ProjectCard({ project }) {
     e.preventDefault();
     e.stopPropagation();
     if (!project.shareToken) {
-      toast.error('Share token not available');
+      toast.error(String(content?.shareTokenNotAvailable || 'Share token not available'));
       return;
     }
     const shareUrl = `${window.location.origin}${getLocalizedUrl(`/projects/share/${project.shareToken}`, locale)}`;
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
-      toast.success('Share link copied to clipboard!');
+      toast.success(String(content?.shareLinkCopied || 'Share link copied to clipboard!'));
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
-      toast.error('Failed to copy share link');
+      toast.error(String(content?.failedToCopyShareLink || 'Failed to copy share link'));
     });
   };
 
@@ -52,7 +52,7 @@ export function ProjectCard({ project }) {
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-primary shrink-0"
               onClick={handleShare}
-              title="Copy project share link"
+              title={String(content?.copyShareLinkTooltip || 'Copy project share link')}
             >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Share2 className="h-4 w-4" />}
             </Button>
@@ -62,7 +62,7 @@ export function ProjectCard({ project }) {
           <div className="mb-2">
             <Badge variant="secondary" className="gap-1 text-xs font-normal bg-secondary/60">
               <Users className="h-3 w-3" />
-              Shared {project.owner?.name ? `by ${project.owner.name}` : ''}
+              {String(content?.sharedTag || 'Shared')} {project.owner?.name ? `${String(content?.sharedBy || 'by')} ${project.owner.name}` : ''}
             </Badge>
           </div>
         )}
