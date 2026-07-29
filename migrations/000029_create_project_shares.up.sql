@@ -1,5 +1,5 @@
-ALTER TABLE projecta_projects ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT gen_random_uuid();
-UPDATE projecta_projects SET share_token = gen_random_uuid() WHERE share_token IS NULL;
+ALTER TABLE projecta_projects ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT uuid_generate_v4();
+UPDATE projecta_projects SET share_token = uuid_generate_v4() WHERE share_token IS NULL;
 ALTER TABLE projecta_projects ALTER COLUMN share_token SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS projecta_project_shares
