@@ -120,6 +120,20 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodGet).Path("/projects/{project_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.GetProject),
+		DecodeGetProjectRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodPost).Path("/projects/share/{share_token}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.AcceptShare),
+		DecodeAcceptShareRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/categories").Handler(ht.NewServer(
 		loggedInOnly(projectEndpoints.CreateCategory),
 		DecodeCreateCategoryRequest,

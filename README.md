@@ -10,6 +10,10 @@
   - Create and manage projects easily.
   - Set primary project currencies and view live budget summaries.
 
+- **Project Sharing & Collaboration**:
+  - Share projects with team members via unique shareable links.
+  - Seamlessly join shared projects to collaborate on budgets, payments, and assets.
+
 - **Payments & Expense Tracking**:
   - Log income and expenses with detailed descriptions.
   - Group payments into customizable **Categories** and **Cost Types**.

@@ -14,6 +14,7 @@ import {
   Payments,
   UserProfileSettings,
   ErrorPage,
+  AcceptShare,
 } from '../components';
 
 const NotFoundRedirect = () => React.createElement(Navigate, { to: '/', replace: true });
@@ -29,6 +30,11 @@ const createRoutesForPrefix = (prefix) => [
     path: `${prefix}/projects`,
     Component: AuthenticatedOnly(Projects),
     exact: true,
+    errorElement,
+  },
+  {
+    path: `${prefix}/projects/share/:shareToken`,
+    Component: AuthenticatedOnly(AcceptShare),
     errorElement,
   },
   {

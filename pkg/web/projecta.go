@@ -46,6 +46,8 @@ type ProjectDTO struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Owner       OwnerDTO `json:"owner"`
+	ShareToken  string   `json:"share_token,omitempty"`
+	IsShared    bool     `json:"is_shared,omitempty"`
 }
 
 type CategoryDTO struct {
@@ -81,6 +83,8 @@ type PaymentDTO struct {
 
 type ProjectEndpoints struct {
 	CreateProject     endpoint.Endpoint
+	GetProject        endpoint.Endpoint
+	AcceptShare       endpoint.Endpoint
 	CreateCategory    endpoint.Endpoint
 	CreateType        endpoint.Endpoint
 	CreatePayment     endpoint.Endpoint
@@ -272,6 +276,8 @@ func makeCreateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 				PersonID:    project.Owner.PersonID.String(),
 				DisplayName: project.Owner.DisplayName,
 			},
+			ShareToken:  project.ShareToken.String(),
+			IsShared:    project.IsShared,
 		}, nil
 	}
 }
@@ -372,6 +378,8 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 					PersonID:    p.Owner.PersonID.String(),
 					DisplayName: p.Owner.DisplayName,
 				},
+				ShareToken:  p.ShareToken.String(),
+				IsShared:    p.IsShared,
 			})
 		}
 
@@ -649,6 +657,95 @@ func makeRemovePaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 	}
 }
 
+type AcceptShareCommand struct {
+	ShareToken uuid.UUID
+	PersonID   uuid.UUID
+}
+
+func DecodeAcceptShareRequest(ctx context.Context, r *http.Request) (any, error) {
+	vars := mux.Vars(r)
+	tokenStr, ok := vars["share_token"]
+	if !ok {
+		return nil, exceptions.NewValidationException("share token is required", nil)
+	}
+
+	shareToken, err := uuid.Parse(tokenStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid share token", err)
+	}
+
+	personID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
+	if !ok {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	}
+
+	return AcceptShareCommand{
+		ShareToken: shareToken,
+		PersonID:   personID,
+	}, nil
+}
+
+func DecodeGetProjectRequest(ctx context.Context, r *http.Request) (any, error) {
+	vars := mux.Vars(r)
+	projectID, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("project id is required", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	return projecta.ProjectFilter{
+		ProjectID: projectUUID,
+	}, nil
+}
+
+func makeGetProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		filter := request.(projecta.ProjectFilter)
+		project, err := svc.FindOne(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+
+		return ProjectDTO{
+			ProjectID:   project.ProjectID.String(),
+			Name:        project.Name,
+			Description: project.Description,
+			Owner: OwnerDTO{
+				PersonID:    project.Owner.PersonID.String(),
+				DisplayName: project.Owner.DisplayName,
+			},
+			ShareToken:  project.ShareToken.String(),
+			IsShared:    project.IsShared,
+		}, nil
+	}
+}
+
+func makeAcceptShareEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		cmd := request.(AcceptShareCommand)
+		project, err := svc.AcceptShare(ctx, cmd.ShareToken, cmd.PersonID)
+		if err != nil {
+			return nil, err
+		}
+
+		return ProjectDTO{
+			ProjectID:   project.ProjectID.String(),
+			Name:        project.Name,
+			Description: project.Description,
+			Owner: OwnerDTO{
+				PersonID:    project.Owner.PersonID.String(),
+				DisplayName: project.Owner.DisplayName,
+			},
+			ShareToken:  project.ShareToken.String(),
+			IsShared:    project.IsShared,
+		}, nil
+	}
+}
+
 func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
@@ -658,6 +755,8 @@ func MakeProjectEndpoints(
 ) (ProjectEndpoints, error) {
 	return ProjectEndpoints{
 		CreateProject:     makeCreateProjectEndpoint(projectService),
+		GetProject:        makeGetProjectEndpoint(projectService),
+		AcceptShare:       makeAcceptShareEndpoint(projectService),
 		CreateCategory:    makeCreateCategoryEndpoint(categoryService),
 		CreateType:        makeCreateTypeEndpoint(typeService),
 		CreatePayment:     makeCreatePaymentEndpoint(expenseService),

@@ -141,6 +141,15 @@ func (m *mockProjectRepo) Create(ctx context.Context, p *projecta.Project) error
 }
 func (m *mockProjectRepo) Update(ctx context.Context, p *projecta.Project) error { return nil }
 func (m *mockProjectRepo) Remove(ctx context.Context, p *projecta.Project) error { return nil }
+func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
+	if m.findErr != nil {
+		return nil, m.findErr
+	}
+	return m.project, nil
+}
+func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+	return m.createErr
+}
 
 type mockCategoryRepo struct {
 	cat        *projecta.CostCategory
@@ -323,6 +332,38 @@ func TestUnimplementedPanics(t *testing.T) {
 		}()
 		_ = typeSvc.Update(context.Background(), projecta.UpdateTypeCommand{})
 	})
+}
+
+func TestProjectSharing(t *testing.T) {
+	ownerID := uuid.New()
+	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "Owner"}
+	proj, _ := projecta.NewProject(uuid.New(), "Shared Project", "Desc", owner, time.Now(), time.Now())
+	projRepo := &mockProjectRepo{project: proj}
+	svc := projecta.NewProjectService(projRepo, &mockPeopleService{owner: owner})
+
+	// AcceptShare by owner
+	p, err := svc.AcceptShare(context.Background(), proj.ShareToken, ownerID)
+	if err != nil || p == nil {
+		t.Fatalf("AcceptShare owner error: %v", err)
+	}
+
+	// AcceptShare by non-owner user
+	recipientID := uuid.New()
+	pShared, err := svc.AcceptShare(context.Background(), proj.ShareToken, recipientID)
+	if err != nil || pShared == nil {
+		t.Fatalf("AcceptShare recipient error: %v", err)
+	}
+	if !pShared.IsShared {
+		t.Errorf("expected IsShared to be true for recipient")
+	}
+
+	// AcceptShare with error
+	errRepo := &mockProjectRepo{findErr: errors.New("not found")}
+	svcErr := projecta.NewProjectService(errRepo, &mockPeopleService{owner: owner})
+	_, err = svcErr.AcceptShare(context.Background(), uuid.New(), recipientID)
+	if err == nil {
+		t.Errorf("expected error when share token not found")
+	}
 }
 
 func TestCategoryService(t *testing.T) {

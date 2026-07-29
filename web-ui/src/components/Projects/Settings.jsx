@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useIntlayer } from 'react-intlayer';
+import { useIntlayer, useLocale } from 'react-intlayer';
+import { getLocalizedUrl } from 'intlayer';
 import { projectsRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -14,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { Loader2, Settings2 } from 'lucide-react';
+import { Loader2, Settings2, Share2, Check, Copy } from 'lucide-react';
 
 const SUPPORTED_CURRENCIES = [
   { code: 'UAH', name: 'Ukrainian Hryvnia (UAH ₴)' },
@@ -25,10 +27,13 @@ const SUPPORTED_CURRENCIES = [
 
 export default function Settings() {
   const content = useIntlayer('project-settings');
+  const { locale } = useLocale();
   const { projectId } = useParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mainCurrency, setMainCurrency] = useState('UAH');
+  const [project, setProject] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -36,8 +41,11 @@ export default function Settings() {
       .getProjects(100, 0)
       .then((projects) => {
         const current = projects.find((p) => p.id === projectId);
-        if (current && current.mainCurrency) {
-          setMainCurrency(current.mainCurrency);
+        if (current) {
+          setProject(current);
+          if (current.mainCurrency) {
+            setMainCurrency(current.mainCurrency);
+          }
         }
       })
       .catch((err) => {
@@ -59,6 +67,21 @@ export default function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const shareUrl = project?.shareToken
+    ? `${window.location.origin}${getLocalizedUrl(`/projects/share/${project.shareToken}`, locale)}`
+    : '';
+
+  const handleCopyShareUrl = () => {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      toast.success('Share link copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      toast.error('Failed to copy link');
+    });
   };
 
   if (loading) {
@@ -108,6 +131,40 @@ export default function Settings() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Share2 className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base">Project Sharing</CardTitle>
+          </div>
+          <CardDescription>
+            Share this link with team members to grant them access to this project.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="share-url">Shareable Link</Label>
+            <div className="flex gap-2">
+              <Input
+                id="share-url"
+                readOnly
+                value={shareUrl}
+                className="font-mono text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCopyShareUrl}
+                className="gap-2 shrink-0"
+              >
+                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
