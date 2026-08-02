@@ -21,7 +21,7 @@ type ProjectService interface {
 	FindOne(ctx context.Context, filter ProjectFilter) (*Project, error)
 	Create(ctx context.Context, command CreateProjectCommand) (*Project, error)
 	Remove(ctx context.Context, command RemoveProjectCommand) error
-	Update(ctx context.Context, command UpdateProjectCommand) error
+	Update(ctx context.Context, command UpdateProjectCommand) (*Project, error)
 	AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*Project, error)
 }
 

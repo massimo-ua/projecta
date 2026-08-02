@@ -4,7 +4,7 @@ import { projectsRepository } from '../../api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Share2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
 
@@ -14,6 +14,7 @@ export function AcceptShare() {
   const { locale } = useLocale();
   const content = useIntlayer('accept-share');
   const [status, setStatus] = useState('loading'); // 'loading' | 'success' | 'error'
+  const [isOwner, setIsOwner] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -29,8 +30,14 @@ export function AcceptShare() {
       try {
         const project = await projectsRepository.acceptShare(shareToken);
         if (isMounted) {
+          const ownerState = !project.isShared;
+          setIsOwner(ownerState);
           setStatus('success');
-          toast.success(`${String(content.projectWord)} "${project.name}" ${String(content.addedToList)}`);
+          if (ownerState) {
+            toast.info(`${String(content.projectWord)} "${project.name}": ${String(content.alreadyOwnerToast)}`);
+          } else {
+            toast.success(`${String(content.projectWord)} "${project.name}" ${String(content.addedToList)}`);
+          }
           setTimeout(() => {
             navigate(getLocalizedUrl(`/projects/${project.id}`, locale), { replace: true });
           }, 1200);
@@ -66,7 +73,7 @@ export function AcceptShare() {
           </CardTitle>
           <CardDescription>
             {status === 'loading' && String(content.processingInvitation)}
-            {status === 'success' && String(content.accessGrantedRedirecting)}
+            {status === 'success' && (isOwner ? String(content.alreadyOwner) : String(content.accessGrantedRedirecting))}
             {status === 'error' && (errorMsg || String(content.invalidOrExpiredLink))}
           </CardDescription>
         </CardHeader>

@@ -45,6 +45,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		"people.last_name",
 		"people.display_name",
 		"projecta_projects.share_token",
+		"projecta_projects.main_currency",
 	)
 	qb.Join("people", "people.person_id = projecta_projects.owner_id")
 
@@ -71,6 +72,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		lastName      string
 		displayName   types.NullString
 		shareTokenStr string
+		mainCurrency  types.NullString
 	)
 
 	if err := r.db.QueryRow(
@@ -88,6 +90,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		&lastName,
 		&displayName,
 		&shareTokenStr,
+		&mainCurrency,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
@@ -96,7 +99,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		return nil, err
 	}
 
-	p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, shareTokenStr)
+	p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +125,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		"people.last_name",
 		"people.display_name",
 		"projecta_projects.share_token",
+		"projecta_projects.main_currency",
 	)
 	qb.Join("people", "people.person_id = projecta_projects.owner_id")
 	qb.Where(qb.Equal("share_token", token.String()))
@@ -139,6 +143,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		lastName      string
 		displayName   types.NullString
 		shareTokenStr string
+		mainCurrency  types.NullString
 	)
 
 	if err := r.db.QueryRow(ctx, sql, args...).Scan(
@@ -152,6 +157,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		&lastName,
 		&displayName,
 		&shareTokenStr,
+		&mainCurrency,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
@@ -159,7 +165,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		return nil, err
 	}
 
-	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, shareTokenStr)
+	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
 }
 
 func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
@@ -180,6 +186,11 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 		project.ShareToken = uuid.New()
 	}
 
+	mainCurrency := project.MainCurrency
+	if mainCurrency == "" {
+		mainCurrency = "UAH"
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_projects")
 	qb.Cols(
@@ -190,6 +201,7 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 		"started_at",
 		"ended_at",
 		"share_token",
+		"main_currency",
 	)
 	qb.Values(
 		project.ProjectID.String(),
@@ -199,6 +211,7 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 		project.StartDate,
 		project.EndDate,
 		project.ShareToken.String(),
+		mainCurrency,
 	)
 
 	sql, args := qb.Build()
@@ -209,6 +222,11 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 }
 
 func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
+	mainCurrency := project.MainCurrency
+	if mainCurrency == "" {
+		mainCurrency = "UAH"
+	}
+
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_projects")
 	qb.Set(
@@ -217,6 +235,7 @@ func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Proj
 		qb.Assign("owner_id", project.Owner.PersonID.String()),
 		qb.Assign("started_at", project.StartDate),
 		qb.Assign("ended_at", project.EndDate),
+		qb.Assign("main_currency", mainCurrency),
 	)
 	qb.Where(qb.Equal("project_id", project.ProjectID.String()))
 	qb.Where(qb.Equal("owner_id", project.Owner.PersonID.String()))
@@ -261,6 +280,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 		"people.last_name",
 		"people.display_name",
 		"projecta_projects.share_token",
+		"projecta_projects.main_currency",
 	)
 	qb.Join("people", "people.person_id = projecta_projects.owner_id")
 
@@ -297,6 +317,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			lastName      string
 			displayName   types.NullString
 			shareTokenStr string
+			mainCurrency  types.NullString
 		)
 
 		if err = rows.Scan(
@@ -310,11 +331,12 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 			&lastName,
 			&displayName,
 			&shareTokenStr,
+			&mainCurrency,
 		); err != nil {
 			return nil, err
 		}
 
-		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, shareTokenStr)
+		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
 
 		if err != nil {
 			return nil, err
@@ -328,7 +350,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 	return projects, nil
 }
 
-func toProject(projectID, name, description, ownerID, firstName, lastName, displayName string, startedAt, enddedAt time.Time, shareToken ...string) (*projecta.Project, error) {
+func toProject(projectID, name, description, ownerID, firstName, lastName, displayName string, startedAt, enddedAt time.Time, mainCurrency string, shareToken ...string) (*projecta.Project, error) {
 	person, err := people.NewPerson(
 		uuid.MustParse(ownerID),
 		firstName,
@@ -351,6 +373,7 @@ func toProject(projectID, name, description, ownerID, firstName, lastName, displ
 		},
 		startedAt,
 		enddedAt,
+		mainCurrency,
 	)
 
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"net/http"
 )
 
@@ -54,6 +55,7 @@ func MakeHTTPHandler(
 	typeService projecta.TypeService,
 	expenseService projecta.PaymentService,
 	assetService asset.Service,
+	rateProvider currency.CurrencyRateProvider,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
@@ -64,6 +66,7 @@ func MakeHTTPHandler(
 		typeService,
 		expenseService,
 		assetService,
+		rateProvider,
 	)
 
 	if err != nil {
@@ -123,6 +126,13 @@ func MakeHTTPHandler(
 	r.Methods(http.MethodGet).Path("/projects/{project_id}").Handler(ht.NewServer(
 		loggedInOnly(projectEndpoints.GetProject),
 		DecodeGetProjectRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodPatch).Path("/projects/{project_id}").Handler(ht.NewServer(
+		loggedInOnly(projectEndpoints.UpdateProject),
+		decodeUpdateProjectRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
