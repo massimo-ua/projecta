@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"net/http"
 	"time"
 )
@@ -136,7 +137,7 @@ func decodeGetPaymentRequest(_ context.Context, r *http.Request) (interface{}, e
 	}, nil
 }
 
-func makeGetPaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
+func makeGetPaymentEndpoint(svc projecta.PaymentService, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(projecta.PaymentFilter)
 
@@ -146,35 +147,6 @@ func makeGetPaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
 			return nil, err
 		}
 
-		return PaymentDTO{
-			PaymentID: p.ID.String(),
-			Project: ProjectDTO{
-				ProjectID:   p.Project.ProjectID.String(),
-				Name:        p.Project.Name,
-				Description: p.Project.Description,
-				Owner: OwnerDTO{
-					PersonID:    p.Owner.PersonID.String(),
-					DisplayName: p.Owner.DisplayName,
-				},
-			},
-			Owner: OwnerDTO{
-				PersonID:    p.Owner.PersonID.String(),
-				DisplayName: p.Owner.DisplayName,
-			},
-			Type: TypeDTO{
-				TypeID:      p.Type.ID.String(),
-				Name:        p.Type.Name,
-				Description: p.Type.Description,
-				Category: TypeCategoryDTO{
-					CategoryID: p.Type.Category.ID.String(),
-					Name:       p.Type.Category.Name,
-				},
-			},
-			Description: p.Description,
-			Amount:      p.Amount.Amount(),
-			Currency:    p.Amount.Currency().Code,
-			PaymentDate: p.Date.Format(time.RFC3339),
-			Kind:        p.Kind.String(),
-		}, nil
+		return toPaymentDTO(p, rateProvider), nil
 	}
 }

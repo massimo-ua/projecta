@@ -34,10 +34,11 @@ type CreateProjectCommand struct {
 }
 
 type UpdateProjectCommand struct {
-	ProjectID   uuid.UUID
-	PersonID    uuid.UUID
-	Name        string
-	Description string
+	ProjectID    uuid.UUID
+	PersonID     uuid.UUID
+	Name         string
+	Description  string
+	MainCurrency string
 }
 
 type RemoveProjectCommand struct {

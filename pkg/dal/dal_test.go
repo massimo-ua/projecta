@@ -431,7 +431,7 @@ func TestPgProjectRepository(t *testing.T) {
 	})
 
 	t.Run("toProject test", func(t *testing.T) {
-		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now)
+		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH")
 		if err != nil || p == nil {
 			t.Errorf("toProject error: %v", err)
 		}
@@ -766,7 +766,7 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		}
 
 		// toProject with valid fields
-		p1, err := toProject(pID.String(), "Project 1", "Description", ownerID.String(), "John", "Doe", "J.D.", now, now)
+		p1, err := toProject(pID.String(), "Project 1", "Description", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH")
 		if err != nil || p1 == nil {
 			t.Errorf("toProject error: %v", err)
 		}

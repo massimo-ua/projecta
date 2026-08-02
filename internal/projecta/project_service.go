@@ -31,9 +31,31 @@ func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCo
 	panic("implement me")
 }
 
-func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCommand) error {
-	//TODO implement me
-	panic("implement me")
+func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCommand) (*Project, error) {
+	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID})
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("project not found", err)
+		}
+		return nil, exceptions.NewInternalException("failed to find project", err)
+	}
+
+	if command.Name != "" {
+		p.Name = command.Name
+	}
+	if command.Description != "" {
+		p.Description = command.Description
+	}
+	if command.MainCurrency != "" {
+		p.MainCurrency = command.MainCurrency
+	}
+
+	err = s.repository.Update(ctx, p)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to update project", err)
+	}
+
+	return p, nil
 }
 
 func NewProjectService(repository ProjectRepository, peopleService PeopleService) *ProjectServiceImpl {

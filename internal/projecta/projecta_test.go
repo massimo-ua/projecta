@@ -122,6 +122,7 @@ type mockProjectRepo struct {
 	project   *projecta.Project
 	findErr   error
 	createErr error
+	updateErr error
 }
 
 func (m *mockProjectRepo) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
@@ -139,7 +140,7 @@ func (m *mockProjectRepo) FindOne(ctx context.Context, filter projecta.ProjectFi
 func (m *mockProjectRepo) Create(ctx context.Context, p *projecta.Project) error {
 	return m.createErr
 }
-func (m *mockProjectRepo) Update(ctx context.Context, p *projecta.Project) error { return nil }
+func (m *mockProjectRepo) Update(ctx context.Context, p *projecta.Project) error { return m.updateErr }
 func (m *mockProjectRepo) Remove(ctx context.Context, p *projecta.Project) error { return nil }
 func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
 	if m.findErr != nil {
@@ -297,6 +298,29 @@ func TestProjectService(t *testing.T) {
 		t.Errorf("expected error when repo FindOne returns unknown error")
 	}
 
+	// Update project
+	pUpdated, err := svc.Update(context.Background(), projecta.UpdateProjectCommand{
+		ProjectID:    proj.ProjectID,
+		Name:         "Updated Project",
+		Description:  "Updated Desc",
+		MainCurrency: "USD",
+	})
+	if err != nil || pUpdated.MainCurrency != "USD" || pUpdated.Name != "Updated Project" {
+		t.Errorf("Update error or unexpected fields: %v", err)
+	}
+
+	// Update error branches
+	_, err = svcNew.Update(context.Background(), projecta.UpdateProjectCommand{ProjectID: uuid.New()})
+	if err == nil {
+		t.Errorf("expected error when FindOne returns error")
+	}
+
+	svcSaveErr := projecta.NewProjectService(&mockProjectRepo{project: proj, updateErr: errors.New("err")}, peopleSvc)
+	_, err = svcSaveErr.Update(context.Background(), projecta.UpdateProjectCommand{ProjectID: proj.ProjectID})
+	if err == nil {
+		t.Errorf("expected error when repo Update fails")
+	}
+
 	// Test unimplemented method panics
 	defer func() { _ = recover() }()
 	_ = svc.Save(context.Background(), nil)
@@ -313,15 +337,6 @@ func TestUnimplementedPanics(t *testing.T) {
 			}
 		}()
 		_ = svc.Remove(context.Background(), projecta.RemoveProjectCommand{})
-	})
-
-	t.Run("ProjectService Update panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic")
-			}
-		}()
-		_ = svc.Update(context.Background(), projecta.UpdateProjectCommand{})
 	})
 
 	t.Run("TypeService Update panic", func(t *testing.T) {

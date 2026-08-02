@@ -15,7 +15,7 @@ export class ProjectsRepository {
       id: item.project_id,
       name: item.name,
       description: item.description,
-      mainCurrency: item.main_currency || 'UAH',
+      mainCurrency: item.mainCurrency || 'UAH',
       shareToken: item.share_token,
       isShared: Boolean(item.is_shared),
       owner: item.owner ? { id: item.owner.person_id, name: item.owner.display_name } : null,
@@ -28,7 +28,7 @@ export class ProjectsRepository {
       id: response.project_id,
       name: response.name,
       description: response.description,
-      mainCurrency: response.main_currency || 'UAH',
+      mainCurrency: response.mainCurrency || 'UAH',
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
@@ -41,7 +41,7 @@ export class ProjectsRepository {
       id: response.project_id,
       name: response.name,
       description: response.description,
-      mainCurrency: response.main_currency || 'UAH',
+      mainCurrency: response.mainCurrency || 'UAH',
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
@@ -54,7 +54,7 @@ export class ProjectsRepository {
       id: response.project_id,
       name: response.name,
       description: response.description,
-      mainCurrency: response.main_currency || 'UAH',
+      mainCurrency: response.mainCurrency || 'UAH',
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
@@ -63,13 +63,13 @@ export class ProjectsRepository {
 
   async updateProjectSettings(projectId, { mainCurrency }) {
     const response = await this.#request.patch(`/projects/${projectId}`, {
-      main_currency: mainCurrency,
+      mainCurrency,
     });
     return {
       id: response.project_id,
       name: response.name,
       description: response.description,
-      mainCurrency: response.main_currency || 'UAH',
+      mainCurrency: response.mainCurrency || 'UAH',
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,

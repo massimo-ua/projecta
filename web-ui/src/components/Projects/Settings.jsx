@@ -152,7 +152,8 @@ export default function Settings() {
                 id="share-url"
                 readOnly
                 value={shareUrl}
-                className="font-mono text-xs"
+                onClick={(e) => e.target.select()}
+                className="font-mono text-xs bg-muted text-muted-foreground cursor-default focus-visible:ring-0 select-all"
               />
               <Button
                 type="button"

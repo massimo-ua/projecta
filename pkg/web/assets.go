@@ -15,18 +15,68 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type AssetDTO struct {
-	AssetID     string     `json:"asset_id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Price       int64      `json:"price"`
-	Currency    string     `json:"currency"`
-	AcquiredAt  string     `json:"acquired_at"`
-	Owner       OwnerDTO   `json:"owner"`
-	Project     ProjectDTO `json:"project"`
-	Type        TypeDTO    `json:"type"`
+	AssetID      string     `json:"asset_id"`
+	Name         string     `json:"name"`
+	Description  string     `json:"description"`
+	Price        int64      `json:"price"`
+	Currency     string     `json:"currency"`
+	HomeAmount   int64      `json:"home_amount,omitempty"`
+	HomeCurrency string     `json:"home_currency,omitempty"`
+	AcquiredAt   string     `json:"acquired_at"`
+	Owner        OwnerDTO   `json:"owner"`
+	Project      ProjectDTO `json:"project"`
+	Type         TypeDTO    `json:"type"`
+}
+
+func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) AssetDTO {
+	if a == nil {
+		return AssetDTO{}
+	}
+	projDTO := toProjectDTO(a.Project())
+	homeCurrency := projDTO.MainCurrency
+	if homeCurrency == "" {
+		homeCurrency = "UAH"
+	}
+
+	homeAmount := a.Price().Amount()
+	if rateProvider != nil && a.Price().Currency().Code != homeCurrency {
+		converted, err := rateProvider.Convert(
+			currency.NewCurrency(a.Price().Amount(), a.Price().Currency().Code),
+			currency.NewCurrency(0, homeCurrency),
+		)
+		if err == nil {
+			homeAmount = converted.Amount
+		}
+	}
+
+	owner := OwnerDTO{
+		PersonID:    a.Owner().PersonID.String(),
+		DisplayName: a.Owner().DisplayName,
+	}
+	return AssetDTO{
+		AssetID:      a.ID().String(),
+		Name:         a.Name(),
+		Description:  a.Description(),
+		Price:        a.Price().Amount(),
+		Currency:     a.Price().Currency().Code,
+		HomeAmount:   homeAmount,
+		HomeCurrency: homeCurrency,
+		AcquiredAt:   a.AcquiredAt().Format(time.RFC3339),
+		Owner:        owner,
+		Project:      projDTO,
+		Type: TypeDTO{
+			TypeID: a.Type().ID.String(),
+			Name:   a.Type().Name,
+			Category: TypeCategoryDTO{
+				CategoryID: a.Type().Category.ID.String(),
+				Name:       a.Type().Category.Name,
+			},
+		},
+	}
 }
 
 type CreateAssetDTO struct {
@@ -286,7 +336,7 @@ func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, e
 	return filter, nil
 }
 
-func makeGetAssetEndpoint(s asset.Service) endpoint.Endpoint {
+func makeGetAssetEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(asset.Filter)
 
@@ -296,45 +346,11 @@ func makeGetAssetEndpoint(s asset.Service) endpoint.Endpoint {
 			return nil, err
 		}
 
-		owner := OwnerDTO{
-			PersonID:    a.Owner().PersonID.String(),
-			DisplayName: a.Owner().DisplayName,
-		}
-
-		category := CategoryDTO{
-			CategoryID: a.Type().Category.ID.String(),
-			Name:       a.Type().Category.Name,
-		}
-
-		costType := TypeDTO{
-			TypeID:      a.Type().ID.String(),
-			Name:        a.Type().Name,
-			Description: a.Type().Description,
-			Category: TypeCategoryDTO{
-				CategoryID: category.CategoryID,
-				Name:       category.Name,
-			}}
-
-		return AssetDTO{
-			AssetID:     a.ID().String(),
-			Name:        a.Name(),
-			Description: a.Description(),
-			Price:       a.Price().Amount(),
-			Currency:    a.Price().Currency().Code,
-			AcquiredAt:  a.AcquiredAt().Format(time.RFC3339),
-			Owner:       owner,
-			Type:        costType,
-			Project: ProjectDTO{
-				ProjectID:   a.Project().ProjectID.String(),
-				Name:        a.Project().Name,
-				Description: a.Project().Description,
-				Owner:       owner,
-			},
-		}, nil
+		return toAssetDTO(a, rateProvider), nil
 	}
 }
 
-func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
+func makeCreateAssetEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		cmd := request.(asset.CreateAssetCommand)
 		a, err := s.Create(ctx, cmd)
@@ -343,41 +359,7 @@ func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 			return nil, err
 		}
 
-		owner := OwnerDTO{
-			PersonID:    a.Owner().PersonID.String(),
-			DisplayName: a.Owner().DisplayName,
-		}
-
-		category := CategoryDTO{
-			CategoryID:  a.Type().Category.ID.String(),
-			Name:        a.Type().Category.Name,
-			Description: a.Type().Category.Description,
-		}
-
-		return AssetDTO{
-			AssetID:     a.ID().String(),
-			Name:        a.Name(),
-			Description: a.Description(),
-			Price:       a.Price().Amount(),
-			Currency:    a.Price().Currency().Code,
-			AcquiredAt:  a.AcquiredAt().Format(time.RFC3339),
-			Owner:       owner,
-			Project: ProjectDTO{
-				ProjectID:   a.Project().ProjectID.String(),
-				Name:        a.Project().Name,
-				Description: a.Project().Description,
-				Owner:       owner,
-			},
-			Type: TypeDTO{
-				TypeID:      a.Type().ID.String(),
-				Name:        a.Type().Name,
-				Description: a.Type().Description,
-				Category: TypeCategoryDTO{
-					CategoryID: category.CategoryID,
-					Name:       category.Name,
-				},
-			},
-		}, nil
+		return toAssetDTO(a, rateProvider), nil
 	}
 }
 
@@ -407,7 +389,7 @@ func makeRemoveAssetEndpoint(svc asset.Service) endpoint.Endpoint {
 	}
 }
 
-func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
+func makeListAssetsEndpoint(svc asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(asset.CollectionFilter)
 
@@ -420,41 +402,7 @@ func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
 		var list []AssetDTO = make([]AssetDTO, 0)
 
 		for _, e := range collection.Elements() {
-			owner := OwnerDTO{
-				PersonID:    e.Owner().PersonID.String(),
-				DisplayName: e.Owner().DisplayName,
-			}
-
-			category := CategoryDTO{
-				CategoryID:  e.Type().Category.ID.String(),
-				Name:        e.Type().Category.Name,
-				Description: e.Type().Category.Description,
-			}
-
-			list = append(list, AssetDTO{
-				AssetID: e.ID().String(),
-				Project: ProjectDTO{
-					ProjectID:   e.Project().ProjectID.String(),
-					Name:        e.Project().Name,
-					Description: e.Project().Description,
-					Owner:       owner,
-				},
-				Owner: owner,
-				Type: TypeDTO{
-					TypeID:      e.Type().ID.String(),
-					Name:        e.Type().Name,
-					Description: e.Type().Description,
-					Category: TypeCategoryDTO{
-						CategoryID: category.CategoryID,
-						Name:       category.Name,
-					},
-				},
-				Name:        e.Name(),
-				Description: e.Description(),
-				Price:       e.Price().Amount(),
-				Currency:    e.Price().Currency().Code,
-				AcquiredAt:  e.AcquiredAt().Format(time.RFC3339),
-			})
+			list = append(list, toAssetDTO(e, rateProvider))
 		}
 
 		return ListAssetsResponse{

@@ -20,8 +20,16 @@ const acceptShareContent = {
       uk: 'Обробка вашого запрошення для спільної роботи над цим проєктом.',
     }),
     accessGrantedRedirecting: t({
-      en: 'You now have access to this project. Redirecting...',
-      uk: 'Тепер ви маєте доступ до цього проєкту. Перенаправлення...',
+      en: 'You now have access to this project. Redirecting to project page...',
+      uk: 'Тепер ви маєте доступ до цього проєкту. Перенаправляємо на сторінку проєкту...',
+    }),
+    alreadyOwner: t({
+      en: 'You already have access to this project as owner. Redirecting to project page...',
+      uk: 'Ви вже маєте доступ до цього проєкту як власник. Перенаправляємо на сторінку проєкту...',
+    }),
+    alreadyOwnerToast: t({
+      en: 'You already have access to this project as owner.',
+      uk: 'Ви вже маєте доступ до цього проєкту як власник.',
     }),
     invalidOrExpiredLink: t({
       en: 'The share link may be invalid or expired.',

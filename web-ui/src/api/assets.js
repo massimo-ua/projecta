@@ -3,20 +3,24 @@ import {
 } from './mappers';
 
 const toDomain = ({
-  asset_id, price, currency, home_amount, home_currency, description, type, acquired_at, name,
-}) => ({
-  key: asset_id,
-  id: asset_id,
-  description,
-  price: toPriceView(price),
-  currency,
-  homeAmount: home_amount !== undefined ? toPriceView(home_amount) : toPriceView(price),
-  homeCurrency: home_currency || currency,
-  type: type?.name,
-  category: type?.category?.name,
-  acquiredAt: toDateView(acquired_at),
-  name,
-});
+  asset_id, price, currency, home_amount, home_currency, homeAmount, homeCurrency, description, type, acquired_at, name, project,
+}) => {
+  const finalHomeAmount = home_amount !== undefined ? home_amount : (homeAmount !== undefined ? homeAmount : price);
+  const finalHomeCurrency = home_currency || homeCurrency || project?.mainCurrency || currency;
+  return {
+    key: asset_id,
+    id: asset_id,
+    description,
+    price: toPriceView(price),
+    currency,
+    homeAmount: toPriceView(finalHomeAmount),
+    homeCurrency: finalHomeCurrency,
+    type: type?.name,
+    category: type?.category?.name,
+    acquiredAt: toDateView(acquired_at),
+    name,
+  };
+};
 
 const toEditAssetView = ({
   asset_id, price, currency, description, type, acquired_at, name,

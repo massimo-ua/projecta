@@ -24,13 +24,13 @@ type mockPeopleService struct {
 	err  error
 }
 
-func (m *mockPeopleService) FindByID(ctx context.Context, id uuid.UUID) (*people.Person, error) {
+func (m *mockPeopleService) FindByID(_ context.Context, _ uuid.UUID) (*people.Person, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.user, nil
 }
-func (m *mockPeopleService) Register(ctx context.Context, command people.RegisterCommand) error {
+func (m *mockPeopleService) Register(_ context.Context, _ people.RegisterCommand) error {
 	return m.err
 }
 
@@ -39,13 +39,13 @@ type mockAuthService struct {
 	err      error
 }
 
-func (m *mockAuthService) Login(ctx context.Context, credentials people.Credentials) (*core.AuthResponse, error) {
+func (m *mockAuthService) Login(_ context.Context, _ people.Credentials) (*core.AuthResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.authResp, nil
 }
-func (m *mockAuthService) Refresh(ctx context.Context, tokenRing *core.TokenRing) (*core.AuthResponse, error) {
+func (m *mockAuthService) Refresh(_ context.Context, _ *core.TokenRing) (*core.AuthResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -57,19 +57,19 @@ type mockTokenProvider struct {
 	err    error
 }
 
-func (m *mockTokenProvider) GenerateTokenRing(data core.AuthTokenPayload) (*core.AuthResponse, error) {
+func (m *mockTokenProvider) GenerateTokenRing(_ core.AuthTokenPayload) (*core.AuthResponse, error) {
 	return nil, nil
 }
-func (m *mockTokenProvider) ValidateToken(token string) (*core.AuthTokenClaims, error) {
+func (m *mockTokenProvider) ValidateToken(_ string) (*core.AuthTokenClaims, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.claims, nil
 }
-func (m *mockTokenProvider) DecodeToken(token string) (*core.AuthTokenClaims, error) {
+func (m *mockTokenProvider) DecodeToken(_ string) (*core.AuthTokenClaims, error) {
 	return m.claims, nil
 }
-func (m *mockTokenProvider) ValidateRefreshToken(tokenID uuid.UUID, refreshToken string) bool {
+func (m *mockTokenProvider) ValidateRefreshToken(_ uuid.UUID, _ string) bool {
 	return true
 }
 
@@ -78,31 +78,34 @@ type mockProjectService struct {
 	err     error
 }
 
-func (m *mockProjectService) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+func (m *mockProjectService) Find(_ context.Context, _ projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return []*projecta.Project{m.project}, nil
 }
-func (m *mockProjectService) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
+func (m *mockProjectService) FindOne(_ context.Context, _ projecta.ProjectFilter) (*projecta.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.project, nil
 }
-func (m *mockProjectService) Create(ctx context.Context, command projecta.CreateProjectCommand) (*projecta.Project, error) {
+func (m *mockProjectService) Create(_ context.Context, _ projecta.CreateProjectCommand) (*projecta.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.project, nil
 }
-func (m *mockProjectService) Remove(ctx context.Context, command projecta.RemoveProjectCommand) error {
+func (m *mockProjectService) Remove(_ context.Context, _ projecta.RemoveProjectCommand) error {
 	return m.err
 }
-func (m *mockProjectService) Update(ctx context.Context, command projecta.UpdateProjectCommand) error {
-	return m.err
+func (m *mockProjectService) Update(_ context.Context, _ projecta.UpdateProjectCommand) (*projecta.Project, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.project, nil
 }
-func (m *mockProjectService) AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*projecta.Project, error) {
+func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*projecta.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -114,22 +117,22 @@ type mockCategoryService struct {
 	err error
 }
 
-func (m *mockCategoryService) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
+func (m *mockCategoryService) Find(_ context.Context, _ projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return projecta.NewCategoryCollection(1), nil
 }
-func (m *mockCategoryService) Create(ctx context.Context, command projecta.CreateCategoryCommand) (*projecta.CostCategory, error) {
+func (m *mockCategoryService) Create(_ context.Context, _ projecta.CreateCategoryCommand) (*projecta.CostCategory, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.cat, nil
 }
-func (m *mockCategoryService) Update(ctx context.Context, command projecta.UpdateCategoryCommand) error {
+func (m *mockCategoryService) Update(_ context.Context, _ projecta.UpdateCategoryCommand) error {
 	return m.err
 }
-func (m *mockCategoryService) Remove(ctx context.Context, command projecta.RemoveCategoryCommand) error {
+func (m *mockCategoryService) Remove(_ context.Context, _ projecta.RemoveCategoryCommand) error {
 	return m.err
 }
 
@@ -138,28 +141,28 @@ type mockTypeService struct {
 	err      error
 }
 
-func (m *mockTypeService) Find(ctx context.Context, filter projecta.TypeCollectionFilter) (*projecta.CostTypeCollection, error) {
+func (m *mockTypeService) Find(_ context.Context, _ projecta.TypeCollectionFilter) (*projecta.CostTypeCollection, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return projecta.NewCostTypeCollection(1), nil
 }
-func (m *mockTypeService) FindOne(ctx context.Context, filter projecta.TypeFilter) (*projecta.CostType, error) {
+func (m *mockTypeService) FindOne(_ context.Context, _ projecta.TypeFilter) (*projecta.CostType, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.costType, nil
 }
-func (m *mockTypeService) Create(ctx context.Context, command projecta.CreateTypeCommand) (*projecta.CostType, error) {
+func (m *mockTypeService) Create(_ context.Context, _ projecta.CreateTypeCommand) (*projecta.CostType, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.costType, nil
 }
-func (m *mockTypeService) Remove(ctx context.Context, command projecta.RemoveProjectResourceCommand) error {
+func (m *mockTypeService) Remove(_ context.Context, _ projecta.RemoveProjectResourceCommand) error {
 	return m.err
 }
-func (m *mockTypeService) Update(ctx context.Context, command projecta.UpdateTypeCommand) error {
+func (m *mockTypeService) Update(_ context.Context, _ projecta.UpdateTypeCommand) error {
 	return m.err
 }
 
@@ -168,28 +171,28 @@ type mockPaymentService struct {
 	err error
 }
 
-func (m *mockPaymentService) FindOne(ctx context.Context, filter projecta.PaymentFilter) (*projecta.Payment, error) {
+func (m *mockPaymentService) FindOne(_ context.Context, _ projecta.PaymentFilter) (*projecta.Payment, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.pay, nil
 }
-func (m *mockPaymentService) Find(ctx context.Context, filter projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
+func (m *mockPaymentService) Find(_ context.Context, _ projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return projecta.NewPaymentCollection(1), nil
 }
-func (m *mockPaymentService) Create(ctx context.Context, command projecta.CreatePaymentCommand) (*projecta.Payment, error) {
+func (m *mockPaymentService) Create(_ context.Context, _ projecta.CreatePaymentCommand) (*projecta.Payment, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.pay, nil
 }
-func (m *mockPaymentService) Update(ctx context.Context, command projecta.UpdatePaymentCommand) error {
+func (m *mockPaymentService) Update(_ context.Context, _ projecta.UpdatePaymentCommand) error {
 	return m.err
 }
-func (m *mockPaymentService) Remove(ctx context.Context, command projecta.RemovePaymentCommand) error {
+func (m *mockPaymentService) Remove(_ context.Context, _ projecta.RemovePaymentCommand) error {
 	return m.err
 }
 
@@ -198,28 +201,28 @@ type mockAssetService struct {
 	err   error
 }
 
-func (m *mockAssetService) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
+func (m *mockAssetService) Find(_ context.Context, _ asset.CollectionFilter) (*asset.Collection, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return asset.NewCollection(1), nil
 }
-func (m *mockAssetService) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
+func (m *mockAssetService) FindOne(_ context.Context, _ asset.Filter) (*asset.Asset, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.asset, nil
 }
-func (m *mockAssetService) Create(ctx context.Context, command asset.CreateAssetCommand) (*asset.Asset, error) {
+func (m *mockAssetService) Create(_ context.Context, _ asset.CreateAssetCommand) (*asset.Asset, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.asset, nil
 }
-func (m *mockAssetService) Remove(ctx context.Context, command asset.RemoveAssetCommand) error {
+func (m *mockAssetService) Remove(_ context.Context, _ asset.RemoveAssetCommand) error {
 	return m.err
 }
-func (m *mockAssetService) Update(ctx context.Context, command asset.UpdateAssetCommand) error {
+func (m *mockAssetService) Update(_ context.Context, _ asset.UpdateAssetCommand) error {
 	return m.err
 }
 
@@ -243,7 +246,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	paySvc := &mockPaymentService{pay: pay}
 	astSvc := &mockAssetService{asset: ast}
 
-	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, projSvc, catSvc, typeSvc, paySvc, astSvc)
+	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, projSvc, catSvc, typeSvc, paySvc, astSvc, nil)
 	if err != nil || handler == nil {
 		t.Fatalf("failed to create http handler: %v", err)
 	}
@@ -323,6 +326,15 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 		respCreate, err := client.Do(reqCreate)
 		if err != nil || respCreate.StatusCode != http.StatusCreated {
 			t.Errorf("expected 201 for POST /projects, got %v", respCreate.StatusCode)
+		}
+
+		// PATCH /projects/{id}
+		patchProjBody, _ := json.Marshal(UpdateProjectDTO{MainCurrency: "USD"})
+		reqPatch, _ := http.NewRequest("PATCH", server.URL+"/projects/"+proj.ProjectID.String(), bytes.NewReader(patchProjBody))
+		reqPatch.Header.Set("Authorization", "Bearer token")
+		respPatch, err := client.Do(reqPatch)
+		if err != nil || respPatch.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for PATCH /projects/{id}, got %v", respPatch.StatusCode)
 		}
 	})
 
