@@ -2,13 +2,14 @@ import { format, formatISO, parseISO } from 'date-fns';
 import {
   fromISO, toISO, toPrice, toPriceView,
 } from './mappers';
+import { Payment } from '../models/Payment';
 
 const toDomain = ({
   payment_id, amount, currency, home_amount, home_currency, homeAmount, homeCurrency, description, type, payment_date, kind, project,
 }) => {
   const finalHomeAmount = home_amount !== undefined ? home_amount : (homeAmount !== undefined ? homeAmount : amount);
   const finalHomeCurrency = home_currency || homeCurrency || project?.mainCurrency || currency;
-  return {
+  return new Payment({
     key: payment_id,
     id: payment_id,
     description,
@@ -20,8 +21,9 @@ const toDomain = ({
     category: type?.category?.name,
     paymentDate: format(parseISO(payment_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
     kind,
-  };
+  });
 };
+
 
 const toAddPaymentDTO = ({
   typeId, amount, currency, paymentDate, description, paymentKind,

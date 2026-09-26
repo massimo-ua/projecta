@@ -1,100 +1,21 @@
+import React from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
-import React, { useEffect, useState } from 'react';
 import { useIntlayer } from 'react-intlayer';
-import { Badge } from '@/components/ui/badge';
 import { Package, Calendar } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import useAssets from '../../hooks/assets';
-import useTypes from '../../hooks/types';
 import AddAssetModal from './AddAssetModal';
 import EditAssetModal from './EditAssetModal';
-import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
 import { CopyableText } from './ListView/CopyableText';
 import { DetailItem } from './ListView/DetailItem';
-import { assetRepository } from '../../api';
-import { toast } from 'sonner';
 import './Assets.css';
 
-export function Assets() {
-  const content = useIntlayer('assets');
-  const { projectId } = useParams();
-  const [loading, assets, total, setFilter] = useAssets();
-  const [, types, , setTypesFilter] = useTypes();
-  const [addModalOpened, setAddModalOpen] = useState(false);
-  const [assetIdToEdit, setAssetIdToEdit] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const onPaginationChange = (nextPage) => {
-    setCurrentPage(nextPage);
-  };
-
-  const onAddButtonClick = () => {
-    if (!addModalOpened) {
-      setAddModalOpen(true);
-    }
-  };
-
-  const onEditButtonClick = (assetId) => {
-    if (!assetIdToEdit) {
-      setAssetIdToEdit(assetId);
-    }
-  };
-
-  useEffect(() => {
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: (currentPage - 1) * PAGE_SIZE,
-    });
-    setTypesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
-  }, [currentPage, projectId, setFilter, setTypesFilter]);
-
-  const onAddCancel = () => setAddModalOpen(false);
-  const onAddSuccess = () => {
-    setAddModalOpen(false);
-    toast.success(String(content.assetAddedSuccess));
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: DEFAULT_OFFSET,
-    });
-  };
-
-  const onEditSuccess = () => {
-    setAssetIdToEdit('');
-    toast.success(String(content.assetUpdatedSuccess));
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: DEFAULT_OFFSET,
-    });
-  };
-
-  const onEditCancel = () => setAssetIdToEdit('');
-
-  const onRemoveButtonClick = (assetId) => {
-    assetRepository.removeAsset(projectId, assetId)
-      .then(() => {
-        toast.success(String(content.assetRemovedSuccess));
-        setFilter({
-          projectId,
-          limit: PAGE_SIZE,
-          offset: DEFAULT_OFFSET,
-        });
-      })
-      .catch((error) => {
-        toast.error(`${String(content.failedToRemove)}: ${error.message}`);
-        console.error(error);
-      });
-  };
-
-  const renderAssetMainContent = (asset) => (
+function AssetMainContent({ asset }) {
+  return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
@@ -112,43 +33,95 @@ export function Assets() {
       )}
     </div>
   );
+}
 
-  const renderAssetAmount = (asset) => {
-    const isDiff = asset.currency !== asset.homeCurrency;
-    return (
-      <div className="flex flex-col items-end gap-0.5">
-        <span className="px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block bg-primary/10 text-primary border border-primary/20">
-          {asset.price} {asset.currency}
+AssetMainContent.propTypes = {
+  asset: PropTypes.shape({
+    acquiredAt: PropTypes.string,
+    name: PropTypes.string,
+    category: PropTypes.string,
+    type: PropTypes.string,
+    description: PropTypes.string,
+  }).isRequired,
+};
+
+function AssetAmount({ asset }) {
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className="px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block bg-primary/10 text-primary border border-primary/20">
+        {asset.formattedPrice}
+      </span>
+      {asset.hasDifferentHomeCurrency && asset.formattedHomeAmount && (
+        <span className="text-[11px] text-muted-foreground font-mono">
+          {asset.formattedHomeAmount}
         </span>
-        {isDiff && asset.homeAmount && (
-          <span className="text-[11px] text-muted-foreground font-mono">
-            ≈ {asset.homeAmount} {asset.homeCurrency}
-          </span>
-        )}
-      </div>
-    );
-  };
+      )}
+    </div>
+  );
+}
 
-  const renderAssetDetails = (asset) => (
+AssetAmount.propTypes = {
+  asset: PropTypes.shape({
+    formattedPrice: PropTypes.string,
+    hasDifferentHomeCurrency: PropTypes.bool,
+    formattedHomeAmount: PropTypes.string,
+  }).isRequired,
+};
+
+function AssetDetails({ asset, typeLabel, categoryLabel }) {
+  return (
     <div className="space-y-2">
       <DetailItem label="ID">
         <CopyableText text={asset.id} truncate />
       </DetailItem>
-      <DetailItem label={String(content.typeLabel)}>
+      <DetailItem label={typeLabel}>
         <span className="text-sm text-foreground">{asset.type}</span>
       </DetailItem>
-      <DetailItem label={String(content.categoryLabel)}>
+      <DetailItem label={categoryLabel}>
         <span className="text-sm text-foreground">{asset.category}</span>
       </DetailItem>
     </div>
   );
+}
 
-  const renderAssetActions = (asset) => (
-    <>
-      <EditButton onClick={() => onEditButtonClick(asset.id)} />
-      <RemoveButton onRemove={() => onRemoveButtonClick(asset.id)} />
-    </>
-  );
+AssetDetails.propTypes = {
+  asset: PropTypes.shape({
+    id: PropTypes.string,
+    type: PropTypes.string,
+    category: PropTypes.string,
+  }).isRequired,
+  typeLabel: PropTypes.string.isRequired,
+  categoryLabel: PropTypes.string.isRequired,
+};
+
+export function Assets() {
+  const content = useIntlayer('assets');
+  const { projectId } = useParams();
+  const {
+    loading,
+    assets,
+    total,
+    currentPage,
+    pageSize,
+    types,
+    addModalOpened,
+    assetIdToEdit,
+    onPaginationChange,
+    openAddModal,
+    closeAddModal,
+    onAddSuccess,
+    openEditModal,
+    closeEditModal,
+    onEditSuccess,
+    removeAsset,
+  } = useAssets(projectId);
+
+  const handleRemove = (assetId) => {
+    removeAsset(assetId, {
+      successMessage: String(content.assetRemovedSuccess),
+      errorMessage: String(content.failedToRemove),
+    });
+  };
 
   return (
     <>
@@ -156,24 +129,35 @@ export function Assets() {
         loading={loading}
         items={assets}
         total={total}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         currentPage={currentPage}
         onPaginationChange={onPaginationChange}
-        onAddButtonClick={onAddButtonClick}
+        onAddButtonClick={openAddModal}
         addButtonIcon={<Package className="h-4 w-4" />}
         addButtonText={String(content.addAsset)}
         addButtonDisabled={addModalOpened}
-        renderItemMainContent={renderAssetMainContent}
-        renderItemAmount={renderAssetAmount}
-        renderItemDetails={renderAssetDetails}
-        renderItemActions={renderAssetActions}
+        renderItemMainContent={(asset) => <AssetMainContent asset={asset} />}
+        renderItemAmount={(asset) => <AssetAmount asset={asset} />}
+        renderItemDetails={(asset) => (
+          <AssetDetails
+            asset={asset}
+            typeLabel={String(content.typeLabel)}
+            categoryLabel={String(content.categoryLabel)}
+          />
+        )}
+        renderItemActions={(asset) => (
+          <>
+            <EditButton onClick={() => openEditModal(asset.id)} />
+            <RemoveButton onRemove={() => handleRemove(asset.id)} />
+          </>
+        )}
       />
 
       <AddAssetModal
         projectId={projectId}
         open={addModalOpened}
-        onCancel={onAddCancel}
-        onSuccess={onAddSuccess}
+        onCancel={closeAddModal}
+        onSuccess={() => onAddSuccess(String(content.assetAddedSuccess))}
         types={types}
       />
 
@@ -181,10 +165,12 @@ export function Assets() {
         projectId={projectId}
         assetId={assetIdToEdit}
         open={!!assetIdToEdit}
-        onCancel={onEditCancel}
-        onSuccess={onEditSuccess}
+        onCancel={closeEditModal}
+        onSuccess={() => onEditSuccess(String(content.assetUpdatedSuccess))}
         types={types}
       />
     </>
   );
 }
+
+export default Assets;
