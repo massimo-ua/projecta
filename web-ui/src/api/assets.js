@@ -1,13 +1,14 @@
 import {
   fromISO, toDateView, toISO, toPrice, toPriceView,
 } from './mappers';
+import { Asset } from '../models/Asset';
 
 const toDomain = ({
   asset_id, price, currency, home_amount, home_currency, homeAmount, homeCurrency, description, type, acquired_at, name, project,
 }) => {
   const finalHomeAmount = home_amount !== undefined ? home_amount : (homeAmount !== undefined ? homeAmount : price);
   const finalHomeCurrency = home_currency || homeCurrency || project?.mainCurrency || currency;
-  return {
+  return new Asset({
     key: asset_id,
     id: asset_id,
     description,
@@ -19,7 +20,7 @@ const toDomain = ({
     category: type?.category?.name,
     acquiredAt: toDateView(acquired_at),
     name,
-  };
+  });
 };
 
 const toEditAssetView = ({

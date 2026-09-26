@@ -1,101 +1,22 @@
+import React from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
-import React, { useEffect, useState } from 'react';
 import { useIntlayer } from 'react-intlayer';
-import { Badge } from '@/components/ui/badge';
 import { DollarSign, Calendar } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import usePayments from '../../hooks/payments';
-import useTypes from '../../hooks/types';
 import AddPaymentModal from './AddPaymentModal';
-import { paymentRepository } from '../../api';
-import { DEFAULT_OFFSET, PAGE_SIZE } from '../../constants';
 import EditPaymentModal from './EditPaymentModal';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
 import { CopyableText } from './ListView/CopyableText';
 import { DetailItem } from './ListView/DetailItem';
-import { toast } from 'sonner';
 import './Payments.css';
 
-export function Payments() {
-  const content = useIntlayer('payments');
-  const { projectId } = useParams();
-  const [loading, payments, total, setFilter] = usePayments();
-  const [addModalOpened, setAddModalOpen] = useState(false);
-  const [paymentIdToEdit, setPaymentIdToEdit] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [, types, , setTypesFilter] = useTypes();
-
-  const onPaginationChange = (nextPage) => {
-    setCurrentPage(nextPage);
-  };
-
-  const onAddButtonClick = () => {
-    if (!addModalOpened) {
-      setAddModalOpen(true);
-    }
-  };
-
-  const onEditButtonClick = (paymentId) => {
-    if (!paymentIdToEdit) {
-      setPaymentIdToEdit(paymentId);
-    }
-  };
-
-  useEffect(() => {
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: (currentPage - 1) * PAGE_SIZE,
-    });
-    setTypesFilter({
-      projectId,
-      limit: 100,
-      offset: 0,
-    });
-  }, [currentPage, projectId, setFilter]);
-
-  const onAddCancel = () => setAddModalOpen(false);
-  const onAddSuccess = () => {
-    setAddModalOpen(false);
-    toast.success(String(content.paymentAddedSuccess));
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: DEFAULT_OFFSET,
-    });
-  };
-
-  const onRemoveButtonClick = (paymentId) => {
-    paymentRepository.removePayment(projectId, paymentId)
-      .then(() => {
-        toast.success(String(content.paymentRemovedSuccess));
-        setFilter({
-          projectId,
-          limit: PAGE_SIZE,
-          offset: DEFAULT_OFFSET,
-        });
-      })
-      .catch((error) => {
-        toast.error(`${String(content.failedToRemove)}: ${error.message}`);
-        console.error(error);
-      });
-  };
-
-  const onEditSuccess = () => {
-    setPaymentIdToEdit('');
-    toast.success(String(content.paymentUpdatedSuccess));
-    setFilter({
-      projectId,
-      limit: PAGE_SIZE,
-      offset: DEFAULT_OFFSET,
-    });
-  };
-
-  const onEditCancel = () => setPaymentIdToEdit('');
-
-  const renderPaymentMainContent = (payment) => (
+function PaymentMainContent({ payment }) {
+  return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
@@ -110,51 +31,102 @@ export function Payments() {
       </div>
     </div>
   );
+}
 
-  const renderPaymentAmount = (payment) => {
-    const isDiff = payment.currency !== payment.homeCurrency;
-    const isDownPayment = payment.kind === 'DOWN_PAYMENT';
-    return (
-      <div className="flex flex-col items-end gap-0.5">
-        <span
-          className={cn(
-            "px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block",
-            isDownPayment
-              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-          )}
-        >
-          {payment.amount} {payment.currency}
-        </span>
-        {isDiff && payment.homeAmount && (
-          <span className="text-[11px] text-muted-foreground font-mono">
-            ≈ {payment.homeAmount} {payment.homeCurrency}
-          </span>
+PaymentMainContent.propTypes = {
+  payment: PropTypes.shape({
+    paymentDate: PropTypes.string,
+    description: PropTypes.string,
+    category: PropTypes.string,
+    type: PropTypes.string,
+  }).isRequired,
+};
+
+function PaymentAmount({ payment }) {
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span
+        className={cn(
+          'px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block',
+          payment.isDownPayment
+            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20',
         )}
-      </div>
-    );
-  };
+      >
+        {payment.formattedAmount}
+      </span>
+      {payment.hasDifferentHomeCurrency && payment.formattedHomeAmount && (
+        <span className="text-[11px] text-muted-foreground font-mono">
+          {payment.formattedHomeAmount}
+        </span>
+      )}
+    </div>
+  );
+}
 
-  const renderPaymentDetails = (payment) => (
+PaymentAmount.propTypes = {
+  payment: PropTypes.shape({
+    isDownPayment: PropTypes.bool,
+    formattedAmount: PropTypes.string,
+    hasDifferentHomeCurrency: PropTypes.bool,
+    formattedHomeAmount: PropTypes.string,
+  }).isRequired,
+};
+
+function PaymentDetails({ payment, typeLabel, categoryLabel }) {
+  return (
     <div className="space-y-2">
       <DetailItem label="ID">
         <CopyableText text={payment.id} truncate />
       </DetailItem>
-      <DetailItem label={String(content.typeLabel)}>
+      <DetailItem label={typeLabel}>
         <span className="text-sm text-foreground">{payment.type}</span>
       </DetailItem>
-      <DetailItem label={String(content.categoryLabel)}>
+      <DetailItem label={categoryLabel}>
         <span className="text-sm text-foreground">{payment.category}</span>
       </DetailItem>
     </div>
   );
+}
 
-  const renderPaymentActions = (payment) => (
-    <>
-      <EditButton onClick={() => onEditButtonClick(payment.id)} />
-      <RemoveButton onRemove={() => onRemoveButtonClick(payment.id)} />
-    </>
-  );
+PaymentDetails.propTypes = {
+  payment: PropTypes.shape({
+    id: PropTypes.string,
+    type: PropTypes.string,
+    category: PropTypes.string,
+  }).isRequired,
+  typeLabel: PropTypes.string.isRequired,
+  categoryLabel: PropTypes.string.isRequired,
+};
+
+export function Payments() {
+  const content = useIntlayer('payments');
+  const { projectId } = useParams();
+  const {
+    loading,
+    payments,
+    total,
+    currentPage,
+    pageSize,
+    types,
+    addModalOpened,
+    paymentIdToEdit,
+    onPaginationChange,
+    openAddModal,
+    closeAddModal,
+    onAddSuccess,
+    openEditModal,
+    closeEditModal,
+    onEditSuccess,
+    removePayment,
+  } = usePayments(projectId);
+
+  const handleRemove = (paymentId) => {
+    removePayment(paymentId, {
+      successMessage: String(content.paymentRemovedSuccess),
+      errorMessage: String(content.failedToRemove),
+    });
+  };
 
   return (
     <>
@@ -162,25 +134,36 @@ export function Payments() {
         loading={loading}
         items={payments}
         total={total}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         currentPage={currentPage}
         onPaginationChange={onPaginationChange}
-        onAddButtonClick={onAddButtonClick}
+        onAddButtonClick={openAddModal}
         addButtonIcon={<DollarSign className="h-4 w-4" />}
         addButtonText={String(content.addPayment)}
         addButtonDisabled={addModalOpened}
-        renderItemMainContent={renderPaymentMainContent}
-        renderItemAmount={renderPaymentAmount}
-        renderItemDetails={renderPaymentDetails}
-        renderItemActions={renderPaymentActions}
+        renderItemMainContent={(payment) => <PaymentMainContent payment={payment} />}
+        renderItemAmount={(payment) => <PaymentAmount payment={payment} />}
+        renderItemDetails={(payment) => (
+          <PaymentDetails
+            payment={payment}
+            typeLabel={String(content.typeLabel)}
+            categoryLabel={String(content.categoryLabel)}
+          />
+        )}
+        renderItemActions={(payment) => (
+          <>
+            <EditButton onClick={() => openEditModal(payment.id)} />
+            <RemoveButton onRemove={() => handleRemove(payment.id)} />
+          </>
+        )}
       />
 
       <AddPaymentModal
         types={types}
         projectId={projectId}
         open={addModalOpened}
-        onCancel={onAddCancel}
-        onSuccess={onAddSuccess}
+        onCancel={closeAddModal}
+        onSuccess={() => onAddSuccess(String(content.paymentAddedSuccess))}
       />
 
       <EditPaymentModal
@@ -188,9 +171,11 @@ export function Payments() {
         projectId={projectId}
         paymentId={paymentIdToEdit}
         open={!!paymentIdToEdit}
-        onCancel={onEditCancel}
-        onSuccess={onEditSuccess}
+        onCancel={closeEditModal}
+        onSuccess={() => onEditSuccess(String(content.paymentUpdatedSuccess))}
       />
     </>
   );
 }
+
+export default Payments;
