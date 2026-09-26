@@ -7,9 +7,13 @@ const listViewContent = {
       en: 'Details & Actions',
       uk: 'Деталі та дії',
     }),
+    details: t({
+      en: 'View details',
+      uk: 'Деталі',
+    }),
     totalItemsLabel: t({
       en: 'Total items',
-      uk: 'Всього елементів',
+      uk: 'Всього записів',
     }),
     noRecords: t({
       en: 'No records available',

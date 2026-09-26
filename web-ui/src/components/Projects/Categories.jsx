@@ -70,8 +70,11 @@ export function Categories() {
   };
 
   const renderCategoryMainContent = (category) => (
-    <div>
+    <div className="flex flex-col gap-1">
       <span className="font-semibold text-base text-foreground">{category.name}</span>
+      {category.description && (
+        <span className="text-xs text-muted-foreground/80 line-clamp-1">{category.description}</span>
+      )}
     </div>
   );
 

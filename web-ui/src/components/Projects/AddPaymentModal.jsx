@@ -23,6 +23,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
 
@@ -100,20 +101,24 @@ export default function AddPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[480px] rounded-2xl p-6">
         <DialogHeader>
-          <DialogTitle>{String(content?.addPaymentTitle || 'Add Payment')}</DialogTitle>
+          <DialogTitle className="text-xl font-bold tracking-tight">
+            {String(content?.addPaymentTitle || 'Add Payment')}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="payment-type">{String(content?.typeLabel || 'Type')}</Label>
+            <Label htmlFor="payment-type" className="text-xs font-semibold">
+              {String(content?.typeLabel || 'Type')}
+            </Label>
             <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger id="payment-type">
+              <SelectTrigger id="payment-type" className="rounded-xl">
                 <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 {types.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
+                  <SelectItem key={type.id} value={type.id} className="rounded-lg">
                     {type.name} [{type.category}]
                   </SelectItem>
                 ))}
@@ -123,14 +128,16 @@ export default function AddPaymentModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="payment-kind">{String(content?.kindLabel || 'Kind')}</Label>
+              <Label htmlFor="payment-kind" className="text-xs font-semibold">
+                {String(content?.kindLabel || 'Kind')}
+              </Label>
               <Select value={paymentKind} onValueChange={setPaymentKind}>
-                <SelectTrigger id="payment-kind">
+                <SelectTrigger id="payment-kind" className="rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl">
                   {Object.keys(PaymentKind).map((id) => (
-                    <SelectItem key={id} value={id}>
+                    <SelectItem key={id} value={id} className="rounded-lg">
                       {getPaymentKindLabel(id)}
                     </SelectItem>
                   ))}
@@ -139,12 +146,15 @@ export default function AddPaymentModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="payment-date">{String(content?.dateLabel || 'Date')}</Label>
+              <Label htmlFor="payment-date" className="text-xs font-semibold">
+                {String(content?.dateLabel || 'Date')}
+              </Label>
               <Input
                 id="payment-date"
                 type="date"
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
+                className="rounded-xl"
                 required
               />
             </div>
@@ -152,7 +162,9 @@ export default function AddPaymentModal({
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="payment-amount">{String(content?.amountLabel || 'Amount')}</Label>
+              <Label htmlFor="payment-amount" className="text-xs font-semibold">
+                {String(content?.amountLabel || 'Amount')}
+              </Label>
               <Input
                 id="payment-amount"
                 type="number"
@@ -160,18 +172,21 @@ export default function AddPaymentModal({
                 placeholder={String(content?.amountPlaceholder || '0.00')}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                className="rounded-xl"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="payment-currency">{String(content?.currencyLabel || 'Currency')}</Label>
+              <Label htmlFor="payment-currency" className="text-xs font-semibold">
+                {String(content?.currencyLabel || 'Currency')}
+              </Label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger id="payment-currency">
+                <SelectTrigger id="payment-currency" className="rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl">
                   {SUPPORTED_CURRENCIES.map((c) => (
-                    <SelectItem key={c} value={c}>
+                    <SelectItem key={c} value={c} className="rounded-lg">
                       {c}
                     </SelectItem>
                   ))}
@@ -181,22 +196,36 @@ export default function AddPaymentModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="payment-desc">{String(content?.descriptionLabel || 'Description')}</Label>
+            <Label htmlFor="payment-desc" className="text-xs font-semibold">
+              {String(content?.descriptionLabel || 'Description')}
+            </Label>
             <Textarea
               id="payment-desc"
               rows={3}
               placeholder={String(content?.descriptionPlaceholder || 'Payment description...')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              className="rounded-xl resize-none"
             />
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
+          <DialogFooter className="pt-3 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={loading}
+              className="rounded-xl"
+            >
               {String(content?.cancelButton || 'Cancel')}
             </Button>
-            <Button type="submit" disabled={loading}>
-              {String(content?.submitButton || 'Submit')}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{String(content?.submitButton || 'Submit')}</span>
             </Button>
           </DialogFooter>
         </form>

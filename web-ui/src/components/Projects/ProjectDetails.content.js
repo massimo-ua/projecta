@@ -36,8 +36,20 @@ const projectDetailsContent = {
       uk: 'Активи',
     }),
     menu: t({
-      en: 'Menu',
-      uk: 'Меню',
+      en: 'Navigation',
+      uk: 'Навігація',
+    }),
+    backToProjects: t({
+      en: 'Projects',
+      uk: 'Проєкти',
+    }),
+    projectsBreadcrumb: t({
+      en: 'Projects',
+      uk: 'Проєкти',
+    }),
+    shareProject: t({
+      en: 'Share project',
+      uk: 'Поділитися',
     }),
   },
 };

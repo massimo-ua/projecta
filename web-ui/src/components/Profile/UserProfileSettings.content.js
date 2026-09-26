@@ -5,7 +5,7 @@ const userProfileSettingsContent = {
   content: {
     title: t({
       en: 'User Profile Settings',
-      uk: 'Налаштування профілю користувача',
+      uk: 'Налаштування профілю',
     }),
     subtitle: t({
       en: 'Manage your profile and interface preferences',
@@ -16,8 +16,8 @@ const userProfileSettingsContent = {
       uk: 'Мова інтерфейсу',
     }),
     languageSectionDesc: t({
-      en: 'Select your preferred language for the application interface. This choice will be saved for your profile.',
-      uk: 'Оберіть бажану мову інтерфейсу застосунку. Цей вибір буде збережено для вашого профілю.',
+      en: 'Select your preferred language for the application interface.',
+      uk: 'Оберіть бажану мову інтерфейсу застосунку.',
     }),
     selectLanguageLabel: t({
       en: 'Language',
@@ -33,9 +33,31 @@ const userProfileSettingsContent = {
         uk: 'Українська',
       }),
     },
+    themeSectionTitle: t({
+      en: 'Appearance & Theme',
+      uk: 'Зовнішній вигляд та тема',
+    }),
+    themeSectionDesc: t({
+      en: 'Customize how Projecta looks on your device. Choose between light and dark themes.',
+      uk: 'Налаштуйте вигляд Projecta на вашому пристрої. Оберіть світлу або темну тему.',
+    }),
+    selectThemeLabel: t({
+      en: 'Theme',
+      uk: 'Тема',
+    }),
+    themes: {
+      light: t({
+        en: 'Light Mode',
+        uk: 'Світла тема',
+      }),
+      dark: t({
+        en: 'Dark Mode',
+        uk: 'Темна тема',
+      }),
+    },
     saveSuccess: t({
-      en: 'Interface language updated successfully',
-      uk: 'Мову інтерфейсу успішно оновлено',
+      en: 'Preferences updated successfully',
+      uk: 'Налаштування успішно оновлено',
     }),
   },
 };

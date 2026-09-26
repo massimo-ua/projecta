@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { useIntlayer } from 'react-intlayer';
 import { projectsRepository } from '../../api';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AddProjectModal({ open, onSuccess, onCancel }) {
@@ -55,25 +57,32 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[440px] rounded-2xl p-6">
         <DialogHeader>
-          <DialogTitle>{String(content.createNewProjectTitle)}</DialogTitle>
+          <DialogTitle className="text-xl font-bold tracking-tight">
+            {String(content.createNewProjectTitle)}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="project-name">{String(content.projectNameLabel)}</Label>
+            <Label htmlFor="project-name" className="text-xs font-semibold">
+              {String(content.projectNameLabel)}
+            </Label>
             <Input
               id="project-name"
               placeholder={String(content.projectNamePlaceholder)}
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={loading}
+              className="rounded-xl h-10"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="project-description">{String(content.descriptionLabel)}</Label>
+            <Label htmlFor="project-description" className="text-xs font-semibold">
+              {String(content.descriptionLabel)}
+            </Label>
             <Textarea
               id="project-description"
               rows={3}
@@ -81,15 +90,27 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={loading}
+              className="rounded-xl resize-none"
             />
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
+          <DialogFooter className="pt-3 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={loading}
+              className="rounded-xl"
+            >
               {String(content.cancelButton)}
             </Button>
-            <Button type="submit" disabled={loading}>
-              {String(content.createProjectButton)}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{String(content.createProjectButton)}</span>
             </Button>
           </DialogFooter>
         </form>
@@ -97,5 +118,11 @@ export function AddProjectModal({ open, onSuccess, onCancel }) {
     </Dialog>
   );
 }
+
+AddProjectModal.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onSuccess: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+};
 
 export default AddProjectModal;

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLocale } from 'react-intlayer';
+import { getLocalizedUrl } from 'intlayer';
 import { Button } from '@/components/ui/button';
 import { authProvider } from '../api';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -8,7 +10,7 @@ import { toast } from 'sonner';
 
 function GoogleIcon(props) {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" {...props}>
+    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" {...props}>
       <path
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
         fill="#4285F4"
@@ -32,6 +34,7 @@ function GoogleIcon(props) {
 export function GoogleLoginBtn() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { locale } = useLocale();
 
   const onSuccess = (response) => {
     return authProvider
@@ -39,7 +42,7 @@ export function GoogleLoginBtn() {
       .then(() => {
         setLoading(false);
         toast.success('Successfully logged in');
-        navigate('/');
+        navigate(getLocalizedUrl('/', locale));
       })
       .catch((error) => {
         setLoading(false);
@@ -67,7 +70,7 @@ export function GoogleLoginBtn() {
     <Button
       type="button"
       variant="outline"
-      className="w-full flex items-center justify-center gap-2 h-10 font-medium"
+      className="w-full flex items-center justify-center gap-2.5 h-11 rounded-xl font-semibold border-border/80 hover:bg-accent/80 hover:border-border transition-all shadow-2xs"
       onClick={onClick}
       disabled={loading}
     >
@@ -80,3 +83,5 @@ export function GoogleLoginBtn() {
     </Button>
   );
 }
+
+export default GoogleLoginBtn;
