@@ -19,6 +19,7 @@ export class ProjectsRepository {
       shareToken: item.share_token,
       isShared: Boolean(item.is_shared),
       owner: item.owner ? { id: item.owner.person_id, name: item.owner.display_name } : null,
+      participants: item.participants || [],
     }));
   }
 
@@ -32,6 +33,7 @@ export class ProjectsRepository {
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
+      participants: response.participants || [],
     };
   }
 
@@ -45,6 +47,7 @@ export class ProjectsRepository {
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
+      participants: response.participants || [],
     };
   }
 
@@ -58,6 +61,7 @@ export class ProjectsRepository {
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
+      participants: response.participants || [],
     };
   }
 
@@ -73,6 +77,7 @@ export class ProjectsRepository {
       shareToken: response.share_token,
       isShared: Boolean(response.is_shared),
       owner: response.owner ? { id: response.owner.person_id, name: response.owner.display_name } : null,
+      participants: response.participants || [],
     };
   }
 

@@ -996,6 +996,37 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("toProjectDTO and ProjectDTO JSON marshaling with participants", func(t *testing.T) {
+		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner Name"}
+		proj, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
+		part1, _ := projecta.NewParticipant("Participant Two")
+		proj.AddParticipant(part1)
+
+		dto := toProjectDTO(proj)
+		if len(dto.Participants) != 2 {
+			t.Fatalf("expected 2 participants, got %d", len(dto.Participants))
+		}
+
+		data, err := json.Marshal(dto)
+		if err != nil {
+			t.Fatalf("failed to marshal ProjectDTO: %v", err)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatalf("failed to unmarshal JSON: %v", err)
+		}
+
+		partsRaw, ok := raw["participants"].([]any)
+		if !ok {
+			t.Fatalf("expected 'participants' array in JSON, got %T", raw["participants"])
+		}
+
+		if len(partsRaw) != 2 || partsRaw[0] != "Owner Name" || partsRaw[1] != "Participant Two" {
+			t.Errorf("unexpected participants JSON: %v", partsRaw)
+		}
+	})
+
 	t.Run("decodeUpdateProjectRequest error branches", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPatch, "/projects/123", nil)
 		_, err := decodeUpdateProjectRequest(context.Background(), req)

@@ -21,10 +21,20 @@ type Project struct {
     ShareToken   uuid.UUID
     IsShared     bool
     MainCurrency string
+    Participants []Participant
 }
 
 func (p *Project) IsOwnedBy(owner *Owner) bool {
     return p.Owner.PersonID == owner.PersonID
+}
+
+func (p *Project) AddParticipant(participant Participant) {
+    for _, existing := range p.Participants {
+        if existing.Equals(participant) {
+            return
+        }
+    }
+    p.Participants = append(p.Participants, participant)
 }
 
 func NewProject(id uuid.UUID, name string, description string, owner *Owner, startDate time.Time, endDate time.Time, mainCurrency ...string) (*Project, error) {
@@ -37,7 +47,7 @@ func NewProject(id uuid.UUID, name string, description string, owner *Owner, sta
         curr = mainCurrency[0]
     }
 
-    return &Project{
+    proj := &Project{
         ProjectID:    id,
         Name:         name,
         Description:  description,
@@ -46,5 +56,14 @@ func NewProject(id uuid.UUID, name string, description string, owner *Owner, sta
         EndDate:      endDate,
         ShareToken:   uuid.New(),
         MainCurrency: curr,
-    }, nil
+        Participants: make([]Participant, 0),
+    }
+
+    if owner != nil && owner.DisplayName != "" {
+        if participant, err := NewParticipant(owner.DisplayName); err == nil {
+            proj.AddParticipant(participant)
+        }
+    }
+
+    return proj, nil
 }
