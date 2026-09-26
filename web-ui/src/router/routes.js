@@ -10,9 +10,11 @@ import {
   Settings,
   Login,
   AuthenticatedOnly,
+  AdminOnly,
   Assets,
   Payments,
   UserProfileSettings,
+  RolesManagement,
   ErrorPage,
   AcceptShare,
 } from '../components';
@@ -40,6 +42,11 @@ const createRoutesForPrefix = (prefix) => [
   {
     path: `${prefix}/profile`,
     Component: AuthenticatedOnly(UserProfileSettings),
+    errorElement,
+  },
+  {
+    path: `${prefix}/admin/roles`,
+    Component: AdminOnly(RolesManagement),
     errorElement,
   },
   {
