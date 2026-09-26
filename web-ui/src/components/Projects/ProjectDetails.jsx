@@ -20,6 +20,7 @@ import {
   Check,
   Users,
   Coins,
+  User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -189,6 +190,28 @@ export function ProjectDetails() {
           </div>
         </div>
 
+        {/* Mobile Team Section */}
+        {project?.participants && project.participants.length > 0 && (
+          <div className="md:hidden flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+            <span className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider shrink-0">
+              {String(content.team || 'Team')}:
+            </span>
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              {project.participants.map((participant, index) => {
+                const displayName = typeof participant === 'string'
+                  ? participant
+                  : (participant?.displayName || participant?.display_name || participant?.name || '');
+                return (
+                  <Badge key={index} variant="secondary" className="gap-1 text-xs font-normal whitespace-nowrap">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    <span>{displayName}</span>
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Main Content Layout with Desktop Sidebar */}
         <div className="flex flex-col md:flex-row gap-8 items-start">
           {/* Desktop Sidebar Navigation */}
@@ -222,6 +245,40 @@ export function ProjectDetails() {
                 </nav>
               </div>
             ))}
+
+            {/* Team Section */}
+            <div className="space-y-1.5">
+              <h4 className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider px-3">
+                {String(content.team || 'Team')}
+              </h4>
+              <div className="space-y-1">
+                {loadingProject ? (
+                  <div className="space-y-2 px-3 py-1">
+                    <Skeleton className="h-5 w-32 rounded-lg" />
+                    <Skeleton className="h-5 w-24 rounded-lg" />
+                  </div>
+                ) : project?.participants && project.participants.length > 0 ? (
+                  project.participants.map((participant, index) => {
+                    const displayName = typeof participant === 'string'
+                      ? participant
+                      : (participant?.displayName || participant?.display_name || participant?.name || '');
+                    return (
+                      <div
+                        key={index}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground/90 font-medium rounded-xl select-none"
+                      >
+                        <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate" title={displayName}>{displayName}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground">
+                    {String(content.noParticipants || 'No team members')}
+                  </div>
+                )}
+              </div>
+            </div>
           </aside>
 
           {/* Main Outlet Area */}

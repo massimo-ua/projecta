@@ -44,13 +44,14 @@ type OwnerDTO struct {
 }
 
 type ProjectDTO struct {
-	ProjectID    string   `json:"project_id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Owner        OwnerDTO `json:"owner"`
-	ShareToken   string   `json:"share_token,omitempty"`
-	IsShared     bool     `json:"is_shared,omitempty"`
-	MainCurrency string   `json:"mainCurrency,omitempty"`
+	ProjectID    string                 `json:"project_id"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	Owner        OwnerDTO               `json:"owner"`
+	ShareToken   string                 `json:"share_token,omitempty"`
+	IsShared     bool                   `json:"is_shared,omitempty"`
+	MainCurrency string                 `json:"mainCurrency,omitempty"`
+	Participants []projecta.Participant `json:"participants"`
 }
 
 type UpdateProjectDTO struct {
@@ -67,6 +68,10 @@ func toProjectDTO(project *projecta.Project) ProjectDTO {
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
 	}
+	participants := project.Participants
+	if participants == nil {
+		participants = make([]projecta.Participant, 0)
+	}
 	dto := ProjectDTO{
 		ProjectID:    project.ProjectID.String(),
 		Name:         project.Name,
@@ -74,6 +79,7 @@ func toProjectDTO(project *projecta.Project) ProjectDTO {
 		ShareToken:   project.ShareToken.String(),
 		IsShared:     project.IsShared,
 		MainCurrency: mainCurrency,
+		Participants: participants,
 	}
 	if project.Owner != nil {
 		dto.Owner = OwnerDTO{

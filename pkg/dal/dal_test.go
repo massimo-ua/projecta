@@ -461,6 +461,28 @@ func TestPgProjectRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("FindOne with participants from shares", func(t *testing.T) {
+		mockDb := &mockPgDb{
+			rowVal:   []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "Owner Display", uuid.New().String(), "UAH"},
+			rowsData: [][]any{{"Jane", "Smith", "Jane Member"}},
+		}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		p, err := repo.FindOne(ctx, projecta.ProjectFilter{ProjectID: pID})
+		if err != nil || p == nil {
+			t.Fatalf("FindOne error: %v", err)
+		}
+		if len(p.Participants) != 2 {
+			t.Fatalf("expected 2 participants, got %d", len(p.Participants))
+		}
+		if p.Participants[0].DisplayName() != "Owner Display" {
+			t.Errorf("expected owner 'Owner Display', got '%s'", p.Participants[0].DisplayName())
+		}
+		if p.Participants[1].DisplayName() != "Jane Member" {
+			t.Errorf("expected shared participant 'Jane Member', got '%s'", p.Participants[1].DisplayName())
+		}
+	})
+
 	t.Run("Create, Update, Remove", func(t *testing.T) {
 		mockDb := &mockPgDb{}
 		ctx := withMockDb(authedCtx, mockDb)

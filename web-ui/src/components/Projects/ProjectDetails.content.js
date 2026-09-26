@@ -11,6 +11,14 @@ const projectDetailsContent = {
       en: 'Operations',
       uk: 'Операції',
     }),
+    team: t({
+      en: 'Team',
+      uk: 'Команда',
+    }),
+    noParticipants: t({
+      en: 'No team members',
+      uk: 'Немає учасників',
+    }),
     categories: t({
       en: 'Categories',
       uk: 'Категорії',

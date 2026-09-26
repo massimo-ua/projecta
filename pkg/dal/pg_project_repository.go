@@ -12,6 +12,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"strings"
 	"time"
 )
 
@@ -104,6 +105,9 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		return nil, err
 	}
 	p.IsShared = (p.Owner.PersonID != personID)
+	if err := r.loadParticipants(ctx, p); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -165,7 +169,65 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		return nil, err
 	}
 
-	return toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
+	p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.loadParticipants(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (r *PgProjectRepository) loadParticipants(ctx context.Context, project *projecta.Project) error {
+	if project == nil {
+		return nil
+	}
+
+	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	qb.From("projecta_project_shares")
+	qb.Select(
+		"people.first_name",
+		"people.last_name",
+		"people.display_name",
+	)
+	qb.Join("people", "people.person_id = projecta_project_shares.person_id")
+	qb.Where(qb.Equal("projecta_project_shares.project_id", project.ProjectID.String()))
+	qb.OrderBy("projecta_project_shares.created_at").Asc()
+
+	sql, args := qb.Build()
+
+	rows, err := r.db.Query(ctx, sql, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			firstName   string
+			lastName    string
+			displayName types.NullString
+		)
+
+		if err := rows.Scan(&firstName, &lastName, &displayName); err != nil {
+			return err
+		}
+
+		name := displayName.String
+		if name == "" {
+			name = strings.TrimSpace(firstName + " " + lastName)
+		}
+
+		if name != "" {
+			participant, err := projecta.NewParticipant(name)
+			if err == nil {
+				project.AddParticipant(participant)
+			}
+		}
+	}
+
+	return rows.Err()
 }
 
 func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
