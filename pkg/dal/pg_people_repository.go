@@ -28,7 +28,7 @@ func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("people")
 	qb.Cols("person_id", "first_name", "last_name", "display_name")
-	qb.Values(person.ID().String(), person.FirstName, person.LastName, person.DisplayName())
+	qb.Values(person.ID().String(), person.FirstName(), person.LastName(), person.DisplayName())
 
 	sql, args := qb.Build()
 
