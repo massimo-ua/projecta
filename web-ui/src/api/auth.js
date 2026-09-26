@@ -1,4 +1,6 @@
 import { differenceInMinutes } from 'date-fns';
+import { jwtDecode } from 'jwt-decode';
+import { User } from '../models/User.js';
 
 const ACCESS_TOKEN_KEY = 'access-token';
 const REFRESH_TOKEN_KEY = 'refresh-token';
@@ -164,5 +166,20 @@ export class Auth {
 
   isAuthenticated() {
     return !!localStorage.getItem(this.#tokenKey);
+  }
+
+  getUser() {
+    const token = localStorage.getItem(this.#tokenKey);
+    if (!token) return null;
+    try {
+      const decoded = jwtDecode(token);
+      return new User({
+        id: decoded.sub,
+        displayName: decoded.display_name,
+        roles: decoded.roles || [],
+      });
+    } catch {
+      return null;
+    }
   }
 }

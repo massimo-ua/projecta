@@ -7,6 +7,10 @@ const layoutContent = {
       en: 'Profile Settings',
       uk: 'Налаштування профілю',
     }),
+    rolesManagementTooltip: t({
+      en: 'Roles Management',
+      uk: 'Керування ролями',
+    }),
     logoutTooltip: t({
       en: 'Logout',
       uk: 'Вийти',

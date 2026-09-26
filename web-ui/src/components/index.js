@@ -16,6 +16,7 @@ export * from './Projects/Assets';
 export * from './Profile/UserProfileSettings';
 export * from './Projects/AcceptShare';
 export * from './ErrorBoundary';
+export * from './Admin';
 
 export const Types = TypesComponent;
 export const Total = TotalComponent;

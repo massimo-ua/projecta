@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { Locales, getLocalizedUrl } from 'intlayer';
-import { User, Sun, Moon, Globe } from 'lucide-react';
+import { User, Sun, Moon, Globe, ShieldCheck } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { Logo } from './components/Logo';
 import Logout from './components/Logout';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { authProvider } from './api';
 import { useI18nHTMLAttributes } from './hooks/useI18nHTMLAttributes';
 import { useTheme } from './hooks/useTheme';
+import { useCurrentUser } from './hooks/useCurrentUser';
 
 export default function HomeLayout({ children }) {
   useI18nHTMLAttributes();
@@ -21,10 +22,16 @@ export default function HomeLayout({ children }) {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const isAuthenticated = authProvider.isAuthenticated();
+  const { isAdmin } = useCurrentUser();
 
   const handleProfileClick = () => {
     const profileUrl = getLocalizedUrl('/profile', locale);
     navigate(profileUrl);
+  };
+
+  const handleAdminRolesClick = () => {
+    const adminUrl = getLocalizedUrl('/admin/roles', locale);
+    navigate(adminUrl);
   };
 
   const handleToggleLanguage = () => {
@@ -71,6 +78,17 @@ export default function HomeLayout({ children }) {
             {isAuthenticated && (
               <>
                 <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleAdminRolesClick}
+                    title={String(content.rolesManagementTooltip || 'Roles Management')}
+                    className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors"
+                  >
+                    <ShieldCheck className="h-4 w-4 text-amber-500/90 dark:text-amber-400" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
