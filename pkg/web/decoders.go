@@ -31,6 +31,63 @@ func decodeRefreshUserToken(_ context.Context, r *http.Request) (any, error) {
 	return req, err
 }
 
+func decodeListUsersRequest(_ context.Context, r *http.Request) (any, error) {
+	var err error
+	var limit, offset int
+	offsetStr := r.URL.Query().Get("offset")
+	limitStr := r.URL.Query().Get("limit")
+
+	if limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid limit", err)
+		}
+	} else {
+		limit = core.DefaultLimit
+	}
+
+	if offsetStr != "" {
+		offset, err = strconv.Atoi(offsetStr)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid offset", err)
+		}
+	}
+
+	return core.Pagination{
+		Limit:  limit,
+		Offset: offset,
+	}, nil
+}
+
+type AssignRolesRequest struct {
+	UserID uuid.UUID
+	Roles  []string
+}
+
+func decodeAssignRolesRequest(_ context.Context, r *http.Request) (any, error) {
+	vars := mux.Vars(r)
+	userIDStr, ok := vars["user_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("missing user_id", nil)
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid user_id", err)
+	}
+
+	var req AssignRolesDTO
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid request payload", err)
+	}
+
+	return AssignRolesRequest{
+		UserID: userID,
+		Roles:  req.Roles,
+	}, nil
+}
+
 func decodeListProjectsRequest(_ context.Context, r *http.Request) (any, error) {
 	var err error
 	var limit, offset int

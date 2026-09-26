@@ -21,5 +21,10 @@ func (s *PeopleServiceImpl) FindOwner(ctx context.Context, personID uuid.UUID) (
 		return nil, err
 	}
 
-	return &Owner{PersonID: person.ID(), DisplayName: person.DisplayName()}, nil
+	return &Owner{
+		PersonID:        person.ID(),
+		DisplayName:     person.DisplayName(),
+		FirstName:       person.FirstName(),
+		CanHaveProjects: person.CanHaveProjects(),
+	}, nil
 }

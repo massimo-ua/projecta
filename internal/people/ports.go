@@ -9,6 +9,8 @@ import (
 type UserService interface {
 	Register(ctx context.Context, command RegisterCommand) error
 	FindByID(ctx context.Context, personID uuid.UUID) (*Person, error)
+	FindAll(ctx context.Context, pagination core.Pagination) ([]*Person, int, error)
+	AssignRoles(ctx context.Context, command AssignRolesCommand) error
 }
 
 type AuthService interface {
@@ -18,6 +20,8 @@ type AuthService interface {
 
 type Repository interface {
 	FindByID(ctx context.Context, personID uuid.UUID) (*Person, error)
+	FindAll(ctx context.Context, pagination core.Pagination) ([]*Person, int, error)
 	Register(ctx context.Context, person *Person) error
 	FindCredentials(ctx context.Context, provider IdentityProvider, registrationID string) (uuid.UUID, string, error)
+	SaveRoles(ctx context.Context, personID uuid.UUID, roles []Role) error
 }

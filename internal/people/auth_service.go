@@ -69,7 +69,7 @@ func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUI
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
 		Sub:         personID.String(),
 		DisplayName: customer.FullName(),
-		Roles:       nil,
+		Roles:       customer.RoleStrings(),
 	})
 
 	if err != nil {
@@ -131,7 +131,7 @@ func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
 		Sub:         person.ID().String(),
 		DisplayName: person.FullName(),
-		Roles:       nil,
+		Roles:       person.RoleStrings(),
 	})
 
 	if err != nil {

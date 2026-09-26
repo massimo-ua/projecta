@@ -26,6 +26,8 @@ func errorCodeToHttpStatus(e exceptions.Exception) int {
 		return http.StatusInternalServerError
 	case exceptions.Unauthorized:
 		return http.StatusUnauthorized
+	case exceptions.Forbidden:
+		return http.StatusForbidden
 	default:
 		return http.StatusInternalServerError
 	}
@@ -109,148 +111,162 @@ func MakeHTTPHandler(
 		options...,
 	))
 
+	r.Methods(http.MethodGet).Path("/users").Handler(ht.NewServer(
+		requireRole(string(people.RoleAdministrator), peopleEndpoints.ListUsers),
+		decodeListUsersRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodPut).Path("/users/{user_id}/roles").Handler(ht.NewServer(
+		requireRole(string(people.RoleAdministrator), peopleEndpoints.AssignRoles),
+		decodeAssignRolesRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/projects").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreateProject),
+		requireRole(string(people.RoleUser), projectEndpoints.CreateProject),
 		DecodeCreateProjectRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListProjects),
+		requireRole(string(people.RoleUser), projectEndpoints.ListProjects),
 		decodeListProjectsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.GetProject),
+		requireRole(string(people.RoleUser), projectEndpoints.GetProject),
 		DecodeGetProjectRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPatch).Path("/projects/{project_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.UpdateProject),
+		requireRole(string(people.RoleUser), projectEndpoints.UpdateProject),
 		decodeUpdateProjectRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects/share/{share_token}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.AcceptShare),
+		requireRole(string(people.RoleUser), projectEndpoints.AcceptShare),
 		DecodeAcceptShareRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/categories").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreateCategory),
+		requireRole(string(people.RoleUser), projectEndpoints.CreateCategory),
 		DecodeCreateCategoryRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/categories").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListCategories),
+		requireRole(string(people.RoleUser), projectEndpoints.ListCategories),
 		decodeListCategoriesRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/types").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreateType),
+		requireRole(string(people.RoleUser), projectEndpoints.CreateType),
 		DecodeCreateTypeRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/types").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListTypes),
+		requireRole(string(people.RoleUser), projectEndpoints.ListTypes),
 		decodeListTypesRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}/types/{type_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.RemoveType),
+		requireRole(string(people.RoleUser), projectEndpoints.RemoveType),
 		decodeProjectResourceRemoveCommand("project_id", "type_id"),
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/totals").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ShowProjectTotals),
+		requireRole(string(people.RoleUser), projectEndpoints.ShowProjectTotals),
 		decodeProjectTotalsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreatePayment),
+		requireRole(string(people.RoleUser), projectEndpoints.CreatePayment),
 		DecodeCreatePaymentRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListPayments),
+		requireRole(string(people.RoleUser), projectEndpoints.ListPayments),
 		decodeListPaymentsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPut).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.UpdatePayment),
+		requireRole(string(people.RoleUser), projectEndpoints.UpdatePayment),
 		decodeUpdatePaymentRequest,
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.GetPayment),
+		requireRole(string(people.RoleUser), projectEndpoints.GetPayment),
 		decodeGetPaymentRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.RemovePayment),
+		requireRole(string(people.RoleUser), projectEndpoints.RemovePayment),
 		decodeProjectResourceRemoveCommand("project_id", "payment_id"),
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.CreateAsset),
+		requireRole(string(people.RoleUser), projectEndpoints.CreateAsset),
 		decodeCreateAssetRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.ListAssets),
+		requireRole(string(people.RoleUser), projectEndpoints.ListAssets),
 		decodeListAssetsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.RemoveAsset),
+		requireRole(string(people.RoleUser), projectEndpoints.RemoveAsset),
 		decodeProjectResourceRemoveCommand("project_id", "asset_id"),
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPut).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.UpdateAsset),
+		requireRole(string(people.RoleUser), projectEndpoints.UpdateAsset),
 		decodeUpdateAssetRequest,
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
-		loggedInOnly(projectEndpoints.GetAsset),
+		requireRole(string(people.RoleUser), projectEndpoints.GetAsset),
 		decodeGetAssetRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,

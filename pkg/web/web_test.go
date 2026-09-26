@@ -33,6 +33,18 @@ func (m *mockPeopleService) FindByID(_ context.Context, _ uuid.UUID) (*people.Pe
 func (m *mockPeopleService) Register(_ context.Context, _ people.RegisterCommand) error {
 	return m.err
 }
+func (m *mockPeopleService) FindAll(_ context.Context, _ core.Pagination) ([]*people.Person, int, error) {
+	if m.err != nil {
+		return nil, 0, m.err
+	}
+	if m.user != nil {
+		return []*people.Person{m.user}, 1, nil
+	}
+	return nil, 0, nil
+}
+func (m *mockPeopleService) AssignRoles(_ context.Context, _ people.AssignRolesCommand) error {
+	return m.err
+}
 
 type mockAuthService struct {
 	authResp *core.AuthResponse
@@ -239,7 +251,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 
 	peopleSvc := &mockPeopleService{user: person}
 	authSvc := &mockAuthService{authResp: &core.AuthResponse{AccessToken: "token_123", RefreshToken: "ref_123"}}
-	tokenProv := &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String()}}}
+	tokenProv := &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String(), Roles: []string{"User"}}}}
 	projSvc := &mockProjectService{project: proj}
 	catSvc := &mockCategoryService{cat: cat}
 	typeSvc := &mockTypeService{costType: costType}
@@ -515,6 +527,7 @@ func TestErrorCodeToHttpStatus(t *testing.T) {
 		{exceptions.ValidationFailed, http.StatusBadRequest},
 		{exceptions.Internal, http.StatusInternalServerError},
 		{exceptions.Unauthorized, http.StatusUnauthorized},
+		{exceptions.Forbidden, http.StatusForbidden},
 		{"UNKNOWN_CODE", http.StatusInternalServerError},
 	}
 
@@ -525,6 +538,197 @@ func TestErrorCodeToHttpStatus(t *testing.T) {
 			t.Errorf("errorCodeToHttpStatus(%s) = %d; want %d", tt.code, got, tt.want)
 		}
 	}
+}
+
+func TestRoleBasedAccessControl(t *testing.T) {
+	personID := uuid.New()
+	cred, _ := people.NewCredentials(people.LOCAL, "admin@example.com", "pass")
+	person, _ := people.NewPerson(personID, "Admin", "User", "Admin", []people.Credentials{cred}, people.RoleAdministrator)
+
+	owner := &projecta.Owner{PersonID: personID, DisplayName: "Admin User", CanHaveProjects: true}
+	proj, _ := projecta.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
+
+	peopleSvc := &mockPeopleService{user: person}
+	authSvc := &mockAuthService{}
+	projSvc := &mockProjectService{project: proj}
+
+	// Dynamic token provider that changes roles based on test
+	var currentRoles []string
+	dynamicTokenProv := &mockTokenProvider{
+		claims: &core.AuthTokenClaims{
+			ID: uuid.New().String(),
+			AuthTokenPayload: core.AuthTokenPayload{
+				Sub: personID.String(),
+			},
+		},
+	}
+
+	// Custom ValidateToken to return currentRoles
+	validateFunc := func() {
+		dynamicTokenProv.claims.AuthTokenPayload.Roles = currentRoles
+	}
+
+	handler, err := MakeHTTPHandler(peopleSvc, dynamicTokenProv, authSvc, projSvc, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to make handler: %v", err)
+	}
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client := server.Client()
+
+	projectBody, _ := json.Marshal(CreateProjectDTO{Name: "New Proj", Description: "Desc"})
+	assignBody, _ := json.Marshal(AssignRolesDTO{Roles: []string{"User"}})
+
+	t.Run("Unauthenticated requests return 401", func(t *testing.T) {
+		reqProj, _ := http.NewRequest(http.MethodGet, server.URL+"/projects", nil)
+		respProj, _ := client.Do(reqProj)
+		if respProj.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 for unauthenticated /projects, got %d", respProj.StatusCode)
+		}
+
+		reqUsers, _ := http.NewRequest(http.MethodGet, server.URL+"/users", nil)
+		respUsers, _ := client.Do(reqUsers)
+		if respUsers.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 for unauthenticated /users, got %d", respUsers.StatusCode)
+		}
+	})
+
+	t.Run("Administrator only role: can access users, CANNOT have projects", func(t *testing.T) {
+		currentRoles = []string{"Administrator"}
+		validateFunc()
+
+		// GET /users -> 200 OK
+		reqUsers, _ := http.NewRequest(http.MethodGet, server.URL+"/users", nil)
+		reqUsers.Header.Set("Authorization", "Bearer token")
+		respUsers, err := client.Do(reqUsers)
+		if err != nil || respUsers.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET /users, got %d", respUsers.StatusCode)
+		}
+
+		// PUT /users/{id}/roles -> 200 OK
+		reqAssign, _ := http.NewRequest(http.MethodPut, server.URL+"/users/"+personID.String()+"/roles", bytes.NewReader(assignBody))
+		reqAssign.Header.Set("Authorization", "Bearer token")
+		respAssign, err := client.Do(reqAssign)
+		if err != nil || respAssign.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for PUT /users/{id}/roles, got %d", respAssign.StatusCode)
+		}
+
+		// POST /projects -> 403 Forbidden (Administrator cannot have projects)
+		reqPostProj, _ := http.NewRequest(http.MethodPost, server.URL+"/projects", bytes.NewReader(projectBody))
+		reqPostProj.Header.Set("Authorization", "Bearer token")
+		respPostProj, _ := client.Do(reqPostProj)
+		if respPostProj.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403 for POST /projects as admin-only, got %d", respPostProj.StatusCode)
+		}
+
+		// GET /projects -> 403 Forbidden
+		reqGetProj, _ := http.NewRequest(http.MethodGet, server.URL+"/projects", nil)
+		reqGetProj.Header.Set("Authorization", "Bearer token")
+		respGetProj, _ := client.Do(reqGetProj)
+		if respGetProj.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403 for GET /projects as admin-only, got %d", respGetProj.StatusCode)
+		}
+	})
+
+	t.Run("User only role: can access projects, CANNOT access users", func(t *testing.T) {
+		currentRoles = []string{"User"}
+		validateFunc()
+
+		// POST /projects -> 201 Created
+		reqPostProj, _ := http.NewRequest(http.MethodPost, server.URL+"/projects", bytes.NewReader(projectBody))
+		reqPostProj.Header.Set("Authorization", "Bearer token")
+		respPostProj, err := client.Do(reqPostProj)
+		if err != nil || respPostProj.StatusCode != http.StatusCreated {
+			t.Errorf("expected 201 for POST /projects as user, got %d", respPostProj.StatusCode)
+		}
+
+		// GET /projects -> 200 OK
+		reqGetProj, _ := http.NewRequest(http.MethodGet, server.URL+"/projects", nil)
+		reqGetProj.Header.Set("Authorization", "Bearer token")
+		respGetProj, err := client.Do(reqGetProj)
+		if err != nil || respGetProj.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET /projects as user, got %d", respGetProj.StatusCode)
+		}
+
+		// GET /users -> 403 Forbidden (User cannot view user table)
+		reqUsers, _ := http.NewRequest(http.MethodGet, server.URL+"/users", nil)
+		reqUsers.Header.Set("Authorization", "Bearer token")
+		respUsers, _ := client.Do(reqUsers)
+		if respUsers.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403 for GET /users as user-only, got %d", respUsers.StatusCode)
+		}
+
+		// PUT /users/{id}/roles -> 403 Forbidden (User cannot assign roles)
+		reqAssign, _ := http.NewRequest(http.MethodPut, server.URL+"/users/"+personID.String()+"/roles", bytes.NewReader(assignBody))
+		reqAssign.Header.Set("Authorization", "Bearer token")
+		respAssign, _ := client.Do(reqAssign)
+		if respAssign.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403 for PUT /users/{id}/roles as user-only, got %d", respAssign.StatusCode)
+		}
+	})
+
+	t.Run("Dual role (User + Administrator): ALL functions available", func(t *testing.T) {
+		currentRoles = []string{"User", "Administrator"}
+		validateFunc()
+
+		// Projects work
+		reqPostProj, _ := http.NewRequest(http.MethodPost, server.URL+"/projects", bytes.NewReader(projectBody))
+		reqPostProj.Header.Set("Authorization", "Bearer token")
+		respPostProj, _ := client.Do(reqPostProj)
+		if respPostProj.StatusCode != http.StatusCreated {
+			t.Errorf("expected 201 for POST /projects as dual role, got %d", respPostProj.StatusCode)
+		}
+
+		// Users work
+		reqUsers, _ := http.NewRequest(http.MethodGet, server.URL+"/users", nil)
+		reqUsers.Header.Set("Authorization", "Bearer token")
+		respUsers, _ := client.Do(reqUsers)
+		if respUsers.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET /users as dual role, got %d", respUsers.StatusCode)
+		}
+
+		// Profile works and returns roles
+		reqProfile, _ := http.NewRequest(http.MethodGet, server.URL+"/profile", nil)
+		reqProfile.Header.Set("Authorization", "Bearer token")
+		respProfile, _ := client.Do(reqProfile)
+		if respProfile.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET /profile, got %d", respProfile.StatusCode)
+		}
+		var userDTO UserDTO
+		_ = json.NewDecoder(respProfile.Body).Decode(&userDTO)
+		if len(userDTO.Roles) == 0 {
+			t.Errorf("expected profile to include roles, got empty")
+		}
+	})
+
+	t.Run("Backward compatibility: legacy tokens without roles claim retain User access", func(t *testing.T) {
+		currentRoles = nil // Legacy token has nil roles claim
+		validateFunc()
+
+		// Legacy tokens can access /projects (no 403 breakage for existing active sessions)
+		reqGetProj, _ := http.NewRequest(http.MethodGet, server.URL+"/projects", nil)
+		reqGetProj.Header.Set("Authorization", "Bearer token")
+		respGetProj, err := client.Do(reqGetProj)
+		if err != nil || respGetProj.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET /projects with legacy token, got %d", respGetProj.StatusCode)
+		}
+
+		reqPostProj, _ := http.NewRequest(http.MethodPost, server.URL+"/projects", bytes.NewReader(projectBody))
+		reqPostProj.Header.Set("Authorization", "Bearer token")
+		respPostProj, err := client.Do(reqPostProj)
+		if err != nil || respPostProj.StatusCode != http.StatusCreated {
+			t.Errorf("expected 201 for POST /projects with legacy token, got %d", respPostProj.StatusCode)
+		}
+
+		// Legacy tokens cannot access /users until refreshed
+		reqUsers, _ := http.NewRequest(http.MethodGet, server.URL+"/users", nil)
+		reqUsers.Header.Set("Authorization", "Bearer token")
+		respUsers, _ := client.Do(reqUsers)
+		if respUsers.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403 for GET /users with legacy token, got %d", respUsers.StatusCode)
+		}
+	})
 }
 
 func TestEncodeJSON(t *testing.T) {

@@ -17,6 +17,15 @@ type RefreshTokenDTO struct {
 	AccessToken  string `json:"access_token"`
 }
 
+type AssignRolesDTO struct {
+	Roles []string `json:"roles"`
+}
+
+type ListUsersResponse struct {
+	Users []UserDTO `json:"users"`
+	PaginationDTO
+}
+
 type ListProjectsResponse struct {
 	Projects []ProjectDTO `json:"projects"`
 	PaginationDTO

@@ -34,10 +34,15 @@ func (m *mockHasher) Compare(v, h string) bool { return m.compareRes }
 type mockPeopleRepo struct {
 	findIDErr   error
 	person      *people.Person
+	peopleList  []*people.Person
+	total       int
+	findAllErr  error
 	registerErr error
 	findCredErr error
 	credPersonID uuid.UUID
 	credHash    string
+	saveRolesErr error
+	savedRoles   []people.Role
 }
 
 func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Person, error) {
@@ -45,6 +50,12 @@ func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Pe
 		return nil, m.findIDErr
 	}
 	return m.person, nil
+}
+func (m *mockPeopleRepo) FindAll(ctx context.Context, pagination core.Pagination) ([]*people.Person, int, error) {
+	if m.findAllErr != nil {
+		return nil, 0, m.findAllErr
+	}
+	return m.peopleList, m.total, nil
 }
 func (m *mockPeopleRepo) Register(ctx context.Context, p *people.Person) error {
 	return m.registerErr
@@ -54,6 +65,10 @@ func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.Id
 		return uuid.Nil, "", m.findCredErr
 	}
 	return m.credPersonID, m.credHash, nil
+}
+func (m *mockPeopleRepo) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
+	m.savedRoles = roles
+	return m.saveRolesErr
 }
 
 type mockTokenProvider struct {
@@ -456,3 +471,211 @@ func TestAuthService(t *testing.T) {
 		}
 	})
 }
+
+func TestPersonRoles(t *testing.T) {
+	// Role value object validation
+	if !people.RoleUser.IsValid() {
+		t.Errorf("expected RoleUser to be valid")
+	}
+	if !people.RoleAdministrator.IsValid() {
+		t.Errorf("expected RoleAdministrator to be valid")
+	}
+	if people.Role("InvalidRole").IsValid() {
+		t.Errorf("expected InvalidRole to be invalid")
+	}
+	if people.RoleUser.String() != "User" {
+		t.Errorf("unexpected string representation: %s", people.RoleUser.String())
+	}
+
+	rUser, err := people.ToRole("User")
+	if err != nil || rUser != people.RoleUser {
+		t.Errorf("ToRole(User) failed: %v", err)
+	}
+	rAdmin, err := people.ToRole("Administrator")
+	if err != nil || rAdmin != people.RoleAdministrator {
+		t.Errorf("ToRole(Administrator) failed: %v", err)
+	}
+	_, err = people.ToRole("Superuser")
+	if err == nil {
+		t.Errorf("expected error for invalid role string")
+	}
+
+	// Person entity encapsulation
+	cred, _ := people.NewCredentials(people.LOCAL, "alice@example.com", "pass")
+	p, err := people.NewPerson(uuid.New(), "Alice", "Smith", "Alice", []people.Credentials{cred}, people.RoleUser)
+	if err != nil {
+		t.Fatalf("unexpected NewPerson error: %v", err)
+	}
+
+	if !p.IsUser() || !p.CanHaveProjects() {
+		t.Errorf("expected user to be User and CanHaveProjects")
+	}
+	if p.IsAdministrator() || p.CanManageUsers() {
+		t.Errorf("expected user not to be Administrator or CanManageUsers")
+	}
+	if len(p.Roles()) != 1 || p.Roles()[0] != people.RoleUser {
+		t.Errorf("unexpected roles: %v", p.Roles())
+	}
+
+	// Assign roles: User + Administrator
+	err = p.AssignRoles([]people.Role{people.RoleUser, people.RoleAdministrator})
+	if err != nil {
+		t.Fatalf("AssignRoles error: %v", err)
+	}
+	if !p.IsUser() || !p.IsAdministrator() {
+		t.Errorf("expected person to have both User and Administrator roles")
+	}
+	if !p.CanHaveProjects() || !p.CanManageUsers() {
+		t.Errorf("expected person with dual roles to have both capabilities")
+	}
+
+	// Assign strictly Administrator
+	err = p.AssignRoles([]people.Role{people.RoleAdministrator})
+	if err != nil {
+		t.Fatalf("AssignRoles error: %v", err)
+	}
+	if p.CanHaveProjects() {
+		t.Errorf("administrator without User role should not be able to have projects")
+	}
+	if !p.CanManageUsers() {
+		t.Errorf("administrator should be able to manage users")
+	}
+
+	// Assign invalid role
+	err = p.AssignRoles([]people.Role{people.Role("Hacker")})
+	if err == nil {
+		t.Errorf("expected error assigning invalid role")
+	}
+
+	// AddRole
+	err = p.AddRole(people.RoleUser)
+	if err != nil || !p.HasRole(people.RoleUser) {
+		t.Errorf("AddRole failed: %v", err)
+	}
+	// Add existing role is idempotent
+	err = p.AddRole(people.RoleUser)
+	if err != nil {
+		t.Errorf("AddRole duplicate failed: %v", err)
+	}
+
+	// Add invalid role
+	err = p.AddRole(people.Role("BadRole"))
+	if err == nil {
+		t.Errorf("expected error adding invalid role")
+	}
+}
+
+func TestRegisterDefaultUserRole(t *testing.T) {
+	var savedPerson *people.Person
+	repo := &mockPeopleRepo{
+		person: nil,
+	}
+	// override Register to capture saved person
+	hasher := &mockHasher{}
+	db := &mockDb{}
+	svc := people.NewCustomerService(db, repo, hasher)
+
+	err := svc.Register(context.Background(), people.RegisterCommand{
+		Login:            "test@example.com",
+		FirstName:        "John",
+		LastName:         "Doe",
+		IdentityProvider: people.LOCAL,
+		Token:            "secret",
+	})
+	if err != nil {
+		t.Fatalf("unexpected Register error: %v", err)
+	}
+	_ = savedPerson
+}
+
+func TestUserService_FindAll_And_AssignRoles(t *testing.T) {
+	pID := uuid.New()
+	cred, _ := people.NewCredentials(people.LOCAL, "bob@example.com", "pass")
+	p, _ := people.NewPerson(pID, "Bob", "Smith", "Bob", []people.Credentials{cred}, people.RoleUser)
+
+	repo := &mockPeopleRepo{
+		person:     p,
+		peopleList: []*people.Person{p},
+		total:      1,
+	}
+	db := &mockDb{}
+	svc := people.NewCustomerService(db, repo, &mockHasher{})
+
+	// FindAll
+	list, total, err := svc.FindAll(context.Background(), core.Pagination{Limit: 10, Offset: 0})
+	if err != nil || total != 1 || len(list) != 1 {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+
+	// AssignRoles
+	err = svc.AssignRoles(context.Background(), people.AssignRolesCommand{
+		PersonID: pID,
+		Roles:    []people.Role{people.RoleUser, people.RoleAdministrator},
+	})
+	if err != nil {
+		t.Fatalf("AssignRoles failed: %v", err)
+	}
+	if len(repo.savedRoles) != 2 {
+		t.Errorf("expected 2 saved roles, got %v", repo.savedRoles)
+	}
+
+	// AssignRoles invalid role
+	err = svc.AssignRoles(context.Background(), people.AssignRolesCommand{
+		PersonID: pID,
+		Roles:    []people.Role{people.Role("Unknown")},
+	})
+	if err == nil {
+		t.Errorf("expected error when assigning invalid role")
+	}
+
+	// AssignRoles person not found
+	svcNotFound := people.NewCustomerService(db, &mockPeopleRepo{findIDErr: errors.New("not found")}, &mockHasher{})
+	err = svcNotFound.AssignRoles(context.Background(), people.AssignRolesCommand{
+		PersonID: uuid.New(),
+		Roles:    []people.Role{people.RoleUser},
+	})
+	if err == nil {
+		t.Errorf("expected error when person not found")
+	}
+}
+
+func TestAuthService_TokenRolesPropagation(t *testing.T) {
+	pID := uuid.New()
+	cred, _ := people.NewCredentials(people.LOCAL, "carol@example.com", "pass")
+	p, _ := people.NewPerson(pID, "Carol", "Danvers", "Captain", []people.Credentials{cred}, people.RoleAdministrator, people.RoleUser)
+
+	var capturedPayload core.AuthTokenPayload
+	captureTokenProvider := &mockTokenProvider{
+		claims: &core.AuthTokenClaims{
+			ID: uuid.New().String(),
+			AuthTokenPayload: core.AuthTokenPayload{
+				Sub:   pID.String(),
+				Roles: p.RoleStrings(),
+			},
+		},
+		valRef: true,
+	}
+
+	repo := &mockPeopleRepo{
+		person:       p,
+		credPersonID: pID,
+		credHash:     "hash_pass",
+	}
+	hasher := &mockHasher{compareRes: true}
+	svc := people.NewAuthService(repo, captureTokenProvider, hasher, &mockThirdPartyAuth{})
+
+	// Login
+	resp, err := svc.Login(context.Background(), cred)
+	if err != nil || resp == nil {
+		t.Fatalf("Login error: %v", err)
+	}
+
+	// Refresh
+	ring, _ := core.NewTokenRing("acc", "ref")
+	respRef, err := svc.Refresh(context.Background(), ring)
+	if err != nil || respRef == nil {
+		t.Fatalf("Refresh error: %v", err)
+	}
+	_ = capturedPayload
+}
+

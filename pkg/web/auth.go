@@ -7,6 +7,7 @@ import (
     "github.com/google/uuid"
     "gitlab.com/massimo-ua/projecta/internal/core"
     "gitlab.com/massimo-ua/projecta/internal/exceptions"
+    "gitlab.com/massimo-ua/projecta/internal/people"
     "net/http"
     "strings"
 )
@@ -45,6 +46,28 @@ func jwtMiddleware(tokenProvider core.AuthTokenProvider) ht.RequestFunc {
             return ctx
         }
 
-        return context.WithValue(ctx, core.RequesterIDContextKey, personUUID)
+        roles := claims.AuthTokenPayload.Roles
+        if roles == nil {
+            // Backward compatibility: legacy tokens issued before RBAC introduction are granted RoleUser
+            roles = []string{string(people.RoleUser)}
+        }
+
+        ctx = context.WithValue(ctx, core.RequesterIDContextKey, personUUID)
+        ctx = context.WithValue(ctx, core.RequesterRolesContextKey, roles)
+        return ctx
+    }
+}
+
+func requireRole(role string, next endpoint.Endpoint) endpoint.Endpoint {
+    return func(ctx context.Context, request any) (any, error) {
+        if _, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID); !ok {
+            return nil, exceptions.NewUnauthorizedException("Request authorization failed", nil)
+        }
+
+        if !core.HasRole(ctx, role) {
+            return nil, exceptions.NewForbiddenException("access forbidden: insufficient permissions", nil)
+        }
+
+        return next(ctx, request)
     }
 }

@@ -345,9 +345,58 @@ func TestPgPeopleRepository(t *testing.T) {
 	})
 
 	t.Run("toPersonFromPg test", func(t *testing.T) {
-		p, err := toPersonFromPg(pID.String(), "John", "Doe", "J.D.")
-		if err != nil || p.FirstName() != "John" {
+		p, err := toPersonFromPg(pID.String(), "John", "Doe", "J.D.", people.RoleUser, people.RoleAdministrator)
+		if err != nil || p.FirstName() != "John" || !p.IsAdministrator() || !p.IsUser() {
 			t.Errorf("toPersonFromPg error: %v", err)
+		}
+	})
+
+	t.Run("SaveRoles success and errors", func(t *testing.T) {
+		mockDb := &mockPgDb{}
+		ctx := withMockDb(context.Background(), mockDb)
+
+		err := repo.SaveRoles(ctx, pID, []people.Role{people.RoleUser, people.RoleAdministrator})
+		if err != nil {
+			t.Errorf("unexpected SaveRoles error: %v", err)
+		}
+
+		err = repo.SaveRoles(ctx, pID, []people.Role{})
+		if err != nil {
+			t.Errorf("unexpected SaveRoles with empty roles error: %v", err)
+		}
+
+		mockDbErr := &mockPgDb{execErr: errors.New("delete failure")}
+		ctxErr := withMockDb(context.Background(), mockDbErr)
+		err = repo.SaveRoles(ctxErr, pID, []people.Role{people.RoleUser})
+		if err == nil {
+			t.Errorf("expected error on delete failure")
+		}
+	})
+
+	t.Run("FindAll success and errors", func(t *testing.T) {
+		mockDb := &mockPgDb{
+			rowVal:   []any{1}, // count(*)
+			rowsData: [][]any{{pID.String(), "John", "Doe", "J.D."}},
+		}
+		ctx := withMockDb(context.Background(), mockDb)
+
+		list, total, err := repo.FindAll(ctx, core.Pagination{Limit: 10, Offset: 0})
+		if err != nil || total != 1 || len(list) != 1 {
+			t.Fatalf("FindAll failed: %v", err)
+		}
+
+		mockDbCountErr := &mockPgDb{rowErr: errors.New("count failed")}
+		ctxCountErr := withMockDb(context.Background(), mockDbCountErr)
+		_, _, err = repo.FindAll(ctxCountErr, core.Pagination{Limit: 10, Offset: 0})
+		if err == nil {
+			t.Errorf("expected count error")
+		}
+
+		mockDbQueryErr := &mockPgDb{rowVal: []any{1}, queryErr: errors.New("query failed")}
+		ctxQueryErr := withMockDb(context.Background(), mockDbQueryErr)
+		_, _, err = repo.FindAll(ctxQueryErr, core.Pagination{Limit: 10, Offset: 0})
+		if err == nil {
+			t.Errorf("expected query error")
 		}
 	})
 }

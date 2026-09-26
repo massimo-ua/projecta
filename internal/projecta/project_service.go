@@ -69,6 +69,10 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 		return nil, exceptions.NewInternalException("failed to find owner", err)
 	}
 
+	if !owner.CanHaveProjects {
+		return nil, exceptions.NewForbiddenException("owner cannot have projects", nil)
+	}
+
 	p, err := s.repository.FindOne(ctx, ProjectFilter{Name: command.Name})
 
 	if p != nil {
