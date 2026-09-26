@@ -303,9 +303,11 @@ func TestLoginWithInvitation(t *testing.T) {
 	})
 
 	t.Run("LoginWithInvitation fails on empty invitation code", func(t *testing.T) {
-		_, err := svc.LoginWithInvitation(context.Background(), "token", people.GOOGLE, "")
-		if err == nil {
+		if _, err := svc.LoginWithInvitation(context.Background(), "token", people.GOOGLE, ""); err == nil {
 			t.Errorf("expected error for empty invitation code")
+		}
+		if _, err := svc.LoginWithInvitation(context.Background(), "token", people.GOOGLE, "   "); err == nil {
+			t.Errorf("expected error for whitespace invitation code")
 		}
 	})
 
@@ -337,6 +339,69 @@ func TestLoginWithInvitation(t *testing.T) {
 		_, err := svcBadGoogle.LoginWithInvitation(context.Background(), "bad_token", people.GOOGLE, rawCode)
 		if err == nil {
 			t.Errorf("expected error when Google validation fails")
+		}
+	})
+}
+
+func TestInvitationCode(t *testing.T) {
+	t.Run("fails on empty or whitespace code", func(t *testing.T) {
+		for _, invalid := range []string{"", " ", "\t\n", "   "} {
+			_, err := people.NewInvitationCode(invalid)
+			if err == nil {
+				t.Errorf("expected error for empty/whitespace code %q, got nil", invalid)
+			}
+		}
+	})
+
+	t.Run("normalizes whitespace and casing", func(t *testing.T) {
+		code, err := people.NewInvitationCode("  AbCdEf123  ")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if code.String() != "abcdef123" {
+			t.Errorf("expected abcdef123, got %s", code.String())
+		}
+	})
+
+	t.Run("generates valid random invitation code", func(t *testing.T) {
+		code1, err := people.GenerateInvitationCode()
+		if err != nil {
+			t.Fatalf("unexpected error generating code 1: %v", err)
+		}
+		code2, err := people.GenerateInvitationCode()
+		if err != nil {
+			t.Fatalf("unexpected error generating code 2: %v", err)
+		}
+
+		if len(code1.String()) != 64 {
+			t.Errorf("expected 64 hex chars, got %d", len(code1.String()))
+		}
+		if code1.Equals(code2) {
+			t.Errorf("expected two generated codes to be distinct")
+		}
+		if code1.Hash() == "" {
+			t.Errorf("expected non-empty hash")
+		}
+	})
+
+	t.Run("computes consistent SHA-256 hash", func(t *testing.T) {
+		c1, _ := people.NewInvitationCode("MY_SECRET_CODE")
+		c2, _ := people.NewInvitationCode("  my_secret_code  ")
+		if !c1.Equals(c2) {
+			t.Errorf("expected c1 to equal c2 after normalization")
+		}
+		if c1.Hash() != c2.Hash() {
+			t.Errorf("expected hash equality, got %s vs %s", c1.Hash(), c2.Hash())
+		}
+	})
+
+	t.Run("zero value handling", func(t *testing.T) {
+		var zero people.InvitationCode
+		if zero.String() != "" {
+			t.Errorf("expected empty string for zero value")
+		}
+		if zero.Hash() != "" {
+			t.Errorf("expected empty hash for zero value")
 		}
 	})
 }

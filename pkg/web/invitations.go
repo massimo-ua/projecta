@@ -88,11 +88,11 @@ func decodeDeleteInvitationRequest(ctx context.Context, r *http.Request) (any, e
 
 func decodeValidateInvitationRequest(_ context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
-	code := vars["code"]
-	if code == "" {
-		return nil, exceptions.NewValidationException("invitation code is required", nil)
+	invCode, err := people.NewInvitationCode(vars["code"])
+	if err != nil {
+		return nil, err
 	}
-	return code, nil
+	return invCode.String(), nil
 }
 
 func makeCreateInvitationEndpoint(svc people.InvitationService) endpoint.Endpoint {

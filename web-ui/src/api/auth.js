@@ -41,6 +41,13 @@ export class Auth {
   }
 
   async getToken() {
+    const refreshToken = localStorage.getItem(this.#refreshTokenKey);
+    const accessToken = localStorage.getItem(this.#tokenKey);
+
+    if (!refreshToken && !accessToken) {
+      return null;
+    }
+
     if (this.#isTokenExpired()) {
       if (this.#pendingTokenRequest) {
         return this.#pendingTokenRequest;
@@ -55,7 +62,7 @@ export class Auth {
       return this.#pendingTokenRequest;
     }
 
-    return localStorage.getItem(this.#tokenKey);
+    return accessToken;
   }
 
   async #refreshToken() {
@@ -137,7 +144,11 @@ export class Auth {
       identity_provider: provider,
     };
     if (invitationCode) {
-      payload.invitation_code = invitationCode;
+      const cleanCode = invitationCode.trim();
+      if (!cleanCode) {
+        throw new Error('Invitation code is required');
+      }
+      payload.invitation_code = cleanCode;
     }
 
     this.#pendingTokenRequest = fetch(`${this.#baseUrl}/login`, {

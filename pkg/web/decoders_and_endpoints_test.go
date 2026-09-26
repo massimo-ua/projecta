@@ -1342,6 +1342,13 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			if err == nil {
 				t.Errorf("expected validation error for empty code")
 			}
+
+			whitespaceCodeReq := httptest.NewRequest(http.MethodGet, "/invitations/code/%20", nil)
+			whitespaceCodeReq = mux.SetURLVars(whitespaceCodeReq, map[string]string{"code": "   "})
+			_, err = decodeValidateInvitationRequest(context.Background(), whitespaceCodeReq)
+			if err == nil {
+				t.Errorf("expected validation error for whitespace code")
+			}
 		})
 	})
 }

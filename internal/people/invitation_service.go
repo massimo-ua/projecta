@@ -2,9 +2,6 @@ package people
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"time"
 
@@ -32,8 +29,11 @@ func NewInvitationService(
 }
 
 func HashInvitationCode(code string) string {
-	h := sha256.Sum256([]byte(code))
-	return hex.EncodeToString(h[:])
+	invCode, err := NewInvitationCode(code)
+	if err != nil {
+		return ""
+	}
+	return invCode.Hash()
 }
 
 func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, email string) (*InvitationWithCode, error) {
@@ -55,12 +55,11 @@ func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, e
 		return nil, exceptions.NewValidationException("user with this email already exists", errors.New("user already exists"))
 	}
 
-	codeBytes := make([]byte, 32)
-	if _, err := rand.Read(codeBytes); err != nil {
-		return nil, exceptions.NewInternalException("failed to generate invitation code", err)
+	invCode, err := GenerateInvitationCode()
+	if err != nil {
+		return nil, err
 	}
-	rawCode := hex.EncodeToString(codeBytes)
-	codeHash := HashInvitationCode(rawCode)
+	codeHash := invCode.Hash()
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
 	personID := uuid.New()
@@ -102,7 +101,7 @@ func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, e
 
 	return &InvitationWithCode{
 		Invitation: invitation,
-		Code:       rawCode,
+		Code:       invCode.String(),
 	}, nil
 }
 
@@ -145,12 +144,12 @@ func (s *InvitationServiceImpl) Delete(ctx context.Context, adminID uuid.UUID, i
 }
 
 func (s *InvitationServiceImpl) FindByCode(ctx context.Context, code string) (*Invitation, error) {
-	if code == "" {
-		return nil, exceptions.NewValidationException("invitation code is required", nil)
+	invCode, err := NewInvitationCode(code)
+	if err != nil {
+		return nil, err
 	}
 
-	codeHash := HashInvitationCode(code)
-	inv, err := s.invitationRepo.FindByCodeHash(ctx, codeHash)
+	inv, err := s.invitationRepo.FindByCodeHash(ctx, invCode.Hash())
 	if err != nil {
 		return nil, err
 	}
