@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
@@ -1087,4 +1088,108 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Error("expected rate error in makeShowProjectTotalsEndpoint")
 		}
 	})
+
+	t.Run("User roles decoders and endpoints", func(t *testing.T) {
+		// decodeListUsersRequest default and params
+		req1, _ := http.NewRequest(http.MethodGet, "/users", nil)
+		res1, err := decodeListUsersRequest(context.Background(), req1)
+		if err != nil || res1.(core.Pagination).Limit != core.DefaultLimit {
+			t.Errorf("decodeListUsersRequest default failed: %v", err)
+		}
+
+		req2, _ := http.NewRequest(http.MethodGet, "/users?limit=5&offset=10", nil)
+		res2, err := decodeListUsersRequest(context.Background(), req2)
+		if err != nil || res2.(core.Pagination).Limit != 5 || res2.(core.Pagination).Offset != 10 {
+			t.Errorf("decodeListUsersRequest custom failed: %v", err)
+		}
+
+		reqBadLimit, _ := http.NewRequest(http.MethodGet, "/users?limit=bad", nil)
+		_, err = decodeListUsersRequest(context.Background(), reqBadLimit)
+		if err == nil {
+			t.Error("expected error for bad limit")
+		}
+
+		reqBadOffset, _ := http.NewRequest(http.MethodGet, "/users?offset=bad", nil)
+		_, err = decodeListUsersRequest(context.Background(), reqBadOffset)
+		if err == nil {
+			t.Error("expected error for bad offset")
+		}
+
+		// decodeAssignRolesRequest
+		targetID := uuid.New()
+		bodyBytes, _ := json.Marshal(AssignRolesDTO{Roles: []string{"User", "Administrator"}})
+		reqAssign, _ := http.NewRequest(http.MethodPut, "/users/"+targetID.String()+"/roles", bytes.NewReader(bodyBytes))
+		reqAssign = mux.SetURLVars(reqAssign, map[string]string{"user_id": targetID.String()})
+		resAssign, err := decodeAssignRolesRequest(context.Background(), reqAssign)
+		if err != nil || resAssign.(AssignRolesRequest).UserID != targetID || len(resAssign.(AssignRolesRequest).Roles) != 2 {
+			t.Fatalf("decodeAssignRolesRequest failed: %v", err)
+		}
+
+		// decodeAssignRolesRequest errors
+		reqNoVar, _ := http.NewRequest(http.MethodPut, "/users//roles", bytes.NewReader(bodyBytes))
+		_, err = decodeAssignRolesRequest(context.Background(), reqNoVar)
+		if err == nil {
+			t.Error("expected missing user_id error")
+		}
+
+		reqBadID, _ := http.NewRequest(http.MethodPut, "/users/not-uuid/roles", bytes.NewReader(bodyBytes))
+		reqBadID = mux.SetURLVars(reqBadID, map[string]string{"user_id": "not-uuid"})
+		_, err = decodeAssignRolesRequest(context.Background(), reqBadID)
+		if err == nil {
+			t.Error("expected invalid user_id error")
+		}
+
+		reqBadJSON, _ := http.NewRequest(http.MethodPut, "/users/"+targetID.String()+"/roles", bytes.NewReader([]byte("{bad json")))
+		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"user_id": targetID.String()})
+		_, err = decodeAssignRolesRequest(context.Background(), reqBadJSON)
+		if err == nil {
+			t.Error("expected bad JSON error")
+		}
+
+		// makeListUsersEndpoint
+		cred, _ := people.NewCredentials(people.LOCAL, "user@test.com", "pass")
+		testUser, _ := people.NewPerson(targetID, "Test", "User", "Tester", []people.Credentials{cred}, people.RoleUser)
+		mPeopleSvc := &mockPeopleService{user: testUser}
+		epListUsers := makeListUsersEndpoint(mPeopleSvc)
+		resListUsers, err := epListUsers(context.Background(), core.Pagination{Limit: 10, Offset: 0})
+		if err != nil || len(resListUsers.(ListUsersResponse).Users) != 1 {
+			t.Fatalf("makeListUsersEndpoint failed: %v", err)
+		}
+
+		mPeopleSvcErr := &mockPeopleService{err: errors.New("people err")}
+		epListUsersErr := makeListUsersEndpoint(mPeopleSvcErr)
+		if _, err := epListUsersErr(context.Background(), core.Pagination{}); err == nil {
+			t.Error("expected error from makeListUsersEndpoint")
+		}
+
+		// makeAssignRolesEndpoint
+		epAssignRoles := makeAssignRolesEndpoint(mPeopleSvc)
+		resAssigned, err := epAssignRoles(context.Background(), AssignRolesRequest{
+			UserID: targetID,
+			Roles:  []string{"Administrator"},
+		})
+		if err != nil || resAssigned.(UserDTO).CustomerID != targetID.String() {
+			t.Fatalf("makeAssignRolesEndpoint failed: %v", err)
+		}
+
+		// makeAssignRolesEndpoint invalid role
+		_, err = epAssignRoles(context.Background(), AssignRolesRequest{
+			UserID: targetID,
+			Roles:  []string{"InvalidRole"},
+		})
+		if err == nil {
+			t.Error("expected invalid role error")
+		}
+
+		// makeAssignRolesEndpoint service error
+		epAssignRolesErr := makeAssignRolesEndpoint(mPeopleSvcErr)
+		_, err = epAssignRolesErr(context.Background(), AssignRolesRequest{
+			UserID: targetID,
+			Roles:  []string{"User"},
+		})
+		if err == nil {
+			t.Error("expected service error")
+		}
+	})
 }
+

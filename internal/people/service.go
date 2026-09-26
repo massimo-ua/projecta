@@ -61,7 +61,7 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
 	}
 
-	person, err := NewPerson(uuid.Nil, command.FirstName, command.LastName, displayName, []Credentials{credentials})
+	person, err := NewPerson(uuid.Nil, command.FirstName, command.LastName, displayName, []Credentials{credentials}, RoleUser)
 
 	if err != nil {
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
@@ -81,3 +81,32 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 
 	return nil
 }
+
+func (s *ServiceImpl) FindAll(ctx context.Context, pagination core.Pagination) ([]*Person, int, error) {
+	return s.peopleRepository.FindAll(ctx, pagination)
+}
+
+func (s *ServiceImpl) AssignRoles(ctx context.Context, command AssignRolesCommand) error {
+	person, err := s.peopleRepository.FindByID(ctx, command.PersonID)
+	if err != nil {
+		return err
+	}
+
+	if err := person.AssignRoles(command.Roles); err != nil {
+		return exceptions.NewValidationException("invalid roles", err)
+	}
+
+	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
+		if err := s.peopleRepository.SaveRoles(ctx, person.ID(), person.Roles()); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
+	if err != nil {
+		return exceptions.NewInternalException("failed to assign roles", err)
+	}
+
+	return nil
+}
+

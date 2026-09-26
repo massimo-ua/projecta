@@ -9,6 +9,7 @@ const (
 	ValidationFailed ErrorCode = "VALIDATION_FAILED"
 	Internal         ErrorCode = "INTERNAL"
 	Unauthorized     ErrorCode = "UNAUTHORIZED"
+	Forbidden        ErrorCode = "FORBIDDEN"
 )
 
 var NotFoundError = errors.New("not found error")
@@ -90,3 +91,8 @@ func NewValidationException(message string, e error) Exception {
 func NewUnauthorizedException(message string, e error) Exception {
 	return NewApplicationError(message, Unauthorized, e)
 }
+
+func NewForbiddenException(message string, e error) Exception {
+	return NewApplicationError(message, Forbidden, e)
+}
+

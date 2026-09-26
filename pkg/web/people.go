@@ -19,10 +19,24 @@ type RegisterUserDTO struct {
 }
 
 type UserDTO struct {
-	CustomerID  string `json:"customer_id"`
-	FirstName   string `json:"first_name"`
-	LastName    string `json:"last_name"`
-	DisplayName string `json:"display_name"`
+	CustomerID  string   `json:"customer_id"`
+	FirstName   string   `json:"first_name"`
+	LastName    string   `json:"last_name"`
+	DisplayName string   `json:"display_name"`
+	Roles       []string `json:"roles"`
+}
+
+func toUserDTO(p *people.Person) UserDTO {
+	if p == nil {
+		return UserDTO{}
+	}
+	return UserDTO{
+		CustomerID:  p.ID().String(),
+		FirstName:   p.FirstName(),
+		LastName:    p.LastName(),
+		DisplayName: p.DisplayName(),
+		Roles:       p.RoleStrings(),
+	}
 }
 
 type UserEndpoints struct {
@@ -30,6 +44,8 @@ type UserEndpoints struct {
 	Login        endpoint.Endpoint
 	RefreshToken endpoint.Endpoint
 	Profile      endpoint.Endpoint
+	ListUsers    endpoint.Endpoint
+	AssignRoles  endpoint.Endpoint
 }
 
 func decodeProfileRequest(ctx context.Context, _ *http.Request) (any, error) {
@@ -97,12 +113,7 @@ func makeProfileEndpoint(svc people.UserService) endpoint.Endpoint {
 			return nil, err
 		}
 
-		return UserDTO{
-			CustomerID:  person.ID().String(),
-			FirstName:   person.FirstName(),
-			LastName:    person.LastName(),
-			DisplayName: person.DisplayName(),
-		}, nil
+		return toUserDTO(person), nil
 	}
 }
 
@@ -125,11 +136,68 @@ func makeRefreshTokenEndpoint(svc people.AuthService) endpoint.Endpoint {
 	}
 }
 
+func makeListUsersEndpoint(svc people.UserService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		pagination := request.(core.Pagination)
+
+		users, total, err := svc.FindAll(ctx, pagination)
+		if err != nil {
+			return nil, err
+		}
+
+		dtos := make([]UserDTO, 0, len(users))
+		for _, u := range users {
+			dtos = append(dtos, toUserDTO(u))
+		}
+
+		return ListUsersResponse{
+			Users: dtos,
+			PaginationDTO: PaginationDTO{
+				Limit:  pagination.Limit,
+				Offset: pagination.Offset,
+				Total:  total,
+			},
+		}, nil
+	}
+}
+
+func makeAssignRolesEndpoint(svc people.UserService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req := request.(AssignRolesRequest)
+
+		roles := make([]people.Role, 0, len(req.Roles))
+		for _, rStr := range req.Roles {
+			r, err := people.ToRole(rStr)
+			if err != nil {
+				return nil, exceptions.NewValidationException("invalid role", err)
+			}
+			roles = append(roles, r)
+		}
+
+		err := svc.AssignRoles(ctx, people.AssignRolesCommand{
+			PersonID: req.UserID,
+			Roles:    roles,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		updatedPerson, err := svc.FindByID(ctx, req.UserID)
+		if err != nil {
+			return nil, err
+		}
+
+		return toUserDTO(updatedPerson), nil
+	}
+}
+
 func MakeCustomerEndpoints(s people.UserService, a people.AuthService) (UserEndpoints, error) {
 	return UserEndpoints{
 		Register:     makeRegisterEndpoint(s),
 		Login:        makeLoginEndpoint(a),
 		RefreshToken: makeRefreshTokenEndpoint(a),
 		Profile:      makeProfileEndpoint(s),
+		ListUsers:    makeListUsersEndpoint(s),
+		AssignRoles:  makeAssignRolesEndpoint(s),
 	}, nil
 }

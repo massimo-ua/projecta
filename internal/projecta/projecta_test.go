@@ -240,19 +240,32 @@ func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Pe
 	}
 	return m.person, nil
 }
+func (m *mockPeopleRepo) FindAll(ctx context.Context, pagination core.Pagination) ([]*people.Person, int, error) {
+	return nil, 0, nil
+}
 func (m *mockPeopleRepo) Register(ctx context.Context, p *people.Person) error { return nil }
 func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.IdentityProvider, regID string) (uuid.UUID, string, error) {
 	return uuid.Nil, "", nil
 }
+func (m *mockPeopleRepo) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
+	return nil
+}
 
 func TestProjectService(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John"}
+	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John", CanHaveProjects: true}
 	proj, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
 
 	peopleSvc := &mockPeopleService{owner: owner}
 	projRepo := &mockProjectRepo{project: proj}
 
 	svc := projecta.NewProjectService(projRepo, peopleSvc)
+
+	// Owner cannot have projects
+	svcNoProjects := projecta.NewProjectService(projRepo, &mockPeopleService{owner: &projecta.Owner{PersonID: uuid.New(), CanHaveProjects: false}})
+	_, err := svcNoProjects.Create(context.Background(), projecta.CreateProjectCommand{Name: "Forbidden Project"})
+	if err == nil {
+		t.Errorf("expected error when owner cannot have projects")
+	}
 
 	// Find & FindOne
 	pList, err := svc.Find(context.Background(), projecta.ProjectCollectionFilter{})
