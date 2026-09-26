@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -11,23 +12,29 @@ import (
 )
 
 type AuthServiceImpl struct {
+	db               core.DbConnection
 	peopleRepository Repository
 	tokenProvider    core.AuthTokenProvider
 	hasher           core.Hasher
 	google           core.ThirdPartyAuth
+	invitationRepo   InvitationRepository
 }
 
 func NewAuthService(
+	db core.DbConnection,
 	peopleRepository Repository,
 	tokenProvider core.AuthTokenProvider,
 	hasher core.Hasher,
 	google core.ThirdPartyAuth,
+	invitationRepo InvitationRepository,
 ) AuthService {
 	return &AuthServiceImpl{
+		db:               db,
 		peopleRepository: peopleRepository,
 		tokenProvider:    tokenProvider,
 		hasher:           hasher,
 		google:           google,
+		invitationRepo:   invitationRepo,
 	}
 }
 
@@ -40,6 +47,129 @@ func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*
 	default:
 		return nil, errors.New("unsupported identity provider")
 	}
+}
+
+func (s *AuthServiceImpl) LoginWithInvitation(
+	ctx context.Context,
+	token string,
+	provider IdentityProvider,
+	invitationCode string,
+) (*core.AuthResponse, error) {
+	if provider != GOOGLE {
+		return nil, exceptions.NewValidationException("unsupported identity provider for invitation", nil)
+	}
+	if invitationCode == "" {
+		return nil, exceptions.NewValidationException("invitation code is required", nil)
+	}
+
+	claims, err := s.google.ValidateToken(token)
+	if err != nil {
+		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+	}
+
+	if s.invitationRepo == nil {
+		return nil, exceptions.NewInternalException("invitation repository not configured", nil)
+	}
+
+	codeHash := HashInvitationCode(invitationCode)
+	invitation, err := s.invitationRepo.FindByCodeHash(ctx, codeHash)
+	if err != nil {
+		return nil, exceptions.NewNotFoundException("invitation not found", err)
+	}
+
+	if invitation.IsExpired() {
+		return nil, exceptions.NewValidationException("invitation has expired", nil)
+	}
+
+	if invitation.IsCompleted() {
+		return nil, exceptions.NewValidationException("invitation has already been completed", nil)
+	}
+
+	if claims.Email != "" && !strings.EqualFold(claims.Email, invitation.Email()) {
+		return nil, exceptions.NewValidationException("google account email does not match invitation email", nil)
+	}
+
+	if invitation.PersonID() == nil {
+		return nil, exceptions.NewInternalException("invitation has no associated user record", nil)
+	}
+
+	personID := *invitation.PersonID()
+	person, err := s.peopleRepository.FindByID(ctx, personID)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to find invited user", err)
+	}
+
+	firstName := claims.FirstName
+	lastName := claims.LastName
+	displayName := claims.DisplayName
+
+	if displayName == "" && claims.Email != "" {
+		displayName = claims.Email
+	}
+	if firstName == "" {
+		parts := strings.Fields(displayName)
+		if len(parts) >= 2 {
+			firstName = parts[0]
+			lastName = strings.Join(parts[1:], " ")
+		} else if len(parts) == 1 {
+			firstName = parts[0]
+			lastName = "User"
+		} else {
+			firstName = "Google"
+			lastName = "User"
+		}
+	}
+	if lastName == "" {
+		lastName = "User"
+	}
+	if len(firstName) < 2 {
+		firstName = firstName + " "
+	}
+	if len(lastName) < 2 {
+		lastName = lastName + " "
+	}
+
+	if err := person.UpdateProfile(firstName, lastName, displayName); err != nil {
+		return nil, exceptions.NewValidationException("invalid user profile data", err)
+	}
+
+	cred, err := NewCredentials(GOOGLE, claims.Sub, claims.Sub)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to prepare credentials", err)
+	}
+
+	updateFn := func(txCtx context.Context) (any, error) {
+		if err := s.peopleRepository.UpdateProfile(txCtx, person.ID(), person.FirstName(), person.LastName(), person.DisplayName()); err != nil {
+			return nil, err
+		}
+
+		if err := s.peopleRepository.SaveCredentials(txCtx, person.ID(), cred); err != nil {
+			return nil, err
+		}
+
+		if err := s.peopleRepository.SaveRoles(txCtx, person.ID(), []Role{RoleUser}); err != nil {
+			return nil, err
+		}
+
+		if err := s.invitationRepo.Complete(txCtx, invitation.ID()); err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	}
+
+	if s.db != nil {
+		if _, err := s.db.Tx(ctx, updateFn); err != nil {
+			return nil, exceptions.NewInternalException("failed to update invited user", err)
+		}
+	} else {
+		if _, err := updateFn(ctx); err != nil {
+			return nil, exceptions.NewInternalException("failed to update invited user", err)
+		}
+	}
+
+	return s.authorizePerson(ctx, person.ID())
 }
 
 func (s *AuthServiceImpl) loginWithLocal(ctx context.Context, credentials Credentials) (*core.AuthResponse, error) {

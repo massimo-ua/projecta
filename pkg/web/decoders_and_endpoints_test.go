@@ -1191,5 +1191,81 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Error("expected service error")
 		}
 	})
+
+	t.Run("Invitation Endpoints and Decoders", func(t *testing.T) {
+		adminID := uuid.New()
+		invID := uuid.New()
+		inv, _ := people.NewInvitation(invID, "invited@example.com", "hash123", time.Now().Add(7*24*time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
+		invWithCode := &people.InvitationWithCode{Invitation: inv, Code: "raw_code_123"}
+
+		invSvc := &mockInvitationService{
+			invWithCode: invWithCode,
+			invList:     []*people.Invitation{inv},
+			inv:         inv,
+		}
+
+		eps := MakeInvitationEndpoints(invSvc)
+
+		// Create
+		resCreate, err := eps.CreateInvitation(context.Background(), struct {
+			AdminID uuid.UUID
+			Email   string
+		}{AdminID: adminID, Email: "invited@example.com"})
+		if err != nil {
+			t.Fatalf("CreateInvitation failed: %v", err)
+		}
+		createResp := resCreate.(InvitationCreatedResponseDTO)
+		if createResp.Code != "raw_code_123" || createResp.Email != "invited@example.com" {
+			t.Errorf("CreateInvitation response mismatch: %+v", createResp)
+		}
+
+		// List
+		resList, err := eps.ListInvitations(context.Background(), adminID)
+		if err != nil {
+			t.Fatalf("ListInvitations failed: %v", err)
+		}
+		listResp := resList.(ListInvitationsResponse)
+		if len(listResp.Invitations) != 1 {
+			t.Errorf("expected 1 invitation in list")
+		}
+
+		// Delete
+		_, err = eps.DeleteInvitation(context.Background(), DeleteInvitationRequest{AdminID: adminID, InvitationID: invID})
+		if err != nil {
+			t.Fatalf("DeleteInvitation failed: %v", err)
+		}
+
+		// Validate
+		resVal, err := eps.ValidateInvitation(context.Background(), "raw_code_123")
+		if err != nil {
+			t.Fatalf("ValidateInvitation failed: %v", err)
+		}
+		valResp := resVal.(ValidateInvitationResponseDTO)
+		if valResp.Email != "invited@example.com" {
+			t.Errorf("ValidateInvitation response mismatch: %+v", valResp)
+		}
+
+		// Login with Invitation Code
+		loginEp := makeLoginEndpoint(&mockAuthService{authResp: &core.AuthResponse{AccessToken: "acc"}})
+		resLogin, err := loginEp(context.Background(), LoginDTO{
+			IdentityProvider: "GOOGLE",
+			Token:            "g_token",
+			InvitationCode:   "raw_code_123",
+		})
+		if err != nil || resLogin == nil {
+			t.Fatalf("Login with invitation failed: %v", err)
+		}
+
+		// Login with invalid provider
+		_, err = loginEp(context.Background(), LoginDTO{
+			IdentityProvider: "INVALID_PROV",
+			Token:            "g_token",
+			InvitationCode:   "raw_code_123",
+		})
+		if err == nil {
+			t.Errorf("expected error for invalid provider")
+		}
+	})
 }
+
 

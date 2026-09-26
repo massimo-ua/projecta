@@ -87,6 +87,14 @@ func makeRegisterEndpoint(svc people.UserService) endpoint.Endpoint {
 func makeLoginEndpoint(svc people.AuthService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req := request.(LoginDTO)
+		if req.InvitationCode != "" {
+			provider, err := people.ToIdentityProvider(req.IdentityProvider)
+			if err != nil {
+				return nil, exceptions.NewValidationException("unknown identity provider", err)
+			}
+			return svc.LoginWithInvitation(ctx, req.Token, provider, req.InvitationCode)
+		}
+
 		c, err := people.NewCredentials(req.IdentityProvider, req.ID, req.Token)
 
 		if err != nil {

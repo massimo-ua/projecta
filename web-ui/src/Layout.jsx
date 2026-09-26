@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { Locales, getLocalizedUrl } from 'intlayer';
-import { User, Sun, Moon, Globe, ShieldCheck } from 'lucide-react';
+import { User, Sun, Moon, Globe, ShieldCheck, Mail } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { Logo } from './components/Logo';
 import Logout from './components/Logout';
@@ -31,6 +31,11 @@ export default function HomeLayout({ children }) {
 
   const handleAdminRolesClick = () => {
     const adminUrl = getLocalizedUrl('/admin/roles', locale);
+    navigate(adminUrl);
+  };
+
+  const handleAdminInvitationsClick = () => {
+    const adminUrl = getLocalizedUrl('/admin/invitations', locale);
     navigate(adminUrl);
   };
 
@@ -79,15 +84,26 @@ export default function HomeLayout({ children }) {
               <>
                 <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
                 {isAdmin && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleAdminRolesClick}
-                    title={String(content.rolesManagementTooltip || 'Roles Management')}
-                    className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors"
-                  >
-                    <ShieldCheck className="h-4 w-4 text-amber-500/90 dark:text-amber-400" />
-                  </Button>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleAdminInvitationsClick}
+                      title={String(content.invitationsManagementTooltip || 'Invitations')}
+                      className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors"
+                    >
+                      <Mail className="h-4 w-4 text-primary" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleAdminRolesClick}
+                      title={String(content.rolesManagementTooltip || 'Roles Management')}
+                      className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors"
+                    >
+                      <ShieldCheck className="h-4 w-4 text-amber-500/90 dark:text-amber-400" />
+                    </Button>
+                  </>
                 )}
                 <Button
                   variant="ghost"

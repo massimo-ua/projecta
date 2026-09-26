@@ -70,6 +70,54 @@ func (m *mockPeopleRepo) SaveRoles(ctx context.Context, personID uuid.UUID, role
 	m.savedRoles = roles
 	return m.saveRolesErr
 }
+func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID uuid.UUID) error {
+	return nil
+}
+func (m *mockPeopleRepo) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName, lastName, displayName string) error {
+	return nil
+}
+func (m *mockPeopleRepo) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
+	return nil
+}
+
+type mockInvitationRepo struct {
+	createErr   error
+	inv         *people.Invitation
+	invList     []*people.Invitation
+	findByIDErr error
+	deleteErr   error
+	completeErr error
+	emailExists bool
+	existsErr   error
+}
+
+func (m *mockInvitationRepo) Create(ctx context.Context, inv *people.Invitation) error {
+	return m.createErr
+}
+func (m *mockInvitationRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Invitation, error) {
+	if m.findByIDErr != nil {
+		return nil, m.findByIDErr
+	}
+	return m.inv, nil
+}
+func (m *mockInvitationRepo) FindByCodeHash(ctx context.Context, codeHash string) (*people.Invitation, error) {
+	if m.findByIDErr != nil {
+		return nil, m.findByIDErr
+	}
+	return m.inv, nil
+}
+func (m *mockInvitationRepo) FindByCreator(ctx context.Context, creatorID uuid.UUID) ([]*people.Invitation, error) {
+	return m.invList, nil
+}
+func (m *mockInvitationRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	return m.deleteErr
+}
+func (m *mockInvitationRepo) Complete(ctx context.Context, id uuid.UUID) error {
+	return m.completeErr
+}
+func (m *mockInvitationRepo) EmailExists(ctx context.Context, email string) (bool, error) {
+	return m.emailExists, m.existsErr
+}
 
 type mockTokenProvider struct {
 	genErr     error
@@ -352,7 +400,11 @@ func TestAuthService(t *testing.T) {
 		claims: &core.AuthTokenClaims{AuthTokenPayload: core.AuthTokenPayload{Sub: "google_sub_123"}},
 	}
 
-	svc := people.NewAuthService(repo, tokenProvider, hasher, googleAuth)
+	newAuth := func(r people.Repository, tp core.AuthTokenProvider, h core.Hasher, g core.ThirdPartyAuth) people.AuthService {
+		return people.NewAuthService(&mockDb{}, r, tp, h, g, &mockInvitationRepo{})
+	}
+
+	svc := newAuth(repo, tokenProvider, hasher, googleAuth)
 
 	t.Run("Login LOCAL success and errors", func(t *testing.T) {
 		res, err := svc.Login(context.Background(), cred)
@@ -361,28 +413,28 @@ func TestAuthService(t *testing.T) {
 		}
 
 		// FindCredentials error
-		svcErr := people.NewAuthService(&mockPeopleRepo{findCredErr: errors.New("err")}, tokenProvider, hasher, googleAuth)
+		svcErr := newAuth(&mockPeopleRepo{findCredErr: errors.New("err")}, tokenProvider, hasher, googleAuth)
 		_, err = svcErr.Login(context.Background(), cred)
 		if err == nil {
 			t.Errorf("expected error when FindCredentials fails")
 		}
 
 		// Password compare failure
-		svcHashMismatch := people.NewAuthService(repo, tokenProvider, &mockHasher{compareRes: false}, googleAuth)
+		svcHashMismatch := newAuth(repo, tokenProvider, &mockHasher{compareRes: false}, googleAuth)
 		_, err = svcHashMismatch.Login(context.Background(), cred)
 		if err == nil {
 			t.Errorf("expected error when password compare fails")
 		}
 
 		// FindByID error in authorizePerson
-		svcFindErr := people.NewAuthService(&mockPeopleRepo{findIDErr: errors.New("err")}, tokenProvider, hasher, googleAuth)
+		svcFindErr := newAuth(&mockPeopleRepo{findIDErr: errors.New("err")}, tokenProvider, hasher, googleAuth)
 		_, err = svcFindErr.Login(context.Background(), cred)
 		if err == nil {
 			t.Errorf("expected error when FindByID fails")
 		}
 
 		// TokenProvider error
-		svcTokErr := people.NewAuthService(repo, &mockTokenProvider{genErr: errors.New("gen err")}, hasher, googleAuth)
+		svcTokErr := newAuth(repo, &mockTokenProvider{genErr: errors.New("gen err")}, hasher, googleAuth)
 		_, err = svcTokErr.Login(context.Background(), cred)
 		if err == nil {
 			t.Errorf("expected error when token generation fails")
@@ -398,14 +450,14 @@ func TestAuthService(t *testing.T) {
 		}
 
 		// Google validate token failure
-		svcGoogleErr := people.NewAuthService(repo, tokenProvider, hasher, &mockThirdPartyAuth{err: errors.New("google err")})
+		svcGoogleErr := newAuth(repo, tokenProvider, hasher, &mockThirdPartyAuth{err: errors.New("google err")})
 		_, err = svcGoogleErr.Login(context.Background(), googleCred)
 		if err == nil {
 			t.Errorf("expected error when google validate token fails")
 		}
 
 		// FindCredentials error
-		svcCredErr := people.NewAuthService(&mockPeopleRepo{findCredErr: errors.New("err")}, tokenProvider, hasher, googleAuth)
+		svcCredErr := newAuth(&mockPeopleRepo{findCredErr: errors.New("err")}, tokenProvider, hasher, googleAuth)
 		_, err = svcCredErr.Login(context.Background(), googleCred)
 		if err == nil {
 			t.Errorf("expected error when FindCredentials fails for google")
@@ -429,42 +481,42 @@ func TestAuthService(t *testing.T) {
 		}
 
 		// DecodeToken failure
-		svcDecErr := people.NewAuthService(repo, &mockTokenProvider{decErr: errors.New("dec err")}, hasher, googleAuth)
+		svcDecErr := newAuth(repo, &mockTokenProvider{decErr: errors.New("dec err")}, hasher, googleAuth)
 		_, err = svcDecErr.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error when DecodeToken fails")
 		}
 
 		// Invalid claims.ID (not a UUID)
-		svcInvalidID := people.NewAuthService(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: "invalid-uuid"}}, hasher, googleAuth)
+		svcInvalidID := newAuth(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: "invalid-uuid"}}, hasher, googleAuth)
 		_, err = svcInvalidID.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error for invalid claim ID")
 		}
 
 		// ValidateRefreshToken fails
-		svcInvalidRef := people.NewAuthService(repo, &mockTokenProvider{claims: tokenProvider.claims, valRef: false}, hasher, googleAuth)
+		svcInvalidRef := newAuth(repo, &mockTokenProvider{claims: tokenProvider.claims, valRef: false}, hasher, googleAuth)
 		_, err = svcInvalidRef.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error when ValidateRefreshToken fails")
 		}
 
 		// Invalid claims.Sub (not a UUID)
-		svcInvalidSub := people.NewAuthService(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: "invalid-uuid"}}, valRef: true}, hasher, googleAuth)
+		svcInvalidSub := newAuth(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: "invalid-uuid"}}, valRef: true}, hasher, googleAuth)
 		_, err = svcInvalidSub.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error for invalid claim Sub")
 		}
 
 		// FindByID fails
-		svcFindErr := people.NewAuthService(&mockPeopleRepo{findIDErr: errors.New("find err")}, tokenProvider, hasher, googleAuth)
+		svcFindErr := newAuth(&mockPeopleRepo{findIDErr: errors.New("find err")}, tokenProvider, hasher, googleAuth)
 		_, err = svcFindErr.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error when FindByID fails")
 		}
 
 		// GenerateTokenRing fails
-		svcGenErr := people.NewAuthService(repo, &mockTokenProvider{claims: tokenProvider.claims, valRef: true, genErr: errors.New("gen err")}, hasher, googleAuth)
+		svcGenErr := newAuth(repo, &mockTokenProvider{claims: tokenProvider.claims, valRef: true, genErr: errors.New("gen err")}, hasher, googleAuth)
 		_, err = svcGenErr.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error when GenerateTokenRing fails")
@@ -662,7 +714,7 @@ func TestAuthService_TokenRolesPropagation(t *testing.T) {
 		credHash:     "hash_pass",
 	}
 	hasher := &mockHasher{compareRes: true}
-	svc := people.NewAuthService(repo, captureTokenProvider, hasher, &mockThirdPartyAuth{})
+	svc := people.NewAuthService(&mockDb{}, repo, captureTokenProvider, hasher, &mockThirdPartyAuth{}, &mockInvitationRepo{})
 
 	// Login
 	resp, err := svc.Login(context.Background(), cred)

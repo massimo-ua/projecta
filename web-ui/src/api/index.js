@@ -6,6 +6,7 @@ import { CategoriesRepository } from './categories';
 import { PaymentRepository } from './payments';
 import { AssetRepository } from './assets';
 import { UsersRepository } from './users';
+import { InvitationsRepository } from './invitations';
 
 const baseUrl = '/api';
 export const authProvider = new Auth(baseUrl);
@@ -17,3 +18,4 @@ export const categoriesRepository = new CategoriesRepository(request);
 export const paymentRepository = new PaymentRepository(request);
 export const assetRepository = new AssetRepository(request);
 export const usersRepository = new UsersRepository(request);
+export const invitationsRepository = new InvitationsRepository(request);

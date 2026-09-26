@@ -7,6 +7,10 @@ const layoutContent = {
       en: 'Profile Settings',
       uk: 'Налаштування профілю',
     }),
+    invitationsManagementTooltip: t({
+      en: 'Invitations',
+      uk: 'Запрошення',
+    }),
     rolesManagementTooltip: t({
       en: 'Roles Management',
       uk: 'Керування ролями',

@@ -249,3 +249,36 @@ func toPersonFromPg(personID string, personFirstName string, personLastName stri
 	}
 	return *p, nil
 }
+
+func (r *PgPeopleRepository) DeletePerson(ctx context.Context, personID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM people WHERE person_id = $1`, personID.String())
+	return err
+}
+
+func (r *PgPeopleRepository) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName string, lastName string, displayName string) error {
+	_, err := r.db.Exec(
+		ctx,
+		`UPDATE people SET first_name = $1, last_name = $2, display_name = $3, updated_at = now() WHERE person_id = $4`,
+		firstName,
+		lastName,
+		displayName,
+		personID.String(),
+	)
+	return err
+}
+
+func (r *PgPeopleRepository) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
+	_, err := r.db.Exec(
+		ctx,
+		`INSERT INTO credentials (person_id, provider, identity, registration_id)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (provider, person_id) DO UPDATE
+		 SET identity = EXCLUDED.identity, registration_id = EXCLUDED.registration_id`,
+		personID.String(),
+		cred.Provider(),
+		cred.Identifier(),
+		cred.RegistrationID(),
+	)
+	return err
+}
+

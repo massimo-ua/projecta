@@ -45,12 +45,16 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		config.TokenTTL,
 		hasher,
 	)
+	invitationRepository := dal.NewPgInvitationRepository(db)
 	authService := people.NewAuthService(
+		db,
 		peopleRepository,
 		tokenProvider,
 		hasher,
 		googleAuth,
+		invitationRepository,
 	)
+	invitationService := people.NewInvitationService(db, invitationRepository, peopleRepository)
 
 	customerService := people.NewCustomerService(db, peopleRepository, hasher)
 	projectRepository := dal.NewPgProjectRepository(db)
@@ -86,6 +90,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		customerService,
 		tokenProvider,
 		authService,
+		invitationService,
 		projectService,
 		categoryService,
 		typeService,

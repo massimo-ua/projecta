@@ -1,6 +1,8 @@
 import React from 'react';
-import { useIntlayer } from 'react-intlayer';
-import { ShieldCheck, ChevronLeft, ChevronRight, Inbox, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useIntlayer, useLocale } from 'react-intlayer';
+import { getLocalizedUrl } from 'intlayer';
+import { ShieldCheck, ChevronLeft, ChevronRight, Inbox, Shield, Mail } from 'lucide-react';
 import HomeLayout from '../../Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +14,8 @@ import { CopyableText } from '../Projects/ListView/CopyableText';
 
 export function RolesManagement() {
   const content = useIntlayer('roles-management');
+  const { locale } = useLocale();
+  const navigate = useNavigate();
   const {
     loading,
     users,
@@ -36,6 +40,27 @@ export function RolesManagement() {
   return (
     <HomeLayout>
       <div className="space-y-6 max-w-5xl mx-auto">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-2 rounded-xl font-semibold shadow-2xs"
+          >
+            <Shield className="h-4 w-4 text-amber-500" />
+            <span>{String(content.title)}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(getLocalizedUrl('/admin/invitations', locale))}
+            className="gap-2 rounded-xl text-muted-foreground hover:text-foreground"
+          >
+            <Mail className="h-4 w-4" />
+            <span>Invitations</span>
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
           <div className="flex items-center gap-3">
