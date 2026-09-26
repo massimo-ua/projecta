@@ -1353,4 +1353,88 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 }
 
+func TestUpdateProfileEndpointAndDecoder(t *testing.T) {
+	validUserID := uuid.New()
+	authCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, validUserID)
+
+	t.Run("decodeUpdateProfileRequest success", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"display_name": "New Display Name"}`)
+		req := httptest.NewRequest(http.MethodPut, "/profile", body)
+		res, err := decodeUpdateProfileRequest(authCtx, req)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		updateReq, ok := res.(UpdateProfileRequest)
+		if !ok {
+			t.Fatalf("expected UpdateProfileRequest type")
+		}
+		if updateReq.PersonID != validUserID {
+			t.Errorf("expected PersonID %s, got %s", validUserID, updateReq.PersonID)
+		}
+		if updateReq.DisplayName.String() != "New Display Name" {
+			t.Errorf("expected 'New Display Name', got '%s'", updateReq.DisplayName.String())
+		}
+	})
+
+	t.Run("decodeUpdateProfileRequest unauthenticated", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"display_name": "New Display Name"}`)
+		req := httptest.NewRequest(http.MethodPut, "/profile", body)
+		_, err := decodeUpdateProfileRequest(context.Background(), req)
+		if err == nil {
+			t.Errorf("expected unauthorized error")
+		}
+	})
+
+	t.Run("decodeUpdateProfileRequest invalid JSON", func(t *testing.T) {
+		body := bytes.NewBufferString(`{invalid json}`)
+		req := httptest.NewRequest(http.MethodPut, "/profile", body)
+		_, err := decodeUpdateProfileRequest(authCtx, req)
+		if err == nil {
+			t.Errorf("expected validation error on invalid JSON")
+		}
+	})
+
+	t.Run("decodeUpdateProfileRequest invalid display name length via json.Unmarshaler", func(t *testing.T) {
+		longName := strings.Repeat("x", 256)
+		payload, _ := json.Marshal(map[string]string{"display_name": longName})
+		req := httptest.NewRequest(http.MethodPut, "/profile", bytes.NewReader(payload))
+		_, err := decodeUpdateProfileRequest(authCtx, req)
+		if err == nil {
+			t.Errorf("expected error decoding too long display name into DisplayName VO")
+		}
+	})
+
+	t.Run("makeUpdateProfileEndpoint success and error", func(t *testing.T) {
+		dn, _ := people.NewDisplayName("Updated Name")
+		p, _ := people.NewPerson(validUserID, "First", "Last", "Old", nil, people.RoleUser)
+
+		// Success
+		svcOk := &mockPeopleService{user: p}
+		epOk := makeUpdateProfileEndpoint(svcOk)
+		res, err := epOk(context.Background(), UpdateProfileRequest{
+			PersonID:    validUserID,
+			DisplayName: dn,
+		})
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		dto := res.(UserDTO)
+		if dto.DisplayName != "Updated Name" {
+			t.Errorf("expected display name 'Updated Name', got '%s'", dto.DisplayName)
+		}
+
+		// Service error
+		svcErr := &mockPeopleService{err: errors.New("svc error")}
+		epErr := makeUpdateProfileEndpoint(svcErr)
+		_, err = epErr(context.Background(), UpdateProfileRequest{
+			PersonID:    validUserID,
+			DisplayName: dn,
+		})
+		if err == nil {
+			t.Errorf("expected service error")
+		}
+	})
+}
+
+
 

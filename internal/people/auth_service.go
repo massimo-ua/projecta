@@ -104,8 +104,14 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 	lastName := claims.LastName
 	displayName := claims.DisplayName
 
-	if displayName == "" && claims.Email != "" {
-		displayName = claims.Email
+	if displayName == "" {
+		if claims.FirstName != "" && claims.LastName != "" {
+			displayName = claims.FirstName + " " + claims.LastName
+		} else if claims.FirstName != "" {
+			displayName = claims.FirstName
+		} else if claims.Email != "" {
+			displayName = strings.Split(claims.Email, "@")[0]
+		}
 	}
 	if firstName == "" {
 		parts := strings.Fields(displayName)
@@ -130,7 +136,12 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 		lastName = lastName + " "
 	}
 
-	if err := person.UpdateProfile(firstName, lastName, displayName); err != nil {
+	dn, err := NewDisplayName(displayName)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid user profile data", err)
+	}
+
+	if err := person.UpdateProfile(firstName, lastName, dn); err != nil {
 		return nil, exceptions.NewValidationException("invalid user profile data", err)
 	}
 

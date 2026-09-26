@@ -43,6 +43,8 @@ type mockPeopleRepo struct {
 	credHash    string
 	saveRolesErr error
 	savedRoles   []people.Role
+	updateProfileErr error
+	updatedDisplayName string
 }
 
 func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Person, error) {
@@ -74,6 +76,10 @@ func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID uuid.UUID) e
 	return nil
 }
 func (m *mockPeopleRepo) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName, lastName, displayName string) error {
+	if m.updateProfileErr != nil {
+		return m.updateProfileErr
+	}
+	m.updatedDisplayName = displayName
 	return nil
 }
 func (m *mockPeopleRepo) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
@@ -729,5 +735,59 @@ func TestAuthService_TokenRolesPropagation(t *testing.T) {
 		t.Fatalf("Refresh error: %v", err)
 	}
 	_ = capturedPayload
+}
+
+func TestCustomerService_UpdateDisplayName(t *testing.T) {
+	pID := uuid.New()
+	cred, _ := people.NewCredentials(people.LOCAL, "john@example.com", "pass")
+	p, _ := people.NewPerson(pID, "John", "Doe", "OldName", []people.Credentials{cred})
+
+	t.Run("success updating display name", func(t *testing.T) {
+		repo := &mockPeopleRepo{person: p}
+		svc := people.NewCustomerService(&mockDb{}, repo, &mockHasher{})
+
+		dn, _ := people.NewDisplayName("NewDisplayName")
+		updated, err := svc.UpdateDisplayName(context.Background(), people.UpdateDisplayNameCommand{
+			PersonID:    pID,
+			DisplayName: dn,
+		})
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if updated.DisplayName() != "NewDisplayName" {
+			t.Errorf("expected 'NewDisplayName', got '%s'", updated.DisplayName())
+		}
+		if repo.updatedDisplayName != "NewDisplayName" {
+			t.Errorf("expected repo to receive 'NewDisplayName', got '%s'", repo.updatedDisplayName)
+		}
+	})
+
+	t.Run("person not found", func(t *testing.T) {
+		repo := &mockPeopleRepo{findIDErr: errors.New("not found")}
+		svc := people.NewCustomerService(&mockDb{}, repo, &mockHasher{})
+
+		dn, _ := people.NewDisplayName("AnyName")
+		_, err := svc.UpdateDisplayName(context.Background(), people.UpdateDisplayNameCommand{
+			PersonID:    pID,
+			DisplayName: dn,
+		})
+		if err == nil {
+			t.Errorf("expected error when person not found")
+		}
+	})
+
+	t.Run("repository error on update", func(t *testing.T) {
+		repo := &mockPeopleRepo{person: p, updateProfileErr: errors.New("db error")}
+		svc := people.NewCustomerService(&mockDb{}, repo, &mockHasher{})
+
+		dn, _ := people.NewDisplayName("AnyName")
+		_, err := svc.UpdateDisplayName(context.Background(), people.UpdateDisplayNameCommand{
+			PersonID:    pID,
+			DisplayName: dn,
+		})
+		if err == nil {
+			t.Errorf("expected error when db fails")
+		}
+	})
 }
 

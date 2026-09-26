@@ -11,6 +11,7 @@ type UserService interface {
 	FindByID(ctx context.Context, personID uuid.UUID) (*Person, error)
 	FindAll(ctx context.Context, pagination core.Pagination) ([]*Person, int, error)
 	AssignRoles(ctx context.Context, command AssignRolesCommand) error
+	UpdateDisplayName(ctx context.Context, command UpdateDisplayNameCommand) (*Person, error)
 }
 
 type AuthService interface {

@@ -15,3 +15,8 @@ type AssignRolesCommand struct {
     Roles    []Role
 }
 
+type UpdateDisplayNameCommand struct {
+    PersonID    uuid.UUID
+    DisplayName DisplayName
+}
+

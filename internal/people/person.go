@@ -40,7 +40,7 @@ type Person struct {
 	id          uuid.UUID
 	firstName   string
 	lastName    string
-	displayName string
+	displayName DisplayName
 	identities  []Credentials
 	roles       []Role
 }
@@ -65,11 +65,15 @@ func (p *Person) Identify(credentials Credentials) (bool, error) {
 }
 
 func (p *Person) DisplayName() string {
-	if p.displayName != "" {
-		return p.displayName
+	if !p.displayName.IsEmpty() {
+		return p.displayName.String()
 	}
 
 	return p.FullName()
+}
+
+func (p *Person) DisplayNameVO() DisplayName {
+	return p.displayName
 }
 
 func (p *Person) Identities() []Credentials {
@@ -174,6 +178,11 @@ func NewPerson(personID uuid.UUID, firstName string, lastName string, displayNam
 		}
 	}
 
+	dn, dnErr := NewDisplayName(displayName)
+	if dnErr != nil {
+		err = errors.Join(err, dnErr)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +191,7 @@ func NewPerson(personID uuid.UUID, firstName string, lastName string, displayNam
 		id:          id,
 		firstName:   firstName,
 		lastName:    lastName,
-		displayName: displayName,
+		displayName: dn,
 		identities:  identities,
 	}
 
@@ -208,7 +217,14 @@ func (p *Person) AddOrReplaceIdentity(credentials Credentials) error {
 	return nil
 }
 
-func (p *Person) UpdateProfile(firstName string, lastName string, displayName string) error {
+func (p *Person) UpdateDisplayName(displayName DisplayName) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	p.displayName = displayName
+}
+
+func (p *Person) UpdateProfile(firstName string, lastName string, displayName DisplayName) error {
 	var err error
 	if l := len(firstName); l < 2 || l > 255 {
 		err = errors.Join(err, errors.New("invalid person first name"))

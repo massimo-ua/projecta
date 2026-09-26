@@ -45,6 +45,14 @@ export class UsersRepository {
     const response = await this.#request.get('/profile');
     return toDomain(response);
   }
+
+  async updateProfile(profileData = {}) {
+    const displayName = typeof profileData === 'string' ? profileData : profileData.displayName;
+    const response = await this.#request.put('/profile', {
+      display_name: displayName,
+    });
+    return toDomain(response);
+  }
 }
 
 export default UsersRepository;

@@ -59,6 +59,42 @@ const userProfileSettingsContent = {
       en: 'Preferences updated successfully',
       uk: 'Налаштування успішно оновлено',
     }),
+    displayNameSectionTitle: t({
+      en: 'Display Name',
+      uk: "Відображуване ім'я",
+    }),
+    displayNameSectionDesc: t({
+      en: 'Update the name that is displayed across your workspaces and projects.',
+      uk: "Оновіть ім'я, яке відображається у ваших робочих просторах та проєктах.",
+    }),
+    displayNameLabel: t({
+      en: 'Display Name',
+      uk: "Відображуване ім'я",
+    }),
+    displayNamePlaceholder: t({
+      en: 'Enter your display name',
+      uk: "Введіть ваше відображуване ім'я",
+    }),
+    saveDisplayNameBtn: t({
+      en: 'Save',
+      uk: 'Зберегти',
+    }),
+    savingDisplayNameBtn: t({
+      en: 'Saving...',
+      uk: 'Збереження...',
+    }),
+    displayNameSuccess: t({
+      en: 'Display name updated successfully',
+      uk: "Відображуване ім'я успішно оновлено",
+    }),
+    displayNameError: t({
+      en: 'Failed to update display name',
+      uk: "Не вдалося оновити відображуване ім'я",
+    }),
+    displayNameValidation: t({
+      en: 'Display name must be less than 255 characters',
+      uk: "Відображуване ім'я має бути менше 255 символів",
+    }),
   },
 };
 

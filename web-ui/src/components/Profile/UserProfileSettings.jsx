@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { Locales, getLocalizedUrl } from 'intlayer';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -11,9 +13,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { User, Globe, Sun, Moon, Palette } from 'lucide-react';
+import { User, Globe, Sun, Moon, Palette, UserPen, Loader2 } from 'lucide-react';
 import HomeLayout from '../../Layout';
 import { useTheme } from '../../hooks/useTheme';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { usersRepository, authProvider } from '../../api';
 
 export function UserProfileSettings() {
   const content = useIntlayer('user-profile-settings');
@@ -21,6 +25,36 @@ export function UserProfileSettings() {
   const { theme, setTheme } = useTheme();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
+  const { currentUser, refreshUser } = useCurrentUser();
+
+  const [displayName, setDisplayName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    usersRepository
+      .getProfile()
+      .then((profile) => {
+        if (isMounted && profile) {
+          setDisplayName(profile.displayName || '');
+        }
+      })
+      .catch(() => {
+        if (isMounted && currentUser) {
+          setDisplayName(currentUser.displayName || '');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setInitialLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]);
 
   const handleLanguageChange = (newLocale) => {
     setLocale(newLocale);
@@ -32,6 +66,30 @@ export function UserProfileSettings() {
   const handleThemeChange = (newTheme) => {
     setTheme(newTheme);
     toast.success(String(content.saveSuccess));
+  };
+
+  const handleDisplayNameSubmit = async (e) => {
+    e.preventDefault();
+    const trimmed = displayName.trim();
+    if (trimmed.length > 255) {
+      toast.error(String(content.displayNameValidation));
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await usersRepository.updateProfile({ displayName: trimmed });
+      try {
+        await authProvider.refreshToken();
+      } catch {
+        refreshUser();
+      }
+      toast.success(String(content.displayNameSuccess));
+    } catch (err) {
+      toast.error(`${String(content.displayNameError)}: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -49,6 +107,51 @@ export function UserProfileSettings() {
               {String(content.subtitle)}
             </p>
           </div>
+        </div>
+
+        {/* Display Name Card */}
+        <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5">
+            <UserPen className="h-4 w-4 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">{String(content.displayNameSectionTitle)}</h3>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {String(content.displayNameSectionDesc)}
+          </p>
+
+          <form onSubmit={handleDisplayNameSubmit} className="space-y-4 pt-1">
+            <div className="space-y-2">
+              <Label htmlFor="user-display-name-input" className="text-xs font-semibold text-foreground">
+                {String(content.displayNameLabel)}
+              </Label>
+              <Input
+                id="user-display-name-input"
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={String(content.displayNamePlaceholder)}
+                maxLength={255}
+                disabled={initialLoading || isSaving}
+                className="w-full rounded-xl"
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                disabled={initialLoading || isSaving}
+                className="rounded-xl px-5 text-xs font-semibold"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    {String(content.savingDisplayNameBtn)}
+                  </>
+                ) : (
+                  String(content.saveDisplayNameBtn)
+                )}
+              </Button>
+            </div>
+          </form>
         </div>
 
         {/* Language Card */}
