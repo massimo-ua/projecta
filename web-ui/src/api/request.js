@@ -21,24 +21,32 @@ export class Request {
     const {
       method = 'GET',
       body = null,
+      auth = true,
       ...rest
     } = options;
 
     const { headers = {} } = rest;
     const { [CORRELATION_ID_HEADER]: requestId = crypto.randomUUID(), ...restOfHeaders } = headers;
 
-    const token = await this.#authProvider.getToken();
+    const requestHeaders = {
+      ...restOfHeaders,
+      'Content-Type': 'application/json',
+      [CORRELATION_ID_HEADER]: requestId,
+    };
+
+    if (auth && this.#authProvider) {
+      const token = await this.#authProvider.getToken();
+      if (token) {
+        requestHeaders.Authorization = `Bearer ${token}`;
+      }
+    }
+
     const controller = new AbortController();
 
     const requestOptions = {
       ...rest,
       method,
-      headers: {
-        ...restOfHeaders,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        [CORRELATION_ID_HEADER]: requestId,
-      },
+      headers: requestHeaders,
       ...(body && { body: JSON.stringify(body) }),
       signal: controller.signal,
     };
@@ -67,7 +75,7 @@ export class Request {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(`${requestOptions.method} failed: ${response.status} ${error.message || response.statusText}`);
+        throw new Error(error.message || `${requestOptions.method} failed: ${response.status} ${response.statusText}`);
       }
 
       if (response.status !== NO_CONTENT) {

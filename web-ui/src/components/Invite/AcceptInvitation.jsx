@@ -47,7 +47,7 @@ export function AcceptInvitation() {
     let isMounted = true;
 
     async function checkInvitation() {
-      if (!code) {
+      if (!code || !code.trim()) {
         setVerifying(false);
         setError('No invitation code provided');
         return;

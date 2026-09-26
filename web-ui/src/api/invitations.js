@@ -19,7 +19,10 @@ export class InvitationsRepository {
   }
 
   async validate(code) {
-    return this.#request.get(`/invitations/code/${code}`);
+    if (!code || !code.trim()) {
+      throw new Error('Invitation code is required');
+    }
+    return this.#request.get(`/invitations/code/${encodeURIComponent(code.trim())}`, { auth: false });
   }
 }
 

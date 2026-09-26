@@ -55,11 +55,12 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 	provider IdentityProvider,
 	invitationCode string,
 ) (*core.AuthResponse, error) {
+	invCode, err := NewInvitationCode(invitationCode)
+	if err != nil {
+		return nil, err
+	}
 	if provider != GOOGLE {
 		return nil, exceptions.NewValidationException("unsupported identity provider for invitation", nil)
-	}
-	if invitationCode == "" {
-		return nil, exceptions.NewValidationException("invitation code is required", nil)
 	}
 
 	claims, err := s.google.ValidateToken(token)
@@ -72,8 +73,7 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 		return nil, exceptions.NewInternalException("invitation repository not configured", nil)
 	}
 
-	codeHash := HashInvitationCode(invitationCode)
-	invitation, err := s.invitationRepo.FindByCodeHash(ctx, codeHash)
+	invitation, err := s.invitationRepo.FindByCodeHash(ctx, invCode.Hash())
 	if err != nil {
 		return nil, exceptions.NewNotFoundException("invitation not found", err)
 	}
