@@ -2,7 +2,8 @@ import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { useIntlayer } from 'react-intlayer';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, Calendar } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import usePayments from '../../hooks/payments';
 import useTypes from '../../hooks/types';
 import AddPaymentModal from './AddPaymentModal';
@@ -95,35 +96,38 @@ export function Payments() {
   const onEditCancel = () => setPaymentIdToEdit('');
 
   const renderPaymentMainContent = (payment) => (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
+          <Calendar className="h-3 w-3" />
           {payment.paymentDate}
         </span>
         <span className="font-semibold text-base text-foreground">{payment.description}</span>
       </div>
       <div className="flex gap-1.5 flex-wrap">
-        <Badge variant="outline">{payment.category}</Badge>
-        <Badge variant="secondary">{payment.type}</Badge>
+        <Badge variant="outline" className="rounded-md text-[11px] font-medium border-border/70 text-muted-foreground">{payment.category}</Badge>
+        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">{payment.type}</Badge>
       </div>
     </div>
   );
 
   const renderPaymentAmount = (payment) => {
     const isDiff = payment.currency !== payment.homeCurrency;
+    const isDownPayment = payment.kind === 'DOWN_PAYMENT';
     return (
-      <div className="flex flex-col items-end">
+      <div className="flex flex-col items-end gap-0.5">
         <span
-          className={
-            payment.kind === 'DOWN_PAYMENT'
-              ? 'text-red-600 dark:text-red-400 font-bold'
-              : 'text-green-600 dark:text-green-400 font-bold'
-          }
+          className={cn(
+            "px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block",
+            isDownPayment
+              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+          )}
         >
           {payment.amount} {payment.currency}
         </span>
         {isDiff && payment.homeAmount && (
-          <span className="text-xs text-muted-foreground font-medium">
+          <span className="text-[11px] text-muted-foreground font-mono">
             ≈ {payment.homeAmount} {payment.homeCurrency}
           </span>
         )}

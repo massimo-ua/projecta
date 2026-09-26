@@ -86,9 +86,14 @@ export default function Types() {
         addButtonText={String(content.addType)}
         addButtonDisabled={addModalOpened}
         renderItemMainContent={(type) => (
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{type.category}</Badge>
-            <span className="font-semibold text-base text-foreground">{type.name}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="rounded-md text-[11px] font-medium border-border/70 text-muted-foreground">{type.category}</Badge>
+              <span className="font-semibold text-base text-foreground">{type.name}</span>
+            </div>
+            {type.description && (
+              <span className="text-xs text-muted-foreground/80 line-clamp-1">{type.description}</span>
+            )}
           </div>
         )}
         renderItemDetails={(type) => (

@@ -23,24 +23,24 @@ export function RemoveButton({ onRemove }) {
         <Button
           variant="outline"
           size="sm"
-          className="h-8 text-xs font-medium text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+          className="h-8 px-2.5 rounded-lg text-xs font-medium text-muted-foreground border-border/70 hover:text-destructive hover:border-destructive/30 hover:bg-destructive/10 transition-all gap-1.5"
         >
           <Trash2 className="h-3.5 w-3.5" />
-          {String(content.remove)}
+          <span>{String(content.remove)}</span>
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent>
+      <AlertDialogContent className="rounded-2xl sm:max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>{String(content.confirmRemoval)}</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogTitle className="text-lg font-bold">{String(content.confirmRemoval)}</AlertDialogTitle>
+          <AlertDialogDescription className="text-sm text-muted-foreground">
             {String(content.removeWarning)}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{String(content.cancel)}</AlertDialogCancel>
+        <AlertDialogFooter className="gap-2 sm:gap-0 pt-2">
+          <AlertDialogCancel className="rounded-xl">{String(content.cancel)}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onRemove}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
           >
             {String(content.remove)}
           </AlertDialogAction>
@@ -49,3 +49,5 @@ export function RemoveButton({ onRemove }) {
     </AlertDialog>
   );
 }
+
+export default RemoveButton;

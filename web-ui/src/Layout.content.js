@@ -11,6 +11,14 @@ const layoutContent = {
       en: 'Logout',
       uk: 'Вийти',
     }),
+    themeToggleTooltip: t({
+      en: 'Toggle dark / light theme',
+      uk: 'Змінити тему (світла / темна)',
+    }),
+    languageTooltip: t({
+      en: 'Switch language',
+      uk: 'Змінити мову',
+    }),
   },
 };
 

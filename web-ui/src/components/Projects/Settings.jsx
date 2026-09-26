@@ -6,7 +6,6 @@ import { projectsRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -86,88 +85,89 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-4">
-        <Skeleton className="h-44 w-full max-w-lg rounded-xl" />
+      <div className="space-y-4 max-w-xl">
+        <Skeleton className="h-44 w-full rounded-2xl" />
+        <Skeleton className="h-36 w-full rounded-2xl" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 space-y-6 max-w-xl">
-      <div className="flex items-center gap-2 pb-2 border-b">
-        <Settings2 className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold tracking-tight">{String(content.title)}</h2>
+    <div className="space-y-6 max-w-xl">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-border/60">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Settings2 className="h-4 w-4" />
+        </div>
+        <h2 className="text-lg font-bold tracking-tight text-foreground">{String(content.title)}</h2>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">{String(content.homeCurrencyTitle)}</CardTitle>
-          <CardDescription>
+      <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-xs space-y-5">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">{String(content.homeCurrencyTitle)}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
             {String(content.homeCurrencyDesc)}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="main-currency">{String(content.homeCurrencyTitle)}</Label>
-              <Select value={mainCurrency} onValueChange={setMainCurrency} disabled={saving}>
-                <SelectTrigger id="main-currency" className="w-full">
-                  <SelectValue placeholder={String(content.selectCurrencyPlaceholder)} />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPORTED_CURRENCIES.map((c) => (
-                    <SelectItem key={c.code} value={c.code}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          </p>
+        </div>
 
-            <div className="flex justify-end pt-2">
-              <Button type="submit" disabled={saving} className="gap-2 font-semibold">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                {String(content.saveSettingsButton)}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="main-currency" className="text-xs font-semibold">{String(content.homeCurrencyTitle)}</Label>
+            <Select value={mainCurrency} onValueChange={setMainCurrency} disabled={saving}>
+              <SelectTrigger id="main-currency" className="w-full rounded-xl">
+                <SelectValue placeholder={String(content.selectCurrencyPlaceholder)} />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code} className="rounded-lg">
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
+          <div className="flex justify-end pt-2">
+            <Button type="submit" disabled={saving} className="gap-2 font-semibold rounded-xl px-5 h-10 shadow-sm shadow-primary/20">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{String(content.saveSettingsButton)}</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-xs space-y-4">
+        <div>
           <div className="flex items-center gap-2">
             <Share2 className="h-4 w-4 text-primary" />
-            <CardTitle className="text-base">{String(content.projectSharingTitle)}</CardTitle>
+            <h3 className="text-base font-semibold text-foreground">{String(content.projectSharingTitle)}</h3>
           </div>
-          <CardDescription>
+          <p className="text-xs text-muted-foreground mt-0.5">
             {String(content.projectSharingDesc)}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="share-url">{String(content.shareableLinkLabel)}</Label>
-            <div className="flex gap-2">
-              <Input
-                id="share-url"
-                readOnly
-                value={shareUrl}
-                onClick={(e) => e.target.select()}
-                className="font-mono text-xs bg-muted text-muted-foreground cursor-default focus-visible:ring-0 select-all"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCopyShareUrl}
-                className="gap-2 shrink-0"
-              >
-                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                {copied ? String(content.copiedButton) : String(content.copyButton)}
-              </Button>
-            </div>
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="share-url" className="text-xs font-semibold">{String(content.shareableLinkLabel)}</Label>
+          <div className="flex gap-2">
+            <Input
+              id="share-url"
+              readOnly
+              value={shareUrl}
+              onClick={(e) => e.target.select()}
+              className="font-mono text-xs bg-muted/50 rounded-xl text-muted-foreground cursor-default focus-visible:ring-0 select-all"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCopyShareUrl}
+              className="gap-2 shrink-0 rounded-xl border-border/70 hover:border-primary/40 text-xs font-semibold"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              <span>{copied ? String(content.copiedButton) : String(content.copyButton)}</span>
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

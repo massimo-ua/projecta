@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
 
@@ -96,20 +97,24 @@ export default function EditAssetModal({
 
   return (
     <Dialog open={Boolean(assetId)} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[480px] rounded-2xl p-6">
         <DialogHeader>
-          <DialogTitle>{String(content?.editAssetTitle || 'Edit Asset')}</DialogTitle>
+          <DialogTitle className="text-xl font-bold tracking-tight">
+            {String(content?.editAssetTitle || 'Edit Asset')}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleUpdate} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-type">{String(content?.typeLabel || 'Type')}</Label>
+            <Label htmlFor="edit-asset-type" className="text-xs font-semibold">
+              {String(content?.typeLabel || 'Type')}
+            </Label>
             <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger id="edit-asset-type">
+              <SelectTrigger id="edit-asset-type" className="rounded-xl">
                 <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 {types.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
+                  <SelectItem key={type.id} value={type.id} className="rounded-lg">
                     {type.name} [{type.category}]
                   </SelectItem>
                 ))}
@@ -119,7 +124,9 @@ export default function EditAssetModal({
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="edit-asset-price">{String(content?.priceLabel || 'Price')}</Label>
+              <Label htmlFor="edit-asset-price" className="text-xs font-semibold">
+                {String(content?.priceLabel || 'Price')}
+              </Label>
               <Input
                 id="edit-asset-price"
                 type="number"
@@ -127,18 +134,21 @@ export default function EditAssetModal({
                 placeholder={String(content?.pricePlaceholder || '0.00')}
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
+                className="rounded-xl"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-asset-currency">{String(content?.currencyLabel || 'Currency')}</Label>
+              <Label htmlFor="edit-asset-currency" className="text-xs font-semibold">
+                {String(content?.currencyLabel || 'Currency')}
+              </Label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger id="edit-asset-currency">
+                <SelectTrigger id="edit-asset-currency" className="rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl">
                   {SUPPORTED_CURRENCIES.map((c) => (
-                    <SelectItem key={c} value={c}>
+                    <SelectItem key={c} value={c} className="rounded-lg">
                       {c}
                     </SelectItem>
                   ))}
@@ -148,44 +158,64 @@ export default function EditAssetModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-acquired">{String(content?.acquiredAtLabel || 'Acquired At')}</Label>
+            <Label htmlFor="edit-asset-acquired" className="text-xs font-semibold">
+              {String(content?.acquiredAtLabel || 'Acquired At')}
+            </Label>
             <Input
               id="edit-asset-acquired"
               type="date"
               value={acquiredAt}
               onChange={(e) => setAcquiredAt(e.target.value)}
+              className="rounded-xl"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-name">{String(content?.nameLabel || 'Name')}</Label>
+            <Label htmlFor="edit-asset-name" className="text-xs font-semibold">
+              {String(content?.nameLabel || 'Name')}
+            </Label>
             <Input
               id="edit-asset-name"
               placeholder={String(content?.namePlaceholder || 'Asset name')}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              className="rounded-xl"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-desc">{String(content?.descriptionLabel || 'Description')}</Label>
+            <Label htmlFor="edit-asset-desc" className="text-xs font-semibold">
+              {String(content?.descriptionLabel || 'Description')}
+            </Label>
             <Textarea
               id="edit-asset-desc"
               rows={3}
               placeholder={String(content?.descriptionPlaceholder || 'Asset description...')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              className="rounded-xl resize-none"
             />
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
+          <DialogFooter className="pt-3 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={loading}
+              className="rounded-xl"
+            >
               {String(content?.cancelButton || 'Cancel')}
             </Button>
-            <Button type="submit" disabled={loading}>
-              {String(content?.submitButton || 'Submit')}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{String(content?.submitButton || 'Submit')}</span>
             </Button>
           </DialogFooter>
         </form>

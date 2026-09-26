@@ -10,11 +10,13 @@ export function EditButton({ onClick }) {
     <Button
       variant="outline"
       size="sm"
-      className="h-8 text-xs font-medium gap-1.5"
+      className="h-8 px-2.5 rounded-lg text-xs font-medium gap-1.5 border-border/70 text-muted-foreground hover:text-foreground hover:border-border hover:bg-accent/60 transition-all"
       onClick={onClick}
     >
       <Pencil className="h-3.5 w-3.5" />
-      {String(content.edit)}
+      <span>{String(content.edit)}</span>
     </Button>
   );
 }
+
+export default EditButton;

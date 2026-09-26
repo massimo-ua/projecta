@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { useIntlayer } from 'react-intlayer';
 import { Badge } from '@/components/ui/badge';
-import { Package } from 'lucide-react';
+import { Package, Calendar } from 'lucide-react';
 import useAssets from '../../hooks/assets';
 import useTypes from '../../hooks/types';
 import AddAssetModal from './AddAssetModal';
@@ -95,19 +95,20 @@ export function Assets() {
   };
 
   const renderAssetMainContent = (asset) => (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
+          <Calendar className="h-3 w-3" />
           {asset.acquiredAt}
         </span>
         <span className="font-semibold text-base text-foreground">{asset.name}</span>
       </div>
       <div className="flex gap-1.5 flex-wrap">
-        <Badge variant="outline">{asset.category}</Badge>
-        <Badge variant="secondary">{asset.type}</Badge>
+        <Badge variant="outline" className="rounded-md text-[11px] font-medium border-border/70 text-muted-foreground">{asset.category}</Badge>
+        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">{asset.type}</Badge>
       </div>
       {asset.description && (
-        <span className="text-xs text-muted-foreground mt-0.5">{asset.description}</span>
+        <span className="text-xs text-muted-foreground/80 mt-0.5 line-clamp-1">{asset.description}</span>
       )}
     </div>
   );
@@ -115,12 +116,12 @@ export function Assets() {
   const renderAssetAmount = (asset) => {
     const isDiff = asset.currency !== asset.homeCurrency;
     return (
-      <div className="flex flex-col items-end">
-        <span className="font-bold text-foreground">
+      <div className="flex flex-col items-end gap-0.5">
+        <span className="px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block bg-primary/10 text-primary border border-primary/20">
           {asset.price} {asset.currency}
         </span>
         {isDiff && asset.homeAmount && (
-          <span className="text-xs text-muted-foreground font-medium">
+          <span className="text-[11px] text-muted-foreground font-mono">
             ≈ {asset.homeAmount} {asset.homeCurrency}
           </span>
         )}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { useIntlayer } from 'react-intlayer';
 import { typesRepository } from '../../api';
@@ -21,6 +22,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AddTypeModal(props) {
@@ -79,20 +81,24 @@ export default function AddTypeModal(props) {
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[440px] rounded-2xl p-6">
         <DialogHeader>
-          <DialogTitle>{String(content.addType)}</DialogTitle>
+          <DialogTitle className="text-xl font-bold tracking-tight">
+            {String(content.addType)}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="type-category">{String(content.categoryLabel)}</Label>
+            <Label htmlFor="type-category" className="text-xs font-semibold">
+              {String(content.categoryLabel)}
+            </Label>
             <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger id="type-category">
+              <SelectTrigger id="type-category" className="rounded-xl">
                 <SelectValue placeholder={String(content.selectCategoryPlaceholder)} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
+                  <SelectItem key={category.id} value={category.id} className="rounded-lg">
                     {category.name}
                   </SelectItem>
                 ))}
@@ -101,33 +107,50 @@ export default function AddTypeModal(props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="type-name">{String(content.nameLabel)}</Label>
+            <Label htmlFor="type-name" className="text-xs font-semibold">
+              {String(content.nameLabel)}
+            </Label>
             <Input
               id="type-name"
               placeholder={String(content.namePlaceholder)}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              className="rounded-xl"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="type-desc">{String(content.descriptionLabel)}</Label>
+            <Label htmlFor="type-desc" className="text-xs font-semibold">
+              {String(content.descriptionLabel)}
+            </Label>
             <Textarea
               id="type-desc"
               rows={3}
               placeholder={String(content.descriptionPlaceholder)}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              className="rounded-xl resize-none"
             />
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
+          <DialogFooter className="pt-3 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={loading}
+              className="rounded-xl"
+            >
               {String(content.cancelButton)}
             </Button>
-            <Button type="submit" disabled={loading}>
-              {String(content.submitButton)}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{String(content.submitButton)}</span>
             </Button>
           </DialogFooter>
         </form>
@@ -135,3 +158,9 @@ export default function AddTypeModal(props) {
     </Dialog>
   );
 }
+
+AddTypeModal.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onSuccess: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+};

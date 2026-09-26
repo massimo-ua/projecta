@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { projectsRepository } from '../../api';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
+import HomeLayout from '../../Layout';
 
 export function AcceptShare() {
   const { shareToken } = useParams();
@@ -58,37 +58,41 @@ export function AcceptShare() {
   }, [shareToken, navigate, locale, content]);
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-4">
-      <Card className="max-w-md w-full text-center shadow-lg border">
-        <CardHeader className="pb-4">
-          <div className="mx-auto mb-3 p-3 rounded-full bg-primary/10 text-primary w-fit">
+    <HomeLayout>
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center rounded-3xl border border-border/80 bg-card p-8 sm:p-10 shadow-lg shadow-black/5 dark:shadow-none space-y-5">
+          <div className="mx-auto p-4 rounded-2xl bg-primary/10 text-primary w-fit ring-1 ring-primary/20">
             {status === 'loading' && <Loader2 className="h-8 w-8 animate-spin" />}
-            {status === 'success' && <CheckCircle2 className="h-8 w-8 text-green-500" />}
-            {status === 'error' && <AlertCircle className="h-8 w-8 text-red-500" />}
+            {status === 'success' && <CheckCircle2 className="h-8 w-8 text-emerald-500" />}
+            {status === 'error' && <AlertCircle className="h-8 w-8 text-rose-500" />}
           </div>
-          <CardTitle className="text-xl font-bold">
-            {status === 'loading' && String(content.joiningProject)}
-            {status === 'success' && String(content.projectShared)}
-            {status === 'error' && String(content.unableToJoinProject)}
-          </CardTitle>
-          <CardDescription>
-            {status === 'loading' && String(content.processingInvitation)}
-            {status === 'success' && (isOwner ? String(content.alreadyOwner) : String(content.accessGrantedRedirecting))}
-            {status === 'error' && (errorMsg || String(content.invalidOrExpiredLink))}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-2">
+
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">
+              {status === 'loading' && String(content.joiningProject)}
+              {status === 'success' && String(content.projectShared)}
+              {status === 'error' && String(content.unableToJoinProject)}
+            </h2>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              {status === 'loading' && String(content.processingInvitation)}
+              {status === 'success' && (isOwner ? String(content.alreadyOwner) : String(content.accessGrantedRedirecting))}
+              {status === 'error' && (errorMsg || String(content.invalidOrExpiredLink))}
+            </p>
+          </div>
+
           {status === 'error' && (
-            <Button
-              onClick={() => navigate(getLocalizedUrl('/projects', locale))}
-              className="w-full"
-            >
-              {String(content.backToProjectsButton)}
-            </Button>
+            <div className="pt-2">
+              <Button
+                onClick={() => navigate(getLocalizedUrl('/projects', locale))}
+                className="w-full rounded-xl h-11 font-semibold"
+              >
+                {String(content.backToProjectsButton)}
+              </Button>
+            </div>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </div>
+    </HomeLayout>
   );
 }
 
