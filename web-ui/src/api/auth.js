@@ -127,9 +127,17 @@ export class Auth {
     return this.#pendingTokenRequest;
   }
 
-  async loginSocial(token, provider) {
+  async loginSocial(token, provider, invitationCode = null) {
     if (this.#pendingTokenRequest) {
       return this.#pendingTokenRequest;
+    }
+
+    const payload = {
+      token,
+      identity_provider: provider,
+    };
+    if (invitationCode) {
+      payload.invitation_code = invitationCode;
     }
 
     this.#pendingTokenRequest = fetch(`${this.#baseUrl}/login`, {
@@ -137,14 +145,12 @@ export class Auth {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        token,
-        identity_provider: provider,
-      }),
+      body: JSON.stringify(payload),
     })
-      .then((response) => {
+      .then(async (response) => {
         if (!response.ok) {
-          throw new Error('Failed to login');
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.message || data.error || 'Failed to login');
         }
 
         return response.json();

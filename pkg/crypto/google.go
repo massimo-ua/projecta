@@ -101,12 +101,36 @@ func (p *GoogleAuthProvider) ValidateToken(code string) (*core.AuthTokenClaims, 
 		return nil, err
 	}
 
+	var sub string
+	if s, ok := claims["sub"].(string); ok {
+		sub = s
+	}
+	var displayName string
+	if n, ok := claims["name"].(string); ok {
+		displayName = n
+	}
+	var email string
+	if e, ok := claims["email"].(string); ok {
+		email = e
+	}
+	var firstName string
+	if fn, ok := claims["given_name"].(string); ok {
+		firstName = fn
+	}
+	var lastName string
+	if ln, ok := claims["family_name"].(string); ok {
+		lastName = ln
+	}
+
 	return &core.AuthTokenClaims{
 		ID: uuid.New().String(),
 		AuthTokenPayload: core.AuthTokenPayload{
-			Sub:         claims["sub"].(string),
-			DisplayName: claims["name"].(string),
+			Sub:         sub,
+			DisplayName: displayName,
 			Roles:       []string{},
+			Email:       email,
+			FirstName:   firstName,
+			LastName:    lastName,
 		},
 	}, nil
 }

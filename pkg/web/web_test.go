@@ -57,11 +57,46 @@ func (m *mockAuthService) Login(_ context.Context, _ people.Credentials) (*core.
 	}
 	return m.authResp, nil
 }
+func (m *mockAuthService) LoginWithInvitation(_ context.Context, _ string, _ people.IdentityProvider, _ string) (*core.AuthResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.authResp, nil
+}
 func (m *mockAuthService) Refresh(_ context.Context, _ *core.TokenRing) (*core.AuthResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.authResp, nil
+}
+
+type mockInvitationService struct {
+	invWithCode *people.InvitationWithCode
+	invList     []*people.Invitation
+	inv         *people.Invitation
+	err         error
+}
+
+func (m *mockInvitationService) Create(_ context.Context, _ uuid.UUID, _ string) (*people.InvitationWithCode, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.invWithCode, nil
+}
+func (m *mockInvitationService) FindAllByCreator(_ context.Context, _ uuid.UUID) ([]*people.Invitation, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.invList, nil
+}
+func (m *mockInvitationService) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return m.err
+}
+func (m *mockInvitationService) FindByCode(_ context.Context, _ string) (*people.Invitation, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.inv, nil
 }
 
 type mockTokenProvider struct {
@@ -258,7 +293,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	paySvc := &mockPaymentService{pay: pay}
 	astSvc := &mockAssetService{asset: ast}
 
-	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, projSvc, catSvc, typeSvc, paySvc, astSvc, nil)
+	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, &mockInvitationService{}, projSvc, catSvc, typeSvc, paySvc, astSvc, nil)
 	if err != nil || handler == nil {
 		t.Fatalf("failed to create http handler: %v", err)
 	}
@@ -568,7 +603,7 @@ func TestRoleBasedAccessControl(t *testing.T) {
 		dynamicTokenProv.claims.AuthTokenPayload.Roles = currentRoles
 	}
 
-	handler, err := MakeHTTPHandler(peopleSvc, dynamicTokenProv, authSvc, projSvc, nil, nil, nil, nil, nil)
+	handler, err := MakeHTTPHandler(peopleSvc, dynamicTokenProv, authSvc, &mockInvitationService{}, projSvc, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to make handler: %v", err)
 	}

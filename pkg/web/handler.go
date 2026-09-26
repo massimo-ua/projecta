@@ -52,6 +52,7 @@ func MakeHTTPHandler(
 	peopleService people.UserService,
 	authTokenProvider core.AuthTokenProvider,
 	authService people.AuthService,
+	invitationService people.InvitationService,
 	projectService projecta.ProjectService,
 	categoryService projecta.CategoryService,
 	typeService projecta.TypeService,
@@ -62,6 +63,7 @@ func MakeHTTPHandler(
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
 	peopleEndpoints, err := MakeCustomerEndpoints(peopleService, authService)
+	invitationEndpoints := MakeInvitationEndpoints(invitationService)
 	projectEndpoints, err := MakeProjectEndpoints(
 		projectService,
 		categoryService,
@@ -123,6 +125,34 @@ func MakeHTTPHandler(
 		decodeAssignRolesRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
+	))
+
+	r.Methods(http.MethodPost).Path("/invitations").Handler(ht.NewServer(
+		requireRole(string(people.RoleAdministrator), invitationEndpoints.CreateInvitation),
+		decodeCreateInvitationRequest,
+		encodeJSON(http.StatusCreated),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodGet).Path("/invitations").Handler(ht.NewServer(
+		requireRole(string(people.RoleAdministrator), invitationEndpoints.ListInvitations),
+		decodeListInvitationsRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodDelete).Path("/invitations/{invitation_id}").Handler(ht.NewServer(
+		requireRole(string(people.RoleAdministrator), invitationEndpoints.DeleteInvitation),
+		decodeDeleteInvitationRequest,
+		encodeJSON(http.StatusNoContent),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodGet).Path("/invitations/code/{code}").Handler(ht.NewServer(
+		invitationEndpoints.ValidateInvitation,
+		decodeValidateInvitationRequest,
+		encodeJSON(http.StatusOK),
+		options...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects").Handler(ht.NewServer(

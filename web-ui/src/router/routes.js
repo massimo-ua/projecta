@@ -15,6 +15,8 @@ import {
   Payments,
   UserProfileSettings,
   RolesManagement,
+  InvitationsManagement,
+  AcceptInvitation,
   ErrorPage,
   AcceptShare,
 } from '../components';
@@ -47,6 +49,16 @@ const createRoutesForPrefix = (prefix) => [
   {
     path: `${prefix}/admin/roles`,
     Component: AdminOnly(RolesManagement),
+    errorElement,
+  },
+  {
+    path: `${prefix}/admin/invitations`,
+    Component: AdminOnly(InvitationsManagement),
+    errorElement,
+  },
+  {
+    path: `${prefix}/invite/:code`,
+    Component: AcceptInvitation,
     errorElement,
   },
   {

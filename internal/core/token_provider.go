@@ -9,6 +9,9 @@ type AuthTokenPayload struct {
 	Sub         string   `json:"sub"`
 	DisplayName string   `json:"display_name"`
 	Roles       []string `json:"roles"`
+	Email       string   `json:"email,omitempty"`
+	FirstName   string   `json:"first_name,omitempty"`
+	LastName    string   `json:"last_name,omitempty"`
 }
 
 type AuthTokenClaims struct {

@@ -207,3 +207,24 @@ func (p *Person) AddOrReplaceIdentity(credentials Credentials) error {
 	p.identities = append(p.identities, credentials)
 	return nil
 }
+
+func (p *Person) UpdateProfile(firstName string, lastName string, displayName string) error {
+	var err error
+	if l := len(firstName); l < 2 || l > 255 {
+		err = errors.Join(err, errors.New("invalid person first name"))
+	}
+	if l := len(lastName); l < 2 || l > 255 {
+		err = errors.Join(err, errors.New("invalid person last name"))
+	}
+	if err != nil {
+		return err
+	}
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	p.firstName = firstName
+	p.lastName = lastName
+	p.displayName = displayName
+	return nil
+}

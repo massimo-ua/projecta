@@ -185,7 +185,10 @@ func (m *mockPgDb) QueryRow(ctx context.Context, sql string, args ...interface{}
 	if m.isNotFound {
 		return &mockRow{err: pgx.ErrNoRows}
 	}
-	if strings.Contains(sql, "COUNT") || strings.Contains(sql, "count") || strings.Contains(sql, "1 as exists") {
+	if strings.Contains(sql, "EXISTS") || strings.Contains(sql, "exists") {
+		return &mockRow{row: []any{true}}
+	}
+	if strings.Contains(sql, "COUNT") || strings.Contains(sql, "count") {
 		if m.countErr != nil {
 			return &mockRow{err: m.countErr}
 		}
@@ -1000,3 +1003,119 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		}
 	})
 }
+
+func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
+	dbConn := &PgDbConnection{}
+	peopleRepo := NewPgPeopleRepository(dbConn)
+	invRepo := NewPgInvitationRepository(dbConn)
+
+	pID := uuid.New()
+	adminID := uuid.New()
+	invID := uuid.New()
+	now := time.Now()
+	codeHash := "sha256_hash_value_123"
+
+	t.Run("DeletePerson, UpdateProfile, SaveCredentials", func(t *testing.T) {
+		mockDb := &mockPgDb{}
+		ctx := withMockDb(context.Background(), mockDb)
+
+		err := peopleRepo.DeletePerson(ctx, pID)
+		if err != nil {
+			t.Errorf("DeletePerson error: %v", err)
+		}
+
+		err = peopleRepo.UpdateProfile(ctx, pID, "Alice", "Smith", "Alice Smith")
+		if err != nil {
+			t.Errorf("UpdateProfile error: %v", err)
+		}
+
+		cred, _ := people.NewCredentials(people.GOOGLE, "sub_123", "sub_123")
+		err = peopleRepo.SaveCredentials(ctx, pID, cred)
+		if err != nil {
+			t.Errorf("SaveCredentials error: %v", err)
+		}
+	})
+
+	t.Run("PgInvitationRepository Create, FindByID, FindByCodeHash, FindByCreator, Complete, Delete, EmailExists", func(t *testing.T) {
+		inv, _ := people.NewInvitation(
+			invID,
+			"user@example.com",
+			codeHash,
+			now.Add(7*24*time.Hour),
+			adminID,
+			&pID,
+			people.InvitationStatusPending,
+			now,
+			nil,
+		)
+
+		mockDb := &mockPgDb{
+			rowVal: []any{
+				invID.String(),
+				"user@example.com",
+				codeHash,
+				now.Add(7 * 24 * time.Hour),
+				adminID.String(),
+				pID.String(),
+				"PENDING",
+				now,
+				now,
+			},
+			rowsData: [][]any{{
+				invID.String(),
+				"user@example.com",
+				codeHash,
+				now.Add(7 * 24 * time.Hour),
+				adminID.String(),
+				pID.String(),
+				"PENDING",
+				now,
+				now,
+			}},
+		}
+		ctx := withMockDb(context.Background(), mockDb)
+
+		// Create
+		err := invRepo.Create(ctx, inv)
+		if err != nil {
+			t.Errorf("Create invitation error: %v", err)
+		}
+
+		// FindByID
+		found, err := invRepo.FindByID(ctx, invID)
+		if err != nil || found == nil || found.Email() != "user@example.com" {
+			t.Errorf("FindByID invitation error: %v", err)
+		}
+
+		// FindByCodeHash
+		foundHash, err := invRepo.FindByCodeHash(ctx, codeHash)
+		if err != nil || foundHash == nil {
+			t.Errorf("FindByCodeHash error: %v", err)
+		}
+
+		// FindByCreator
+		list, err := invRepo.FindByCreator(ctx, adminID)
+		if err != nil || len(list) != 1 {
+			t.Errorf("FindByCreator error: %v", err)
+		}
+
+		// Complete
+		err = invRepo.Complete(ctx, invID)
+		if err != nil {
+			t.Errorf("Complete error: %v", err)
+		}
+
+		// Delete
+		err = invRepo.Delete(ctx, invID)
+		if err != nil {
+			t.Errorf("Delete error: %v", err)
+		}
+
+		// EmailExists
+		exists, err := invRepo.EmailExists(ctx, "user@example.com")
+		if err != nil || !exists {
+			t.Errorf("EmailExists error: %v", err)
+		}
+	})
+}
+

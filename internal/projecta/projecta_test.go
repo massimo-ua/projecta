@@ -250,6 +250,15 @@ func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.Id
 func (m *mockPeopleRepo) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
 	return nil
 }
+func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID uuid.UUID) error {
+	return nil
+}
+func (m *mockPeopleRepo) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName, lastName, displayName string) error {
+	return nil
+}
+func (m *mockPeopleRepo) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
+	return nil
+}
 
 func TestProjectService(t *testing.T) {
 	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John", CanHaveProjects: true}
