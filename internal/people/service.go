@@ -110,3 +110,24 @@ func (s *ServiceImpl) AssignRoles(ctx context.Context, command AssignRolesComman
 	return nil
 }
 
+func (s *ServiceImpl) UpdateDisplayName(ctx context.Context, command UpdateDisplayNameCommand) (*Person, error) {
+	person, err := s.peopleRepository.FindByID(ctx, command.PersonID)
+	if err != nil {
+		return nil, err
+	}
+
+	person.UpdateDisplayName(command.DisplayName)
+
+	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
+		if err := s.peopleRepository.UpdateProfile(ctx, person.ID(), person.FirstName(), person.LastName(), person.displayName.String()); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to update display name", err)
+	}
+
+	return person, nil
+}
+

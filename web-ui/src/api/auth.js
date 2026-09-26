@@ -65,6 +65,10 @@ export class Auth {
     return accessToken;
   }
 
+  async refreshToken() {
+    return this.#refreshToken();
+  }
+
   async #refreshToken() {
     const refreshToken = localStorage.getItem(this.#refreshTokenKey);
     const accessToken = localStorage.getItem(this.#tokenKey);

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -39,13 +40,23 @@ func toUserDTO(p *people.Person) UserDTO {
 	}
 }
 
+type UpdateProfileDTO struct {
+	DisplayName people.DisplayName `json:"display_name"`
+}
+
+type UpdateProfileRequest struct {
+	PersonID    uuid.UUID
+	DisplayName people.DisplayName
+}
+
 type UserEndpoints struct {
-	Register     endpoint.Endpoint
-	Login        endpoint.Endpoint
-	RefreshToken endpoint.Endpoint
-	Profile      endpoint.Endpoint
-	ListUsers    endpoint.Endpoint
-	AssignRoles  endpoint.Endpoint
+	Register      endpoint.Endpoint
+	Login         endpoint.Endpoint
+	RefreshToken  endpoint.Endpoint
+	Profile       endpoint.Endpoint
+	UpdateProfile endpoint.Endpoint
+	ListUsers     endpoint.Endpoint
+	AssignRoles   endpoint.Endpoint
 }
 
 func decodeProfileRequest(ctx context.Context, _ *http.Request) (any, error) {
@@ -56,6 +67,24 @@ func decodeProfileRequest(ctx context.Context, _ *http.Request) (any, error) {
 	}
 
 	return requesterID, nil
+}
+
+func decodeUpdateProfileRequest(ctx context.Context, r *http.Request) (any, error) {
+	requesterID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
+
+	if !ok {
+		return nil, exceptions.NewUnauthorizedException("failed to authorize profile request", nil)
+	}
+
+	var dto UpdateProfileDTO
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
+		return nil, exceptions.NewValidationException("invalid request body", err)
+	}
+
+	return UpdateProfileRequest{
+		PersonID:    requesterID,
+		DisplayName: dto.DisplayName,
+	}, nil
 }
 
 func makeRegisterEndpoint(svc people.UserService) endpoint.Endpoint {
@@ -116,6 +145,23 @@ func makeProfileEndpoint(svc people.UserService) endpoint.Endpoint {
 		personID := request.(uuid.UUID)
 
 		person, err := svc.FindByID(ctx, personID)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return toUserDTO(person), nil
+	}
+}
+
+func makeUpdateProfileEndpoint(svc people.UserService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req := request.(UpdateProfileRequest)
+
+		person, err := svc.UpdateDisplayName(ctx, people.UpdateDisplayNameCommand{
+			PersonID:    req.PersonID,
+			DisplayName: req.DisplayName,
+		})
 
 		if err != nil {
 			return nil, err
@@ -201,11 +247,12 @@ func makeAssignRolesEndpoint(svc people.UserService) endpoint.Endpoint {
 
 func MakeCustomerEndpoints(s people.UserService, a people.AuthService) (UserEndpoints, error) {
 	return UserEndpoints{
-		Register:     makeRegisterEndpoint(s),
-		Login:        makeLoginEndpoint(a),
-		RefreshToken: makeRefreshTokenEndpoint(a),
-		Profile:      makeProfileEndpoint(s),
-		ListUsers:    makeListUsersEndpoint(s),
-		AssignRoles:  makeAssignRolesEndpoint(s),
+		Register:      makeRegisterEndpoint(s),
+		Login:         makeLoginEndpoint(a),
+		RefreshToken:  makeRefreshTokenEndpoint(a),
+		Profile:       makeProfileEndpoint(s),
+		UpdateProfile: makeUpdateProfileEndpoint(s),
+		ListUsers:     makeListUsersEndpoint(s),
+		AssignRoles:   makeAssignRolesEndpoint(s),
 	}, nil
 }

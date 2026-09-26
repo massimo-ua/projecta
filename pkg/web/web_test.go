@@ -45,6 +45,16 @@ func (m *mockPeopleService) FindAll(_ context.Context, _ core.Pagination) ([]*pe
 func (m *mockPeopleService) AssignRoles(_ context.Context, _ people.AssignRolesCommand) error {
 	return m.err
 }
+func (m *mockPeopleService) UpdateDisplayName(_ context.Context, cmd people.UpdateDisplayNameCommand) (*people.Person, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.user != nil {
+		m.user.UpdateDisplayName(cmd.DisplayName)
+		return m.user, nil
+	}
+	return nil, nil
+}
 
 type mockAuthService struct {
 	authResp *core.AuthResponse
@@ -734,6 +744,20 @@ func TestRoleBasedAccessControl(t *testing.T) {
 		_ = json.NewDecoder(respProfile.Body).Decode(&userDTO)
 		if len(userDTO.Roles) == 0 {
 			t.Errorf("expected profile to include roles, got empty")
+		}
+
+		// PUT /profile updates display name
+		updateBody := []byte(`{"display_name": "Updated John"}`)
+		reqPutProfile, _ := http.NewRequest(http.MethodPut, server.URL+"/profile", bytes.NewReader(updateBody))
+		reqPutProfile.Header.Set("Authorization", "Bearer token")
+		respPutProfile, _ := client.Do(reqPutProfile)
+		if respPutProfile.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for PUT /profile, got %d", respPutProfile.StatusCode)
+		}
+		var updatedUserDTO UserDTO
+		_ = json.NewDecoder(respPutProfile.Body).Decode(&updatedUserDTO)
+		if updatedUserDTO.DisplayName != "Updated John" {
+			t.Errorf("expected updated display name 'Updated John', got '%s'", updatedUserDTO.DisplayName)
 		}
 	})
 

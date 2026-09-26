@@ -106,6 +106,13 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodPut).Path("/profile").Handler(ht.NewServer(
+		loggedInOnly(peopleEndpoints.UpdateProfile),
+		decodeUpdateProfileRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/refresh").Handler(ht.NewServer(
 		peopleEndpoints.RefreshToken,
 		decodeRefreshUserToken,
