@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/people"
@@ -146,6 +147,7 @@ func (m *mockRows) Scan(dest ...any) error {
 func (m *mockRows) Values() ([]any, error) { return nil, nil }
 func (m *mockRows) RawValues() [][]byte    { return nil }
 func (m *mockRows) Conn() *pgx.Conn        { return nil }
+func (m *mockRows) TypeMap() *pgtype.Map   { return nil }
 
 type mockPgDb struct {
 	execErr    error
@@ -370,7 +372,7 @@ func TestPgProjectRepository(t *testing.T) {
 	})
 
 	t.Run("FindOne success and errors", func(t *testing.T) {
-		mockDb := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D."}}
+		mockDb := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", uuid.New().String(), "UAH"}}
 		ctx := withMockDb(authedCtx, mockDb)
 
 		p, err := repo.FindOne(ctx, projecta.ProjectFilter{ProjectID: pID, Name: "Project A"})
@@ -378,11 +380,27 @@ func TestPgProjectRepository(t *testing.T) {
 			t.Errorf("FindOne error: %v", err)
 		}
 
+		// Shared project (different requester)
+		sharedPersonID := uuid.New()
+		sharedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, sharedPersonID)
+		ctxShared := withMockDb(sharedCtx, mockDb)
+		pShared, err := repo.FindOne(ctxShared, projecta.ProjectFilter{ProjectID: pID})
+		if err != nil || !pShared.IsShared {
+			t.Errorf("expected shared project")
+		}
+
 		mockDbErr := &mockPgDb{rowErr: pgx.ErrNoRows}
 		ctxErr := withMockDb(authedCtx, mockDbErr)
 		_, err = repo.FindOne(ctxErr, projecta.ProjectFilter{})
 		if err == nil {
 			t.Errorf("expected not found error")
+		}
+
+		mockDbQueryErr := &mockPgDb{rowErr: errors.New("db error")}
+		ctxQueryErr := withMockDb(authedCtx, mockDbQueryErr)
+		_, err = repo.FindOne(ctxQueryErr, projecta.ProjectFilter{})
+		if err == nil {
+			t.Errorf("expected db error")
 		}
 	})
 
@@ -395,7 +413,21 @@ func TestPgProjectRepository(t *testing.T) {
 			t.Errorf("Create error: %v", err)
 		}
 
-		err = repo.Update(ctx, proj)
+		projWithToken, _ := projecta.NewProject(pID, "Project A", "Desc", owner, now, now)
+		projWithToken.ShareToken = uuid.New()
+		err = repo.Create(ctx, projWithToken)
+		if err != nil {
+			t.Errorf("Create error with existing share token: %v", err)
+		}
+
+		projEmptyCurr, _ := projecta.NewProject(pID, "Project A", "Desc", owner, now, now)
+		projEmptyCurr.MainCurrency = ""
+		err = repo.Create(ctx, projEmptyCurr)
+		if err != nil {
+			t.Errorf("Create error with empty currency: %v", err)
+		}
+
+		err = repo.Update(ctx, projEmptyCurr)
 		if err != nil {
 			t.Errorf("Update error: %v", err)
 		}
@@ -407,7 +439,7 @@ func TestPgProjectRepository(t *testing.T) {
 	})
 
 	t.Run("Find collection success and errors", func(t *testing.T) {
-		mockDb := &mockPgDb{rowsData: [][]any{{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D."}}}
+		mockDb := &mockPgDb{rowsData: [][]any{{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", uuid.New().String(), "UAH"}}}
 		ctx := withMockDb(authedCtx, mockDb)
 
 		projects, err := repo.Find(ctx, projecta.ProjectCollectionFilter{Name: "Project A", Pagination: core.Pagination{Limit: 10, Offset: 0}})
@@ -430,10 +462,73 @@ func TestPgProjectRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("toProject test", func(t *testing.T) {
-		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH")
+	t.Run("FindByShareToken", func(t *testing.T) {
+		token := uuid.New()
+		mockDb := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", token.String(), "UAH"}}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		p, err := repo.FindByShareToken(ctx, token)
 		if err != nil || p == nil {
+			t.Errorf("FindByShareToken error: %v", err)
+		}
+
+		// Invalid share token
+		_, err = repo.FindByShareToken(ctx, uuid.Nil)
+		if err == nil {
+			t.Errorf("expected validation error for nil token")
+		}
+
+		// Not found
+		mockDbNotFound := &mockPgDb{rowErr: pgx.ErrNoRows}
+		ctxNotFound := withMockDb(authedCtx, mockDbNotFound)
+		_, err = repo.FindByShareToken(ctxNotFound, token)
+		if err == nil {
+			t.Errorf("expected not found error")
+		}
+
+		// Other DB error
+		mockDbErr := &mockPgDb{rowErr: errors.New("db error")}
+		ctxErr := withMockDb(authedCtx, mockDbErr)
+		_, err = repo.FindByShareToken(ctxErr, token)
+		if err == nil {
+			t.Errorf("expected db error")
+		}
+	})
+
+	t.Run("CreateShareRecord", func(t *testing.T) {
+		mockDb := &mockPgDb{}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		err := repo.CreateShareRecord(ctx, pID, ownerID)
+		if err != nil {
+			t.Errorf("CreateShareRecord error: %v", err)
+		}
+
+		mockDbErr := &mockPgDb{execErr: errors.New("exec error")}
+		ctxErr := withMockDb(authedCtx, mockDbErr)
+		err = repo.CreateShareRecord(ctxErr, pID, ownerID)
+		if err == nil {
+			t.Errorf("expected exec error")
+		}
+	})
+
+	t.Run("toProject test", func(t *testing.T) {
+		token := uuid.New()
+		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH", token.String())
+		if err != nil || p == nil || p.ShareToken != token {
 			t.Errorf("toProject error: %v", err)
+		}
+
+		// Invalid first name for people.NewPerson
+		_, err = toProject(pID.String(), "Name", "Desc", ownerID.String(), "", "Doe", "J.D.", now, now, "UAH")
+		if err == nil {
+			t.Errorf("expected error for invalid first name")
+		}
+
+		// Invalid project name for projecta.NewProject
+		_, err = toProject(pID.String(), "", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH")
+		if err == nil {
+			t.Errorf("expected error for invalid project name")
 		}
 	})
 }
