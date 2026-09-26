@@ -104,6 +104,8 @@ backend-deploy:
       if [ -f /etc/projecta/projecta.env ]; then set -a; . /etc/projecta/projecta.env; set +a; fi && \
       DB_URI=\"\${DB_URI:-${DB_URI}}\" MIGRATION_PATH=\"migrations\" ./projecta-migrate && \
       ln -sf ${BINARY_NAME}-${CI_COMMIT_SHA} ${BINARY_NAME} && \
+      sudo systemctl stop projecta && \
+      sudo systemctl start projecta && \
       ls -t ${BINARY_NAME}-* | grep -v projecta-migrate | tail -n +3 | xargs -r rm"
 
 frontend-build:
