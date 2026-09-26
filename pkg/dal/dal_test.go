@@ -291,6 +291,11 @@ func TestPgPeopleRepository(t *testing.T) {
 			t.Errorf("unexpected Register error: %v", err)
 		}
 
+		personNoCreds, _ := people.NewPerson(uuid.New(), "Jane", "Doe", "J.D.", nil, people.RoleUser)
+		if err := repo.Register(ctx, personNoCreds); err != nil {
+			t.Errorf("unexpected Register without credentials error: %v", err)
+		}
+
 		mockDbErr := &mockPgDb{execErr: errors.New("exec error")}
 		ctxErr := withMockDb(context.Background(), mockDbErr)
 		err = repo.Register(ctxErr, person)

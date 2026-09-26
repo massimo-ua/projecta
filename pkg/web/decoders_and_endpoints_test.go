@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -1265,6 +1266,83 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error for invalid provider")
 		}
+
+		// Decoders tests
+		t.Run("Invitation Decoders", func(t *testing.T) {
+			body := strings.NewReader(`{"email":"test@example.com"}`)
+			req := httptest.NewRequest(http.MethodPost, "/invitations", body)
+			_, err := decodeCreateInvitationRequest(context.Background(), req)
+			if err == nil {
+				t.Errorf("expected unauthorized error")
+			}
+
+			authCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, adminID)
+			body = strings.NewReader(`{"email":"test@example.com"}`)
+			req = httptest.NewRequest(http.MethodPost, "/invitations", body)
+			decCreate, err := decodeCreateInvitationRequest(authCtx, req)
+			if err != nil {
+				t.Fatalf("unexpected error decoding create invitation: %v", err)
+			}
+			createReq := decCreate.(struct {
+				AdminID uuid.UUID
+				Email   string
+			})
+			if createReq.Email != "test@example.com" || createReq.AdminID != adminID {
+				t.Errorf("mismatch create invitation request: %+v", createReq)
+			}
+
+			badBody := strings.NewReader(`invalid json`)
+			req = httptest.NewRequest(http.MethodPost, "/invitations", badBody)
+			_, err = decodeCreateInvitationRequest(authCtx, req)
+			if err == nil {
+				t.Errorf("expected validation error for bad json")
+			}
+
+			req = httptest.NewRequest(http.MethodGet, "/invitations", nil)
+			_, err = decodeListInvitationsRequest(context.Background(), req)
+			if err == nil {
+				t.Errorf("expected unauthorized error")
+			}
+			decList, err := decodeListInvitationsRequest(authCtx, req)
+			if err != nil || decList.(uuid.UUID) != adminID {
+				t.Errorf("unexpected error decoding list invitations: %v", err)
+			}
+
+			req = httptest.NewRequest(http.MethodDelete, "/invitations/"+invID.String(), nil)
+			req = mux.SetURLVars(req, map[string]string{"invitation_id": invID.String()})
+			_, err = decodeDeleteInvitationRequest(context.Background(), req)
+			if err == nil {
+				t.Errorf("expected unauthorized error")
+			}
+			decDel, err := decodeDeleteInvitationRequest(authCtx, req)
+			if err != nil {
+				t.Fatalf("unexpected error decoding delete invitation: %v", err)
+			}
+			delReq := decDel.(DeleteInvitationRequest)
+			if delReq.InvitationID != invID || delReq.AdminID != adminID {
+				t.Errorf("mismatch delete invitation request: %+v", delReq)
+			}
+
+			badDelReq := httptest.NewRequest(http.MethodDelete, "/invitations/bad-id", nil)
+			badDelReq = mux.SetURLVars(badDelReq, map[string]string{"invitation_id": "bad-id"})
+			_, err = decodeDeleteInvitationRequest(authCtx, badDelReq)
+			if err == nil {
+				t.Errorf("expected validation error for bad invitation id")
+			}
+
+			req = httptest.NewRequest(http.MethodGet, "/invitations/code/raw_code_123", nil)
+			req = mux.SetURLVars(req, map[string]string{"code": "raw_code_123"})
+			decCode, err := decodeValidateInvitationRequest(context.Background(), req)
+			if err != nil || decCode.(string) != "raw_code_123" {
+				t.Errorf("unexpected error decoding validate invitation request: %v", err)
+			}
+
+			badCodeReq := httptest.NewRequest(http.MethodGet, "/invitations/code/", nil)
+			_, err = decodeValidateInvitationRequest(context.Background(), badCodeReq)
+			if err == nil {
+				t.Errorf("expected validation error for empty code")
+			}
+		})
 	})
 }
 
