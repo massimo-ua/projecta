@@ -1,5 +1,6 @@
 stages:
   - dependabot-gomod
+  - dependabot-npm
   - test
   - build
   - deploy
@@ -33,6 +34,14 @@ gomod:
     - if: $DEPENDENCY_UPDATES_DISABLED
       when: never
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bgomod\b/'
+
+npm:
+  stage: dependabot-npm
+  extends: .dependabot-gitlab
+  rules:
+    - if: $DEPENDENCY_UPDATES_DISABLED
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $PACKAGE_MANAGER_SET =~ /\bnpm\b/'
 
 # Used for CI/CD component release and test
 #
