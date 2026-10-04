@@ -21,6 +21,7 @@ export function ListView({
   addButtonIcon,
   addButtonText,
   addButtonDisabled,
+  extraActions,
   renderItemMainContent,
   renderItemAmount,
   renderItemDetails,
@@ -55,14 +56,17 @@ export function ListView({
     <div className="space-y-5">
       {/* Top Action Bar */}
       <div className="flex items-center justify-between gap-4 pb-2">
-        <Button
-          disabled={addButtonDisabled}
-          onClick={onAddButtonClick}
-          className="gap-2 font-semibold shadow-sm shadow-primary/20 hover:shadow-md transition-all rounded-xl h-10 px-4"
-        >
-          {addButtonIcon || <Plus className="h-4 w-4" />}
-          <span>{addButtonText}</span>
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            disabled={addButtonDisabled}
+            onClick={onAddButtonClick}
+            className="gap-2 font-semibold shadow-sm shadow-primary/20 hover:shadow-md transition-all rounded-xl h-10 px-4"
+          >
+            {addButtonIcon || <Plus className="h-4 w-4" />}
+            <span>{addButtonText}</span>
+          </Button>
+          {extraActions}
+        </div>
 
         {total > 0 && (
           <span className="text-xs text-muted-foreground font-medium bg-muted/50 px-2.5 py-1 rounded-full border border-border/40">

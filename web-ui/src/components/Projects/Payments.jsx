@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { useIntlayer } from 'react-intlayer';
-import { DollarSign, Calendar } from 'lucide-react';
+import { DollarSign, Calendar, FileUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import usePayments from '../../hooks/payments';
 import AddPaymentModal from './AddPaymentModal';
 import EditPaymentModal from './EditPaymentModal';
+import ImportStatementModal from './ImportStatementModal';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
@@ -121,6 +123,10 @@ export function Payments() {
     removePayment,
   } = usePayments(projectId);
 
+  const [importModalOpened, setImportModalOpened] = useState(false);
+  const openImportModal = () => setImportModalOpened(true);
+  const closeImportModal = () => setImportModalOpened(false);
+
   const handleRemove = (paymentId) => {
     removePayment(paymentId, {
       successMessage: String(content.paymentRemovedSuccess),
@@ -141,6 +147,16 @@ export function Payments() {
         addButtonIcon={<DollarSign className="h-4 w-4" />}
         addButtonText={String(content.addPayment)}
         addButtonDisabled={addModalOpened}
+        extraActions={(
+          <Button
+            variant="outline"
+            onClick={openImportModal}
+            className="gap-2 font-semibold shadow-sm hover:shadow-md transition-all rounded-xl h-10 px-4 border-dashed hover:border-primary/50"
+          >
+            <FileUp className="h-4 w-4 text-primary" />
+            <span>{String(content.importStatement || 'Import Statement')}</span>
+          </Button>
+        )}
         renderItemMainContent={(payment) => <PaymentMainContent payment={payment} />}
         renderItemAmount={(payment) => <PaymentAmount payment={payment} />}
         renderItemDetails={(payment) => (
@@ -164,6 +180,17 @@ export function Payments() {
         open={addModalOpened}
         onCancel={closeAddModal}
         onSuccess={() => onAddSuccess(String(content.paymentAddedSuccess))}
+      />
+
+      <ImportStatementModal
+        types={types}
+        projectId={projectId}
+        open={importModalOpened}
+        onCancel={closeImportModal}
+        onSuccess={() => {
+          closeImportModal();
+          onAddSuccess(String(content.paymentsImportedSuccess || 'Payments imported successfully'));
+        }}
       />
 
       <EditPaymentModal

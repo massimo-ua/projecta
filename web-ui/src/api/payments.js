@@ -99,6 +99,18 @@ export class PaymentRepository {
       toUpdatePaymentDTO(payment),
     );
   }
+
+  async parseStatement(projectId, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return await this.#request.post(`/projects/${projectId}/payments/parse-statement`, formData);
+  }
+
+  async addPaymentsBatch(projectId, payments) {
+    const dtos = payments.map(toAddPaymentDTO);
+    const response = await this.#request.post(`/projects/${projectId}/payments/batch`, dtos);
+    return Array.isArray(response) ? response.map(toDomain) : [];
+  }
 }
 
 export default PaymentRepository;

@@ -111,6 +111,9 @@ type mockPaymentRepo struct {
 }
 
 func (m *mockPaymentRepo) Save(ctx context.Context, p *projecta.Payment) error { return m.saveErr }
+func (m *mockPaymentRepo) SaveBatch(ctx context.Context, payments []*projecta.Payment) error {
+	return m.saveErr
+}
 func (m *mockPaymentRepo) Remove(ctx context.Context, p *projecta.Payment) error {
 	return nil
 }
