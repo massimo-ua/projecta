@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
@@ -120,6 +120,115 @@ PaymentDetails.propTypes = {
   categoryLabel: PropTypes.string.isRequired,
 };
 
+function DebouncedDateInput({
+  value,
+  onChange,
+  className,
+}) {
+  const [localValue, setLocalValue] = useState(value || '');
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    setLocalValue(value || '');
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+  }, []);
+
+  const isValidFilterDate = (val) => {
+    if (!val) return true;
+    return /^\d{4}-\d{2}-\d{2}$/.test(val) && parseInt(val.slice(0, 4), 10) >= 1000;
+  };
+
+  const handleChange = (e) => {
+    const nextVal = e.target.value;
+    setLocalValue(nextVal);
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (!nextVal) {
+      if (value !== '') {
+        onChange('');
+      }
+      return;
+    }
+
+    if (isValidFilterDate(nextVal)) {
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        onChange(nextVal);
+      }, 500);
+    }
+  };
+
+  const handleBlur = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (!localValue) {
+      if (value !== '') {
+        onChange('');
+      }
+    } else if (isValidFilterDate(localValue)) {
+      if (localValue !== value) {
+        onChange(localValue);
+      }
+    } else {
+      setLocalValue(value || '');
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (!localValue) {
+        if (value !== '') {
+          onChange('');
+        }
+      } else if (isValidFilterDate(localValue)) {
+        if (localValue !== value) {
+          onChange(localValue);
+        }
+      } else {
+        setLocalValue(value || '');
+      }
+    }
+  };
+
+  return (
+    <Input
+      type="date"
+      value={localValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className={className}
+    />
+  );
+}
+
+DebouncedDateInput.propTypes = {
+  value: PropTypes.string,
+  onChange: PropTypes.func.isRequired,
+  className: PropTypes.string,
+};
+
+DebouncedDateInput.defaultProps = {
+  value: '',
+  className: '',
+};
+
 export function Payments() {
   const content = useIntlayer('payments');
   const { projectId } = useParams();
@@ -237,10 +346,9 @@ export function Payments() {
                   <Label className="text-[11px] text-muted-foreground whitespace-nowrap">
                     {String(content.filterDateFrom || 'From')}:
                   </Label>
-                  <Input
-                    type="date"
+                  <DebouncedDateInput
                     value={filters.fromDate}
-                    onChange={(e) => setFilter('fromDate', e.target.value)}
+                    onChange={(val) => setFilter('fromDate', val)}
                     className="rounded-xl h-9 text-xs w-full sm:w-36"
                   />
                 </div>
@@ -250,10 +358,9 @@ export function Payments() {
                   <Label className="text-[11px] text-muted-foreground whitespace-nowrap">
                     {String(content.filterDateTo || 'To')}:
                   </Label>
-                  <Input
-                    type="date"
+                  <DebouncedDateInput
                     value={filters.toDate}
-                    onChange={(e) => setFilter('toDate', e.target.value)}
+                    onChange={(val) => setFilter('toDate', val)}
                     className="rounded-xl h-9 text-xs w-full sm:w-36"
                   />
                 </div>
