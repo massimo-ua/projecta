@@ -246,6 +246,20 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments/parse-statement").Handler(ht.NewServer(
+		requireRole(string(people.RoleUser), projectEndpoints.ParseStatement),
+		decodeParseStatementRequest,
+		encodeJSON(http.StatusOK),
+		withAuth...,
+	))
+
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments/batch").Handler(ht.NewServer(
+		requireRole(string(people.RoleUser), projectEndpoints.CreateBatchPayments),
+		decodeCreateBatchPaymentRequest,
+		encodeJSON(http.StatusCreated),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
 		requireRole(string(people.RoleUser), projectEndpoints.ListPayments),
 		decodeListPaymentsRequest,

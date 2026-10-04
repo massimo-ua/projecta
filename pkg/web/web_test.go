@@ -246,6 +246,26 @@ func (m *mockPaymentService) Create(_ context.Context, _ projecta.CreatePaymentC
 	}
 	return m.pay, nil
 }
+func (m *mockPaymentService) CreateBatch(_ context.Context, _ []projecta.CreatePaymentCommand) ([]*projecta.Payment, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.pay != nil {
+		return []*projecta.Payment{m.pay}, nil
+	}
+	return []*projecta.Payment{}, nil
+}
+func (m *mockPaymentService) ParseStatement(_ context.Context, _ uuid.UUID, _ []byte) (*projecta.StatementParseResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &projecta.StatementParseResult{
+		Account:      "ACC123",
+		Currency:     "PLN",
+		Period:       "01.09.2026 - 30.09.2026",
+		Transactions: []projecta.StatementParseItem{},
+	}, nil
+}
 func (m *mockPaymentService) Update(_ context.Context, _ projecta.UpdatePaymentCommand) error {
 	return m.err
 }

@@ -165,6 +165,32 @@ func (r *PgPaymentRepository) Save(ctx context.Context, expense *projecta.Paymen
 	}
 }
 
+func (r *PgPaymentRepository) SaveBatch(ctx context.Context, payments []*projecta.Payment) error {
+	if len(payments) == 0 {
+		return nil
+	}
+
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+			for _, payment := range payments {
+				if err := r.Save(txCtx, payment); err != nil {
+					return nil, err
+				}
+			}
+			return nil, nil
+		})
+		return err
+	}
+
+	for _, payment := range payments {
+		if err := r.Save(ctx, payment); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (r *PgPaymentRepository) create(ctx context.Context, expense *projecta.Payment) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_payments")

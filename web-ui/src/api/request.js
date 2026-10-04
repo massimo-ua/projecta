@@ -28,9 +28,11 @@ export class Request {
     const { headers = {} } = rest;
     const { [CORRELATION_ID_HEADER]: requestId = crypto.randomUUID(), ...restOfHeaders } = headers;
 
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+
     const requestHeaders = {
       ...restOfHeaders,
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       [CORRELATION_ID_HEADER]: requestId,
     };
 
@@ -47,7 +49,7 @@ export class Request {
       ...rest,
       method,
       headers: requestHeaders,
-      ...(body && { body: JSON.stringify(body) }),
+      ...(body && { body: isFormData ? body : JSON.stringify(body) }),
       signal: controller.signal,
     };
 

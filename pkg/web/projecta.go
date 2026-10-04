@@ -187,9 +187,11 @@ type ProjectEndpoints struct {
 	ListAssets        endpoint.Endpoint
 	UpdateAsset       endpoint.Endpoint
 	GetAsset          endpoint.Endpoint
-	UpdatePayment     endpoint.Endpoint
-	GetPayment        endpoint.Endpoint
-	UpdateProject     endpoint.Endpoint
+	UpdatePayment       endpoint.Endpoint
+	GetPayment          endpoint.Endpoint
+	UpdateProject       endpoint.Endpoint
+	ParseStatement      endpoint.Endpoint
+	CreateBatchPayments endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -811,8 +813,10 @@ func MakeProjectEndpoints(
 		ListAssets:        makeListAssetsEndpoint(assetService, rateProvider),
 		UpdateAsset:       makeUpdateAssetEndpoint(assetService),
 		GetAsset:          makeGetAssetEndpoint(assetService, rateProvider),
-		UpdatePayment:     makeUpdatePaymentEndpoint(expenseService),
-		GetPayment:        makeGetPaymentEndpoint(expenseService, rateProvider),
-		UpdateProject:     makeUpdateProjectEndpoint(projectService),
+		UpdatePayment:       makeUpdatePaymentEndpoint(expenseService),
+		GetPayment:          makeGetPaymentEndpoint(expenseService, rateProvider),
+		UpdateProject:       makeUpdateProjectEndpoint(projectService),
+		ParseStatement:      makeParseStatementEndpoint(expenseService),
+		CreateBatchPayments: makeCreateBatchPaymentsEndpoint(expenseService, rateProvider),
 	}, nil
 }

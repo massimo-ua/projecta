@@ -37,6 +37,8 @@ type PaymentService interface {
 	FindOne(ctx context.Context, filter PaymentFilter) (*Payment, error)
 	Find(ctx context.Context, filter PaymentCollectionFilter) (*PaymentCollection, error)
 	Create(ctx context.Context, command CreatePaymentCommand) (*Payment, error)
+	CreateBatch(ctx context.Context, commands []CreatePaymentCommand) ([]*Payment, error)
+	ParseStatement(ctx context.Context, projectID uuid.UUID, fileData []byte) (*StatementParseResult, error)
 	Update(ctx context.Context, command UpdatePaymentCommand) error
 	Remove(ctx context.Context, command RemovePaymentCommand) error
 }
@@ -69,5 +71,6 @@ type PaymentRepository interface {
 	Find(ctx context.Context, filter PaymentCollectionFilter) (*PaymentCollection, error)
 	FindOne(ctx context.Context, filter PaymentFilter) (*Payment, error)
 	Save(ctx context.Context, payment *Payment) error
+	SaveBatch(ctx context.Context, payments []*Payment) error
 	Remove(ctx context.Context, payment *Payment) error
 }

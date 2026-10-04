@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/dslipak/pdf v0.0.2 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect

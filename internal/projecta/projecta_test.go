@@ -225,6 +225,9 @@ func (m *mockPaymentRepo) FindOne(ctx context.Context, filter projecta.PaymentFi
 	return m.pay, nil
 }
 func (m *mockPaymentRepo) Save(ctx context.Context, p *projecta.Payment) error { return m.saveErr }
+func (m *mockPaymentRepo) SaveBatch(ctx context.Context, payments []*projecta.Payment) error {
+	return m.saveErr
+}
 func (m *mockPaymentRepo) Remove(ctx context.Context, p *projecta.Payment) error {
 	return m.removeErr
 }
@@ -685,6 +688,51 @@ func TestPaymentService(t *testing.T) {
 	err = svcPayFindErr.Remove(authedCtx, projecta.RemovePaymentCommand{})
 	if err == nil {
 		t.Errorf("expected internal error on Remove")
+	}
+
+	// CreateBatch empty
+	batchRes, err := svc.CreateBatch(authedCtx, []projecta.CreatePaymentCommand{})
+	if err != nil || len(batchRes) != 0 {
+		t.Errorf("expected empty slice for empty batch, got %v, err %v", batchRes, err)
+	}
+
+	// CreateBatch with items
+	batchRes, err = svc.CreateBatch(authedCtx, []projecta.CreatePaymentCommand{
+		{
+			ProjectID:   proj.ProjectID,
+			TypeID:      costType.ID,
+			Description: "Batch Pay 1",
+			Amount:      money.New(100, money.USD),
+			Kind:        projecta.UponCompletionPayment,
+		},
+		{
+			ProjectID:   proj.ProjectID,
+			TypeID:      costType.ID,
+			Description: "Batch Pay 2",
+			Amount:      money.New(200, money.USD),
+			Kind:        projecta.DownPayment,
+		},
+	})
+	if err != nil || len(batchRes) != 2 {
+		t.Fatalf("CreateBatch error: %v", err)
+	}
+
+	// CreateBatch unauthorized
+	_, err = svc.CreateBatch(context.Background(), []projecta.CreatePaymentCommand{{}})
+	if err == nil {
+		t.Errorf("expected unauthorized error for CreateBatch")
+	}
+
+	// ParseStatement unauthorized
+	_, err = svc.ParseStatement(context.Background(), proj.ProjectID, []byte("data"))
+	if err == nil {
+		t.Errorf("expected unauthorized error for ParseStatement")
+	}
+
+	// ParseStatement project not found
+	_, err = svcProjErr.ParseStatement(authedCtx, proj.ProjectID, []byte("data"))
+	if err == nil {
+		t.Errorf("expected project not found error for ParseStatement")
 	}
 }
 
