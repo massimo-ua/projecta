@@ -182,8 +182,9 @@ type ProjectEndpoints struct {
 	ShowProjectTotals endpoint.Endpoint
 	RemoveType        endpoint.Endpoint
 	RemovePayment     endpoint.Endpoint
-	CreateAsset       endpoint.Endpoint
-	RemoveAsset       endpoint.Endpoint
+	CreateAsset               endpoint.Endpoint
+	CreateAssetFromPayments   endpoint.Endpoint
+	RemoveAsset               endpoint.Endpoint
 	ListAssets        endpoint.Endpoint
 	UpdateAsset       endpoint.Endpoint
 	GetAsset          endpoint.Endpoint
@@ -808,8 +809,9 @@ func MakeProjectEndpoints(
 		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService, expenseService, assetService, rateProvider),
 		RemoveType:        makeRemoveTypeEndpoint(typeService),
 		RemovePayment:     makeRemovePaymentEndpoint(expenseService),
-		CreateAsset:       makeCreateAssetEndpoint(assetService, rateProvider),
-		RemoveAsset:       makeRemoveAssetEndpoint(assetService),
+		CreateAsset:             makeCreateAssetEndpoint(assetService, rateProvider),
+		CreateAssetFromPayments: makeCreateAssetFromPaymentsEndpoint(assetService, rateProvider),
+		RemoveAsset:             makeRemoveAssetEndpoint(assetService),
 		ListAssets:        makeListAssetsEndpoint(assetService, rateProvider),
 		UpdateAsset:       makeUpdateAssetEndpoint(assetService),
 		GetAsset:          makeGetAssetEndpoint(assetService, rateProvider),

@@ -288,6 +288,13 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/from-payments").Handler(ht.NewServer(
+		requireRole(string(people.RoleUser), projectEndpoints.CreateAssetFromPayments),
+		decodeCreateAssetFromPaymentsRequest,
+		encodeJSON(http.StatusCreated),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
 		requireRole(string(people.RoleUser), projectEndpoints.CreateAsset),
 		decodeCreateAssetRequest,

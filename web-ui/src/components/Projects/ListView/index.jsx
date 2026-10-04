@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { useIntlayer } from 'react-intlayer';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,6 +23,9 @@ export function ListView({
   addButtonText,
   addButtonDisabled,
   extraActions,
+  filterBar,
+  batchActionBar,
+  renderItemPrefix,
   renderItemMainContent,
   renderItemAmount,
   renderItemDetails,
@@ -75,6 +79,10 @@ export function ListView({
         )}
       </div>
 
+      {filterBar}
+
+      {batchActionBar}
+
       {/* Item Cards List */}
       {!items || items.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-dashed border-border/80 bg-muted/20">
@@ -91,8 +99,15 @@ export function ListView({
               className="group rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs transition-all duration-200 hover:border-border hover:shadow-sm"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  {renderItemMainContent(item)}
+                <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+                  {renderItemPrefix && (
+                    <div className="shrink-0 pt-0.5 sm:pt-0">
+                      {renderItemPrefix(item)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {renderItemMainContent(item)}
+                  </div>
                 </div>
 
                 {/* Amount and Quick Actions directly visible on desktop */}
@@ -165,5 +180,47 @@ export function ListView({
     </div>
   );
 }
+
+ListView.propTypes = {
+  loading: PropTypes.bool,
+  items: PropTypes.arrayOf(PropTypes.any),
+  total: PropTypes.number,
+  currentPage: PropTypes.number,
+  pageSize: PropTypes.number,
+  onPaginationChange: PropTypes.func,
+  onAddButtonClick: PropTypes.func,
+  addButtonIcon: PropTypes.node,
+  addButtonText: PropTypes.string,
+  addButtonDisabled: PropTypes.bool,
+  extraActions: PropTypes.node,
+  filterBar: PropTypes.node,
+  batchActionBar: PropTypes.node,
+  renderItemPrefix: PropTypes.func,
+  renderItemMainContent: PropTypes.func,
+  renderItemAmount: PropTypes.func,
+  renderItemDetails: PropTypes.func,
+  renderItemActions: PropTypes.func,
+};
+
+ListView.defaultProps = {
+  loading: false,
+  items: [],
+  total: 0,
+  currentPage: 1,
+  pageSize: 10,
+  onPaginationChange: undefined,
+  onAddButtonClick: undefined,
+  addButtonIcon: null,
+  addButtonText: '',
+  addButtonDisabled: false,
+  extraActions: null,
+  filterBar: null,
+  batchActionBar: null,
+  renderItemPrefix: undefined,
+  renderItemMainContent: undefined,
+  renderItemAmount: undefined,
+  renderItemDetails: undefined,
+  renderItemActions: undefined,
+};
 
 export default ListView;

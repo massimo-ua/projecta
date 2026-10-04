@@ -211,6 +211,31 @@ func TestDecodersValidationErrors(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected invalid offset error")
 		}
+
+		reqBadFromDate, _ := http.NewRequest("GET", "/payments?from_date=bad", nil)
+		reqBadFromDate = mux.SetURLVars(reqBadFromDate, map[string]string{"project_id": validUUID})
+		_, err = decodeListPaymentsRequest(context.Background(), reqBadFromDate)
+		if err == nil {
+			t.Errorf("expected invalid from_date error")
+		}
+
+		reqBadToDate, _ := http.NewRequest("GET", "/payments?to_date=bad", nil)
+		reqBadToDate = mux.SetURLVars(reqBadToDate, map[string]string{"project_id": validUUID})
+		_, err = decodeListPaymentsRequest(context.Background(), reqBadToDate)
+		if err == nil {
+			t.Errorf("expected invalid to_date error")
+		}
+
+		reqValidDates, _ := http.NewRequest("GET", "/payments?from_date=2026-01-01&to_date=2026-01-31", nil)
+		reqValidDates = mux.SetURLVars(reqValidDates, map[string]string{"project_id": validUUID})
+		res, err := decodeListPaymentsRequest(context.Background(), reqValidDates)
+		if err != nil {
+			t.Fatalf("unexpected error decoding valid dates: %v", err)
+		}
+		filter := res.(projecta.PaymentCollectionFilter)
+		if filter.FromDate.IsZero() || filter.ToDate.IsZero() {
+			t.Errorf("expected non-zero FromDate and ToDate")
+		}
 	})
 
 	t.Run("decodeProjectTotalsRequest validation errors", func(t *testing.T) {
@@ -329,6 +354,86 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		_, err = decodeCreateAssetRequest(context.Background(), reqBadDate)
 		if err == nil {
 			t.Errorf("expected bad acquired_at date error")
+		}
+	})
+
+	t.Run("decodeCreateAssetFromPaymentsRequest validation and success", func(t *testing.T) {
+		reqNoProj, _ := http.NewRequest("POST", "/", nil)
+		_, err := decodeCreateAssetFromPaymentsRequest(context.Background(), reqNoProj)
+		if err == nil {
+			t.Errorf("expected missing project_id")
+		}
+
+		reqBadProj, _ := http.NewRequest("POST", "/", nil)
+		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqBadProj)
+		if err == nil {
+			t.Errorf("expected invalid project_id")
+		}
+
+		reqBadJSON, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("not json")))
+		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqBadJSON)
+		if err == nil {
+			t.Errorf("expected invalid json error")
+		}
+
+		// Empty name
+		bodyEmptyName, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "", PaymentIDs: []string{validUUID}})
+		reqEmptyName, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyEmptyName))
+		reqEmptyName = mux.SetURLVars(reqEmptyName, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqEmptyName)
+		if err == nil {
+			t.Errorf("expected empty name error")
+		}
+
+		// Empty payment_ids
+		bodyEmptyPays, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "Asset", PaymentIDs: []string{}})
+		reqEmptyPays, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyEmptyPays))
+		reqEmptyPays = mux.SetURLVars(reqEmptyPays, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqEmptyPays)
+		if err == nil {
+			t.Errorf("expected empty payment_ids error")
+		}
+
+		// Invalid payment id
+		bodyBadPayID, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "Asset", PaymentIDs: []string{"bad-id"}})
+		reqBadPayID, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadPayID))
+		reqBadPayID = mux.SetURLVars(reqBadPayID, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqBadPayID)
+		if err == nil {
+			t.Errorf("expected invalid payment id error")
+		}
+
+		// Bad type_id
+		bodyBadType, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "Asset", PaymentIDs: []string{validUUID}, TypeID: "bad"})
+		reqBadType, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadType))
+		reqBadType = mux.SetURLVars(reqBadType, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqBadType)
+		if err == nil {
+			t.Errorf("expected bad type_id error")
+		}
+
+		// Bad acquired_at
+		bodyBadDate, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "Asset", PaymentIDs: []string{validUUID}, AcquiredAt: "bad-date"})
+		reqBadDate, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadDate))
+		reqBadDate = mux.SetURLVars(reqBadDate, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetFromPaymentsRequest(context.Background(), reqBadDate)
+		if err == nil {
+			t.Errorf("expected bad acquired_at error")
+		}
+
+		// Valid YYYY-MM-DD
+		bodyValidDay, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "Asset", PaymentIDs: []string{validUUID}, AcquiredAt: "2026-05-15", TargetCurrency: "USD"})
+		reqValidDay, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValidDay))
+		reqValidDay = mux.SetURLVars(reqValidDay, map[string]string{"project_id": validUUID})
+		res, err := decodeCreateAssetFromPaymentsRequest(context.Background(), reqValidDay)
+		if err != nil {
+			t.Fatalf("unexpected error decoding valid day request: %v", err)
+		}
+		cmd := res.(asset.CreateAssetFromPaymentsCommand)
+		if cmd.Name != "Asset" || len(cmd.PaymentIDs) != 1 || cmd.TargetCurrency != "USD" {
+			t.Errorf("unexpected decoded command: %+v", cmd)
 		}
 	})
 
@@ -1092,6 +1197,11 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		epCreateAst := makeCreateAssetEndpoint(astSvc, rateProv)
 		if _, err := epCreateAst(context.Background(), asset.CreateAssetCommand{}); err != nil {
 			t.Errorf("makeCreateAssetEndpoint error: %v", err)
+		}
+
+		epCreateFromPays := makeCreateAssetFromPaymentsEndpoint(astSvc, rateProv)
+		if _, err := epCreateFromPays(context.Background(), asset.CreateAssetFromPaymentsCommand{}); err != nil {
+			t.Errorf("makeCreateAssetFromPaymentsEndpoint error: %v", err)
 		}
 
 		epGetAst := makeGetAssetEndpoint(astSvc, rateProv)

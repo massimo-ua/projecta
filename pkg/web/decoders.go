@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"net/http"
-	"strconv"
 )
 
 func decodeRegisterUser(_ context.Context, r *http.Request) (any, error) {
@@ -296,6 +298,19 @@ func decodeListPaymentsRequest(_ context.Context, r *http.Request) (any, error) 
 		}
 	}
 
+	fromDateStr := r.URL.Query().Get("from_date")
+	toDateStr := r.URL.Query().Get("to_date")
+
+	fromDate, err := parseFilterDate(fromDateStr, false)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid from_date", err)
+	}
+
+	toDate, err := parseFilterDate(toDateStr, true)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid to_date", err)
+	}
+
 	filter := projecta.PaymentCollectionFilter{
 		Pagination: core.Pagination{
 			Limit:  limit,
@@ -308,9 +323,29 @@ func decodeListPaymentsRequest(_ context.Context, r *http.Request) (any, error) 
 		ProjectID:  projectUUID,
 		CategoryID: categoryID,
 		TypeID:     typeID,
+		FromDate:   fromDate,
+		ToDate:     toDate,
 	}
 
 	return filter, nil
+}
+
+func parseFilterDate(s string, endOfDay bool) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err == nil {
+		return t, nil
+	}
+	t, err = time.Parse("2006-01-02", s)
+	if err == nil {
+		if endOfDay {
+			return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location()), nil
+		}
+		return t, nil
+	}
+	return time.Time{}, exceptions.NewValidationException("invalid date format", err)
 }
 
 func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error) {

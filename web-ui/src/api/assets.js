@@ -88,6 +88,22 @@ export class AssetRepository {
     return toDomain(response);
   }
 
+  async createAssetFromPayments(projectId, {
+    paymentIds, name, description, typeId, acquiredAt, targetCurrency,
+  }) {
+    const payload = {
+      payment_ids: paymentIds,
+      name,
+      description,
+    };
+    if (typeId) payload.type_id = typeId;
+    if (acquiredAt) payload.acquired_at = toISO(acquiredAt);
+    if (targetCurrency) payload.target_currency = targetCurrency;
+
+    const response = await this.#request.post(`/projects/${projectId}/assets/from-payments`, payload);
+    return toDomain(response);
+  }
+
   async removeAsset(projectId, assetId) {
     return await this.#request.delete(`/projects/${projectId}/assets/${assetId}`);
   }

@@ -89,6 +89,15 @@ type CreateAssetDTO struct {
 	WithPayment bool   `json:"with_payment"`
 }
 
+type CreateAssetFromPaymentsDTO struct {
+	PaymentIDs     []string `json:"payment_ids"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	TypeID         string   `json:"type_id,omitempty"`
+	AcquiredAt     string   `json:"acquired_at,omitempty"`
+	TargetCurrency string   `json:"target_currency,omitempty"`
+}
+
 type UpdateAssetDTO struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -159,6 +168,72 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		Price:       price,
 		AcquiredAt:  date,
 		WithPayment: req.WithPayment,
+	}, nil
+}
+
+func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	vars := mux.Vars(r)
+
+	projectID, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid project id", nil)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	var req CreateAssetFromPaymentsDTO
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+
+	if req.Name == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+
+	if len(req.PaymentIDs) == 0 {
+		return nil, exceptions.NewValidationException("at least one payment must be selected", nil)
+	}
+
+	paymentUUIDs := make([]uuid.UUID, 0, len(req.PaymentIDs))
+	for _, pid := range req.PaymentIDs {
+		puuid, err := uuid.Parse(pid)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid payment id in payment_ids", err)
+		}
+		paymentUUIDs = append(paymentUUIDs, puuid)
+	}
+
+	var typeUUID uuid.UUID
+	if req.TypeID != "" {
+		typeUUID, err = uuid.Parse(req.TypeID)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid type id", err)
+		}
+	}
+
+	var acquiredDate time.Time
+	if req.AcquiredAt != "" {
+		acquiredDate, err = time.Parse(time.RFC3339, req.AcquiredAt)
+		if err != nil {
+			acquiredDate, err = time.Parse("2006-01-02", req.AcquiredAt)
+			if err != nil {
+				return nil, exceptions.NewValidationException("invalid acquired at date", err)
+			}
+		}
+	}
+
+	return asset.CreateAssetFromPaymentsCommand{
+		ProjectID:      projectUUID,
+		PaymentIDs:     paymentUUIDs,
+		Name:           req.Name,
+		Description:    req.Description,
+		TypeID:         typeUUID,
+		AcquiredAt:     acquiredDate,
+		TargetCurrency: req.TargetCurrency,
 	}, nil
 }
 
@@ -354,6 +429,19 @@ func makeCreateAssetEndpoint(s asset.Service, rateProvider currency.CurrencyRate
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		cmd := request.(asset.CreateAssetCommand)
 		a, err := s.Create(ctx, cmd)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return toAssetDTO(a, rateProvider), nil
+	}
+}
+
+func makeCreateAssetFromPaymentsEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		cmd := request.(asset.CreateAssetFromPaymentsCommand)
+		a, err := s.CreateFromPayments(ctx, cmd)
 
 		if err != nil {
 			return nil, err

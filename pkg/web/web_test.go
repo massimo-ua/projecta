@@ -296,6 +296,12 @@ func (m *mockAssetService) Create(_ context.Context, _ asset.CreateAssetCommand)
 	}
 	return m.asset, nil
 }
+func (m *mockAssetService) CreateFromPayments(_ context.Context, _ asset.CreateAssetFromPaymentsCommand) (*asset.Asset, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.asset, nil
+}
 func (m *mockAssetService) Remove(_ context.Context, _ asset.RemoveAssetCommand) error {
 	return m.err
 }
