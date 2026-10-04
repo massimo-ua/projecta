@@ -72,6 +72,11 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		projectRepository,
 		peopleService,
 	)
+	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
+		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
+		CacheTTL:            30 * time.Minute,
+	})
+
 	assetService := asset.NewService(
 		db,
 		assetRepository,
@@ -79,12 +84,8 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		typeRepository,
 		projectRepository,
 		paymentRepository,
+		rateProvider,
 	)
-
-	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
-		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
-		CacheTTL:            30 * time.Minute,
-	})
 
 	return web.MakeHTTPHandler(
 		customerService,

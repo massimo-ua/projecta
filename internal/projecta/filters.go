@@ -1,6 +1,8 @@
 package projecta
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
@@ -54,4 +56,6 @@ type PaymentCollectionFilter struct {
 	CategoryID uuid.UUID
 	TypeID     uuid.UUID
 	Kind       PaymentKind
+	FromDate   time.Time
+	ToDate     time.Time
 }

@@ -297,6 +297,14 @@ func (r *PgPaymentRepository) Find(ctx context.Context, filter projecta.PaymentC
 		qb.Where(qb.Equal("projecta_payments.kind", filter.Kind.String()))
 	}
 
+	if !filter.FromDate.IsZero() {
+		qb.Where(qb.GreaterEqualThan("COALESCE(projecta_payments.payment_date, projecta_payments.created_at)", filter.FromDate))
+	}
+
+	if !filter.ToDate.IsZero() {
+		qb.Where(qb.LessEqualThan("COALESCE(projecta_payments.payment_date, projecta_payments.created_at)", filter.ToDate))
+	}
+
 	qb.Select(qb.As("COUNT(*)", "total"))
 
 	sql, args := qb.Build()

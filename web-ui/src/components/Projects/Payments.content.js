@@ -179,6 +179,74 @@ const paymentsContent = {
       en: 'Please select a Cost Type for all checked payments',
       uk: 'Будь ласка, оберіть тип витрат для всіх вибраних платежів',
     }),
+    filterAllTypes: t({
+      en: 'All Types',
+      uk: 'Усі типи',
+    }),
+    filterDateFrom: t({
+      en: 'From date',
+      uk: 'Дата з',
+    }),
+    filterDateTo: t({
+      en: 'To date',
+      uk: 'Дата по',
+    }),
+    resetFilters: t({
+      en: 'Reset filters',
+      uk: 'Скинути фільтри',
+    }),
+    selectedPayments: t({
+      en: 'payments selected',
+      uk: 'платежів вибрано',
+    }),
+    createAssetFromSelected: t({
+      en: 'Create Asset from Selected',
+      uk: 'Створити актив з вибраних',
+    }),
+    clearSelection: t({
+      en: 'Clear selection',
+      uk: 'Очистити вибір',
+    }),
+    createAssetTitle: t({
+      en: 'Create Asset from Payments',
+      uk: 'Створити актив з платежів',
+    }),
+    createAssetDesc: t({
+      en: 'Summarize the selected payments into a new asset record.',
+      uk: 'Обʼєднайте вибрані платежі у новий актив.',
+    }),
+    assetNameLabel: t({
+      en: 'Asset Name',
+      uk: 'Назва активу',
+    }),
+    assetNamePlaceholder: t({
+      en: 'Enter asset name...',
+      uk: 'Введіть назву активу...',
+    }),
+    targetCurrencyLabel: t({
+      en: 'Resulting Currency',
+      uk: 'Підсумкова валюта',
+    }),
+    estimatedTotalLabel: t({
+      en: 'Total Price',
+      uk: 'Підсумкова ціна',
+    }),
+    currencyConversionNotice: t({
+      en: 'Payments in differing currencies will be converted into',
+      uk: 'Платежі в інших валютах буде сконвертовано у',
+    }),
+    assetCreatedSuccess: t({
+      en: 'Asset created successfully from selected payments',
+      uk: 'Актив успішно створено з вибраних платежів',
+    }),
+    viewInAssets: t({
+      en: 'View in Assets',
+      uk: 'Переглянути в активах',
+    }),
+    failedToCreateAsset: t({
+      en: 'Failed to create asset',
+      uk: 'Не вдалося створити актив',
+    }),
   },
 };
 

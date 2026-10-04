@@ -11,6 +11,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type mockDb struct{}
@@ -107,7 +108,9 @@ func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.
 }
 
 type mockPaymentRepo struct {
-	saveErr error
+	saveErr  error
+	payments map[uuid.UUID]*projecta.Payment
+	err      error
 }
 
 func (m *mockPaymentRepo) Save(ctx context.Context, p *projecta.Payment) error { return m.saveErr }
@@ -121,7 +124,30 @@ func (m *mockPaymentRepo) Find(ctx context.Context, filter projecta.PaymentColle
 	return nil, nil
 }
 func (m *mockPaymentRepo) FindOne(ctx context.Context, filter projecta.PaymentFilter) (*projecta.Payment, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.payments != nil {
+		if p, ok := m.payments[filter.PaymentID]; ok {
+			return p, nil
+		}
+		return nil, errors.New("not found")
+	}
 	return nil, nil
+}
+
+type mockRateProvider struct {
+	err error
+}
+
+func (m *mockRateProvider) Convert(a currency.Currency, b currency.Currency) (currency.Currency, error) {
+	if m.err != nil {
+		return currency.Currency{}, m.err
+	}
+	if a.Code == "USD" && b.Code == "UAH" {
+		return currency.Currency{Amount: a.Amount * 40, Code: b.Code}, nil
+	}
+	return currency.Currency{Amount: a.Amount, Code: b.Code}, nil
 }
 
 func TestAssetService(t *testing.T) {
@@ -314,6 +340,144 @@ func TestAssetService(t *testing.T) {
 		err = svc.Update(authedCtx, updCmd)
 		if err != nil {
 			t.Errorf("unexpected update error: %v", err)
+		}
+	})
+
+	t.Run("CreateFromPayments", func(t *testing.T) {
+		p1ID := uuid.New()
+		p2ID := uuid.New()
+		p3ID := uuid.New()
+
+		d1 := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+		d2 := time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC)
+
+		costType2, _ := projecta.NewCostType(project.ProjectID, nil, "Type 2", "Desc")
+
+		pay1 := projecta.NewPayment(p1ID, project, owner, costType, "Pay 1", money.New(1000, "USD"), d1, projecta.UponCompletionPayment)
+		pay2 := projecta.NewPayment(p2ID, project, owner, costType, "Pay 2", money.New(2000, "USD"), d2, projecta.UponCompletionPayment)
+		pay3 := projecta.NewPayment(p3ID, project, owner, costType2, "Pay 3", money.New(500, "UAH"), d1, projecta.UponCompletionPayment)
+
+		paymentsMap := map[uuid.UUID]*projecta.Payment{
+			p1ID: pay1,
+			p2ID: pay2,
+			p3ID: pay3,
+		}
+
+		rateProv := &mockRateProvider{}
+		payRepoWithPayments := &mockPaymentRepo{payments: paymentsMap}
+		typeRepoMulti := &mockTypeRepo{costType: costType}
+
+		svc := asset.NewService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, typeRepoMulti, &mockProjectRepo{project: project}, payRepoWithPayments, rateProv)
+
+		// 1. Unauthorized
+		_, err := svc.CreateFromPayments(context.Background(), asset.CreateAssetFromPaymentsCommand{ProjectID: project.ProjectID})
+		if err == nil {
+			t.Errorf("expected unauthorized error")
+		}
+
+		// 2. Missing project id
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{Name: "Asset", PaymentIDs: []uuid.UUID{p1ID}})
+		if err == nil {
+			t.Errorf("expected missing project id error")
+		}
+
+		// 3. Empty payment ids
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{ProjectID: project.ProjectID, Name: "Asset"})
+		if err == nil {
+			t.Errorf("expected empty payment ids error")
+		}
+
+		// 4. Empty name
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{ProjectID: project.ProjectID, PaymentIDs: []uuid.UUID{p1ID}})
+		if err == nil {
+			t.Errorf("expected empty name error")
+		}
+
+		// 5. Payment not found
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{uuid.New()},
+			Name:       "Asset",
+		})
+		if err == nil {
+			t.Errorf("expected payment not found error")
+		}
+
+		// 6. Single payment success (inherits type, date, amount, currency)
+		a, err := svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{p1ID},
+			Name:       "Single Asset",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error creating asset from single payment: %v", err)
+		}
+		if a.Price().Amount() != 1000 || a.Price().Currency().Code != "USD" {
+			t.Errorf("expected price 1000 USD, got %d %s", a.Price().Amount(), a.Price().Currency().Code)
+		}
+		if a.Type().ID != costType.ID {
+			t.Errorf("expected type %s, got %s", costType.ID, a.Type().ID)
+		}
+		if !a.AcquiredAt().Equal(d1) {
+			t.Errorf("expected date %v, got %v", d1, a.AcquiredAt())
+		}
+
+		// 7. Multiple payments same currency (sums amounts, latest date)
+		a2, err := svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{p1ID, p2ID},
+			Name:       "Multi Asset",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error creating asset from multi payments: %v", err)
+		}
+		if a2.Price().Amount() != 3000 || a2.Price().Currency().Code != "USD" {
+			t.Errorf("expected price 3000 USD, got %d %s", a2.Price().Amount(), a2.Price().Currency().Code)
+		}
+		if !a2.AcquiredAt().Equal(d2) {
+			t.Errorf("expected latest date %v, got %v", d2, a2.AcquiredAt())
+		}
+
+		// 8. Differing types without type_id -> error
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{p1ID, p3ID},
+			Name:       "Diff Types",
+		})
+		if err == nil {
+			t.Errorf("expected error when payments have different types without type_id")
+		}
+
+		// 9. Differing types with type_id -> success
+		a3, err := svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{p1ID, p3ID},
+			TypeID:     costType.ID,
+			Name:       "Diff Types With Specified Type",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error with specified type_id: %v", err)
+		}
+		if a3.Type().ID != costType.ID {
+			t.Errorf("expected specified type_id")
+		}
+
+		// 10. Mixed currencies (USD + UAH, project MainCurrency is UAH)
+		// USD 1000 * 40 = 40000 UAH + 500 UAH = 40500 UAH
+		if a3.Price().Currency().Code != "UAH" || a3.Price().Amount() != 40500 {
+			t.Errorf("expected price 40500 UAH, got %d %s", a3.Price().Amount(), a3.Price().Currency().Code)
+		}
+
+		// 11. Rate provider error
+		svcRateErr := asset.NewService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, typeRepoMulti, &mockProjectRepo{project: project}, payRepoWithPayments, &mockRateProvider{err: errors.New("rate err")})
+		_, err = svcRateErr.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{p1ID, p3ID},
+			TypeID:     costType.ID,
+			Name:       "Rate Err",
+		})
+		if err == nil {
+			t.Errorf("expected rate provider error")
 		}
 	})
 }

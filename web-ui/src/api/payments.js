@@ -14,12 +14,16 @@ const toDomain = ({
     id: payment_id,
     description,
     amount: toPriceView(amount),
+    rawAmount: amount,
     currency,
     homeAmount: toPriceView(finalHomeAmount),
+    rawHomeAmount: finalHomeAmount,
     homeCurrency: finalHomeCurrency,
     type: type?.name,
+    typeId: type?.type_id,
     category: type?.category?.name,
     paymentDate: format(parseISO(payment_date), 'dd/MM/yyyy', { awareOfUnicodeTokens: true }),
+    rawDate: payment_date,
     kind,
   });
 };
@@ -67,8 +71,13 @@ export class PaymentRepository {
     this.#request = request;
   }
 
-  async getPayments(projectId, limit = 10, offset = 0) {
-    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) }).toString();
+  async getPayments(projectId, limit = 10, offset = 0, filters = {}) {
+    const params = { limit: String(limit), offset: String(offset) };
+    if (filters.typeId) params.type_id = filters.typeId;
+    if (filters.fromDate) params.from_date = filters.fromDate;
+    if (filters.toDate) params.to_date = filters.toDate;
+
+    const query = new URLSearchParams(params).toString();
     const resourceUrl = `/projects/${projectId}/payments`;
     const url = query ? `${resourceUrl}?${query}` : resourceUrl;
     const response = await this.#request.get(url);
