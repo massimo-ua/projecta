@@ -837,16 +837,18 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 	})
 
 	t.Run("PgAssetRepository methods and zero total branch", func(t *testing.T) {
+		targetPrice := int64(1000)
+		targetCurr := "USD"
 		mockDb := &mockPgDb{
 			rowVal: []any{
-				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc",
-				typeID.String(), "Type", "Type Desc", int64(1000), "USD", now,
-				ownerID.String(), "John", "J.D.", catID.String(), "Cat", "Cat Desc",
+				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
+				now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+				&targetPrice, &targetCurr, []string{"tag1"},
 			},
 			rowsData: [][]any{{
-				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc",
-				typeID.String(), "Type", "Type Desc", int64(1000), "USD", now,
-				ownerID.String(), "John", "J.D.", catID.String(), "Cat", "Cat Desc",
+				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
+				now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+				&targetPrice, &targetCurr, []string{"tag1"},
 			}},
 		}
 		ctx := withMockDb(authedCtx, mockDb)
@@ -867,9 +869,9 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		// Save update failure (exec error)
 		mockDbUpdErr := &mockPgDb{
 			rowVal: []any{
-				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc",
-				typeID.String(), "Type", "Type Desc", int64(1000), "USD", now,
-				ownerID.String(), "John", "J.D.", catID.String(), "Cat", "Cat Desc",
+				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
+				now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+				&targetPrice, &targetCurr, []string{"tag1"},
 			},
 			execErr: errors.New("exec update error"),
 		}
@@ -926,7 +928,9 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 	})
 
 	t.Run("toAssetFromPg test", func(t *testing.T) {
-		a, err := toAssetFromPg(astID.String(), "Laptop", "Desc", pID.String(), "Proj", "Desc", typeID.String(), "Type", "Desc", 1000, "USD", now, ownerID.String(), "John", "J.D.", catID.String(), "Cat", "Desc")
+		tp := int64(1000)
+		tc := "USD"
+		a, err := toAssetFromPg(astID.String(), "Laptop", "Desc", pID.String(), "Proj", "Desc", "USD", now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil, &tp, &tc, []string{"tag1"})
 		if err != nil || a == nil {
 			t.Errorf("toAssetFromPg error: %v", err)
 		}
@@ -983,10 +987,12 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 			t.Errorf("FindOne payment by ProjectID error: %v", err)
 		}
 
+		targetPriceVal := int64(1000)
+		targetCurrVal := "USD"
 		mockDbAst := &mockPgDb{rowVal: []any{
-			astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc",
-			typeID.String(), "Type", "Type Desc", int64(1000), "USD", now,
-			ownerID.String(), "John", "J.D.", catID.String(), "Cat", "Cat Desc",
+			astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
+			now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+			&targetPriceVal, &targetCurrVal, []string{"tag1"},
 		}}
 		ctxAst := withMockDb(authedCtx, mockDbAst)
 		astOne, err := astRepo.FindOne(ctxAst, asset.Filter{ID: astID, ProjectID: pID, Name: "Laptop"})

@@ -251,6 +251,13 @@ export class AssetRepository {
   async removeAsset(projectId, assetId) {
     return await this.#request.delete(`/projects/${projectId}/assets/${assetId}`);
   }
+
+  async assignInvestments(projectId, assetId, investmentIds) {
+    return await this.#request.post(
+      `/projects/${projectId}/assets/${assetId}/investments`,
+      { investment_ids: investmentIds },
+    );
+  }
 }
 
 export default AssetRepository;

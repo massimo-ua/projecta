@@ -64,3 +64,10 @@ type UnlinkChildCommand struct {
 	ChildID   uuid.UUID
 	ProjectID uuid.UUID
 }
+
+type AssignInvestmentsCommand struct {
+	AssetID       uuid.UUID
+	ProjectID     uuid.UUID
+	InvestmentIDs []uuid.UUID
+}
+

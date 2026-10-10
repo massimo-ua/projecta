@@ -151,6 +151,30 @@ func (m *mockPaymentRepo) FindOne(ctx context.Context, filter projecta.PaymentFi
 	return nil, nil
 }
 
+type mockInvestmentSource struct {
+	items         []asset.InvestmentItem
+	findErr       error
+	assignErr     error
+	assignedAsset uuid.UUID
+	assignedIDs   []uuid.UUID
+}
+
+func (m *mockInvestmentSource) FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]asset.InvestmentItem, error) {
+	if m.findErr != nil {
+		return nil, m.findErr
+	}
+	return m.items, nil
+}
+
+func (m *mockInvestmentSource) AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error {
+	if m.assignErr != nil {
+		return m.assignErr
+	}
+	m.assignedAsset = assetID
+	m.assignedIDs = investmentIDs
+	return nil
+}
+
 type mockRateProvider struct {
 	err error
 }
@@ -494,6 +518,65 @@ func TestAssetService(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected rate provider error")
 		}
+
+		// 12. Create from investments success
+		inv1ID := uuid.New()
+		inv2ID := uuid.New()
+		mockInvSrc := &mockInvestmentSource{
+			items: []asset.InvestmentItem{
+				{
+					ID:     inv1ID,
+					Amount: money.New(5000, "UAH"),
+					Date:   d1,
+					Tags:   []string{"tag-a", "tag-b"},
+				},
+				{
+					ID:     inv2ID,
+					Amount: money.New(2000, "UAH"),
+					Date:   d2,
+					Tags:   []string{"tag-b", "tag-c"},
+				},
+			},
+		}
+
+		svcWithInv := asset.NewService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, typeRepoMulti, &mockProjectRepo{project: project}, payRepoWithPayments, rateProv)
+		svcWithInv.SetInvestmentSource(mockInvSrc)
+
+		createdFromInv, err := svcWithInv.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{inv1ID, inv2ID},
+			Name:       "Asset From Investments",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error creating asset from investments: %v", err)
+		}
+		if createdFromInv.Price().Amount() != 7000 || createdFromInv.Price().Currency().Code != "UAH" {
+			t.Errorf("expected 7000 UAH, got %d %s", createdFromInv.Price().Amount(), createdFromInv.Price().Currency().Code)
+		}
+		if !createdFromInv.AcquiredAt().Equal(d2) {
+			t.Errorf("expected latest date %v, got %v", d2, createdFromInv.AcquiredAt())
+		}
+		if len(mockInvSrc.assignedIDs) != 2 || mockInvSrc.assignedAsset != createdFromInv.ID() {
+			t.Errorf("expected assigned asset ID %v and 2 items, got asset %v and %d items", createdFromInv.ID(), mockInvSrc.assignedAsset, len(mockInvSrc.assignedIDs))
+		}
+
+		// 13. Investment assign error
+		mockInvSrcErr := &mockInvestmentSource{
+			items: []asset.InvestmentItem{
+				{ID: inv1ID, Amount: money.New(100, "UAH"), Date: d1},
+			},
+			assignErr: errors.New("assign failed"),
+		}
+		svcAssignErr := asset.NewService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, typeRepoMulti, &mockProjectRepo{project: project}, payRepoWithPayments)
+		svcAssignErr.SetInvestmentSource(mockInvSrcErr)
+		_, err = svcAssignErr.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
+			ProjectID:  project.ProjectID,
+			PaymentIDs: []uuid.UUID{inv1ID},
+			Name:       "Fail Assign",
+		})
+		if err == nil {
+			t.Errorf("expected error on assign failure")
+		}
 	})
 
 	t.Run("LinkChild and UnlinkChild tests", func(t *testing.T) {
@@ -540,6 +623,75 @@ func TestAssetService(t *testing.T) {
 		err = svc.UnlinkChild(authedCtx, asset.UnlinkChildCommand{ParentID: pID, ChildID: cID})
 		if err != nil {
 			t.Errorf("unexpected unlink error: %v", err)
+		}
+	})
+
+	t.Run("AssignInvestments", func(t *testing.T) {
+		astID := uuid.New()
+		invID1 := uuid.New()
+		invID2 := uuid.New()
+		targetAsset := asset.NewAsset(astID, "Car", "Vehicle", project, nil, money.New(100000, "UAH"), time.Now(), owner)
+
+		mockInv := &mockInvestmentSource{
+			items: []asset.InvestmentItem{
+				{ID: invID1, Amount: money.New(50000, "UAH"), Date: time.Now()},
+				{ID: invID2, Amount: money.New(50000, "UAH"), Date: time.Now()},
+			},
+		}
+
+		svc := asset.NewService(
+			&mockDb{},
+			&mockAssetRepo{asset: targetAsset},
+			&mockPeopleService{owner: owner},
+			&mockTypeRepo{},
+			&mockProjectRepo{project: project},
+			&mockPaymentRepo{},
+		)
+		svc.SetInvestmentSource(mockInv)
+
+		// Unauthenticated
+		err := svc.AssignInvestments(context.Background(), asset.AssignInvestmentsCommand{
+			AssetID:       astID,
+			ProjectID:     project.ProjectID,
+			InvestmentIDs: []uuid.UUID{invID1, invID2},
+		})
+		if err == nil {
+			t.Errorf("expected unauthenticated error")
+		}
+
+		// Validation errors
+		err = svc.AssignInvestments(authedCtx, asset.AssignInvestmentsCommand{
+			AssetID:       uuid.Nil,
+			ProjectID:     project.ProjectID,
+			InvestmentIDs: []uuid.UUID{invID1},
+		})
+		if err == nil {
+			t.Errorf("expected error for nil asset id")
+		}
+
+		err = svc.AssignInvestments(authedCtx, asset.AssignInvestmentsCommand{
+			AssetID:       astID,
+			ProjectID:     project.ProjectID,
+			InvestmentIDs: nil,
+		})
+		if err == nil {
+			t.Errorf("expected error for empty investment ids")
+		}
+
+		// Success
+		err = svc.AssignInvestments(authedCtx, asset.AssignInvestmentsCommand{
+			AssetID:       astID,
+			ProjectID:     project.ProjectID,
+			InvestmentIDs: []uuid.UUID{invID1, invID2},
+		})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if mockInv.assignedAsset != astID {
+			t.Errorf("expected assigned asset to be %v, got %v", astID, mockInv.assignedAsset)
+		}
+		if len(mockInv.assignedIDs) != 2 {
+			t.Errorf("expected 2 assigned investments, got %d", len(mockInv.assignedIDs))
 		}
 	})
 }

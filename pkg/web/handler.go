@@ -349,6 +349,15 @@ func MakeHTTPHandler(
 		))
 	}
 
+	if projectEndpoints.AssignInvestments != nil {
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/{asset_id}/investments").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.AssignInvestments),
+			decodeAssignInvestmentsRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
+
 	if projectEndpoints.CreateInvestment != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
 			requireRole(string(people.RoleUser), projectEndpoints.CreateInvestment),

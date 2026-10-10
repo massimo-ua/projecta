@@ -391,6 +391,30 @@ const paymentsContent = {
       en: 'Failed to create asset',
       uk: 'Не вдалося створити актив',
     }),
+    assignToExistingAsset: t({
+      en: 'Add to Existing Asset',
+      uk: 'Додати до існуючого активу',
+    }),
+    assignToAssetTitle: t({
+      en: 'Add Investments to Existing Asset',
+      uk: 'Додати інвестиції до існуючого активу',
+    }),
+    assignToAssetDesc: t({
+      en: 'Assign the selected investments to an existing project asset.',
+      uk: 'Призначити вибрані інвестиції до існуючого активу проєкту.',
+    }),
+    assignButton: t({
+      en: 'Assign Investments',
+      uk: 'Призначити інвестиції',
+    }),
+    assignSuccess: t({
+      en: 'Investments assigned to asset successfully',
+      uk: 'Інвестиції успішно додано до активу',
+    }),
+    failedToAssign: t({
+      en: 'Failed to assign investments to asset',
+      uk: 'Не вдалося призначити інвестиції до активу',
+    }),
   },
 };
 

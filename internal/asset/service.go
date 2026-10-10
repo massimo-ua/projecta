@@ -28,6 +28,11 @@ type ServiceImpl struct {
 	projects     projecta.ProjectRepository
 	payments     projecta.PaymentRepository
 	rateProvider currency.CurrencyRateProvider
+	investments  InvestmentSource
+}
+
+func (s *ServiceImpl) SetInvestmentSource(is InvestmentSource) {
+	s.investments = is
 }
 
 func NewService(
@@ -214,88 +219,170 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	var payments []*projecta.Payment
-	for _, pid := range command.PaymentIDs {
-		payment, err := s.payments.FindOne(ctx, projecta.PaymentFilter{
-			PaymentID: pid,
-			ProjectID: command.ProjectID,
-		})
+	var (
+		totalAmount    int64
+		targetCurrency string
+		acquiredAt     time.Time
+		tags           []string
+		usedInvestment bool
+	)
+
+	if s.investments != nil {
+		invItems, err := s.investments.FindInvestments(ctx, command.ProjectID, command.PaymentIDs)
 		if err != nil {
-			return nil, exceptions.NewValidationException(fmt.Sprintf("payment %s not found in project", pid), err)
+			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 		}
-		payments = append(payments, payment)
-	}
+		if len(invItems) != len(command.PaymentIDs) {
+			return nil, exceptions.NewValidationException("one or more investments not found in project", nil)
+		}
+		usedInvestment = true
+
+			acquiredAt = command.AcquiredAt
+			if acquiredAt.IsZero() {
+				for _, inv := range invItems {
+					if inv.Date.After(acquiredAt) {
+						acquiredAt = inv.Date
+					}
+				}
+				if acquiredAt.IsZero() {
+					acquiredAt = time.Now()
+				}
+			}
+
+			targetCurrency = strings.ToUpper(strings.TrimSpace(command.TargetCurrency))
+			if targetCurrency == "" {
+				firstCurr := invItems[0].Amount.Currency().Code
+				allSameCurr := true
+				for _, inv := range invItems[1:] {
+					if inv.Amount.Currency().Code != firstCurr {
+						allSameCurr = false
+						break
+					}
+				}
+				if allSameCurr {
+					targetCurrency = firstCurr
+				} else {
+					targetCurrency = project.MainCurrency
+					if targetCurrency == "" {
+						targetCurrency = "UAH"
+					}
+				}
+			}
+
+			tagSet := make(map[string]struct{})
+			for _, inv := range invItems {
+				currCode := inv.Amount.Currency().Code
+				if currCode == targetCurrency {
+					totalAmount += inv.Amount.Amount()
+				} else {
+					if s.rateProvider == nil {
+						return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
+					}
+					converted, err := s.rateProvider.Convert(
+						currency.NewCurrency(inv.Amount.Amount(), currCode),
+						currency.NewCurrency(0, targetCurrency),
+					)
+					if err != nil {
+						return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
+					}
+					totalAmount += converted.Amount
+				}
+
+				for _, t := range inv.Tags {
+					if t != "" {
+						tagSet[t] = struct{}{}
+					}
+				}
+			}
+
+			for t := range tagSet {
+				tags = append(tags, t)
+			}
+		}
 
 	var costType *projecta.CostType
-	if command.TypeID != uuid.Nil {
-		costType, err = s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid cost type", err)
-		}
-	} else {
-		firstTypeID := payments[0].Type.ID
-		allSame := true
-		for _, p := range payments[1:] {
-			if p.Type == nil || p.Type.ID != firstTypeID {
-				allSame = false
-				break
-			}
-		}
-		if !allSame {
-			return nil, exceptions.NewValidationException("cost type is required when selected payments have different types", nil)
-		}
-		costType = payments[0].Type
-	}
-
-	acquiredAt := command.AcquiredAt
-	if acquiredAt.IsZero() {
-		for _, p := range payments {
-			if p.Date.After(acquiredAt) {
-				acquiredAt = p.Date
-			}
-		}
-		if acquiredAt.IsZero() {
-			acquiredAt = time.Now()
-		}
-	}
-
-	targetCurrency := strings.ToUpper(strings.TrimSpace(command.TargetCurrency))
-	if targetCurrency == "" {
-		firstCurr := payments[0].Amount.Currency().Code
-		allSameCurr := true
-		for _, p := range payments[1:] {
-			if p.Amount.Currency().Code != firstCurr {
-				allSameCurr = false
-				break
-			}
-		}
-		if allSameCurr {
-			targetCurrency = firstCurr
-		} else {
-			targetCurrency = project.MainCurrency
-			if targetCurrency == "" {
-				targetCurrency = "UAH"
-			}
-		}
-	}
-
-	var totalAmount int64
-	for _, p := range payments {
-		currCode := p.Amount.Currency().Code
-		if currCode == targetCurrency {
-			totalAmount += p.Amount.Amount()
-		} else {
-			if s.rateProvider == nil {
-				return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
-			}
-			converted, err := s.rateProvider.Convert(
-				currency.NewCurrency(p.Amount.Amount(), currCode),
-				currency.NewCurrency(0, targetCurrency),
-			)
+	if !usedInvestment {
+		var payments []*projecta.Payment
+		for _, pid := range command.PaymentIDs {
+			payment, err := s.payments.FindOne(ctx, projecta.PaymentFilter{
+				PaymentID: pid,
+				ProjectID: command.ProjectID,
+			})
 			if err != nil {
-				return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
+				return nil, exceptions.NewValidationException(fmt.Sprintf("payment %s not found in project", pid), err)
 			}
-			totalAmount += converted.Amount
+			payments = append(payments, payment)
+		}
+
+		if command.TypeID != uuid.Nil {
+			costType, err = s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
+			if err != nil {
+				return nil, exceptions.NewValidationException("invalid cost type", err)
+			}
+		} else {
+			firstTypeID := payments[0].Type.ID
+			allSame := true
+			for _, p := range payments[1:] {
+				if p.Type == nil || p.Type.ID != firstTypeID {
+					allSame = false
+					break
+				}
+			}
+			if !allSame {
+				return nil, exceptions.NewValidationException("cost type is required when selected payments have different types", nil)
+			}
+			costType = payments[0].Type
+		}
+
+		acquiredAt = command.AcquiredAt
+		if acquiredAt.IsZero() {
+			for _, p := range payments {
+				if p.Date.After(acquiredAt) {
+					acquiredAt = p.Date
+				}
+			}
+			if acquiredAt.IsZero() {
+				acquiredAt = time.Now()
+			}
+		}
+
+		targetCurrency = strings.ToUpper(strings.TrimSpace(command.TargetCurrency))
+		if targetCurrency == "" {
+			firstCurr := payments[0].Amount.Currency().Code
+			allSameCurr := true
+			for _, p := range payments[1:] {
+				if p.Amount.Currency().Code != firstCurr {
+					allSameCurr = false
+					break
+				}
+			}
+			if allSameCurr {
+				targetCurrency = firstCurr
+			} else {
+				targetCurrency = project.MainCurrency
+				if targetCurrency == "" {
+					targetCurrency = "UAH"
+				}
+			}
+		}
+
+		for _, p := range payments {
+			currCode := p.Amount.Currency().Code
+			if currCode == targetCurrency {
+				totalAmount += p.Amount.Amount()
+			} else {
+				if s.rateProvider == nil {
+					return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
+				}
+				converted, err := s.rateProvider.Convert(
+					currency.NewCurrency(p.Amount.Amount(), currCode),
+					currency.NewCurrency(0, targetCurrency),
+				)
+				if err != nil {
+					return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
+				}
+				totalAmount += converted.Amount
+			}
 		}
 	}
 
@@ -316,9 +403,20 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		owner,
 	)
 	anAsset.SetTargetPrice(price)
+	if len(tags) > 0 {
+		anAsset.SetTags(tags)
+	}
+	anAsset.SetDirectCost(price)
+	anAsset.SetTotalCost(price)
 
 	if err = s.assets.Save(ctx, anAsset); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+	}
+
+	if usedInvestment && s.investments != nil {
+		if err = s.investments.AssignToAsset(ctx, anAsset.ID(), command.PaymentIDs); err != nil {
+			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		}
 	}
 
 	return anAsset, nil
@@ -437,3 +535,43 @@ func (s *ServiceImpl) UnlinkChild(ctx context.Context, command UnlinkChildComman
 
 	return s.assets.RemoveChild(ctx, command.ParentID, command.ChildID)
 }
+
+func (s *ServiceImpl) AssignInvestments(ctx context.Context, command AssignInvestmentsCommand) error {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return exceptions.NewUnauthorizedException("failed to assign investments to asset", err)
+	}
+
+	if command.AssetID == uuid.Nil {
+		return exceptions.NewValidationException("asset id is required", nil)
+	}
+	if command.ProjectID == uuid.Nil {
+		return exceptions.NewValidationException("project id is required", nil)
+	}
+	if len(command.InvestmentIDs) == 0 {
+		return exceptions.NewValidationException("at least one investment must be selected", nil)
+	}
+
+	_, err = s.assets.FindOne(ctx, Filter{
+		ID:        command.AssetID,
+		ProjectID: command.ProjectID,
+		OwnerID:   personID,
+	})
+	if err != nil {
+		return exceptions.NewValidationException("asset not found in project", err)
+	}
+
+	if s.investments != nil {
+		items, err := s.investments.FindInvestments(ctx, command.ProjectID, command.InvestmentIDs)
+		if err != nil || len(items) != len(command.InvestmentIDs) {
+			return exceptions.NewValidationException("one or more investments not found in project", err)
+		}
+
+		if err = s.investments.AssignToAsset(ctx, command.AssetID, command.InvestmentIDs); err != nil {
+			return exceptions.NewInternalException("failed to assign investments to asset", err)
+		}
+	}
+
+	return nil
+}
+
