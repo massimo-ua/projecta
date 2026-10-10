@@ -11,6 +11,7 @@ export class Asset {
     type,
     category,
     acquiredAt,
+    rawAcquiredAt,
   }) {
     this.id = id;
     this.key = key || id;
@@ -23,6 +24,7 @@ export class Asset {
     this.type = type;
     this.category = category;
     this.acquiredAt = acquiredAt;
+    this.rawAcquiredAt = rawAcquiredAt;
   }
 
   get hasDifferentHomeCurrency() {
