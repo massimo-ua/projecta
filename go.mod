@@ -4,19 +4,19 @@ go 1.26.5
 
 require (
 	github.com/Rhymond/go-money v1.0.15
+	github.com/dslipak/pdf v0.0.2
 	github.com/go-kit/kit v0.13.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
-	github.com/huandu/go-sqlbuilder v1.43.0
+	github.com/huandu/go-sqlbuilder v1.44.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/rabbitmq/amqp091-go v1.14.0
 	golang.org/x/crypto v0.57.0
 )
 
 require (
-	github.com/dslipak/pdf v0.0.2 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
