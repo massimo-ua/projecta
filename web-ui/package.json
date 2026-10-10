@@ -53,7 +53,7 @@
     "postcss": "^8.5.23",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.1",
-    "vite-intlayer": "^9.0.2"
+    "vite-intlayer": "^9.6.0"
   },
   "overrides": {
     "eslint": "$eslint"
