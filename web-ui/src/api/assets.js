@@ -23,6 +23,7 @@ const toDomain = ({
   acquired_at,
   children = [],
   parents = [],
+  tags = [],
   type,
   project,
 }) => {
@@ -71,6 +72,7 @@ const toDomain = ({
     rawAcquiredAt: acquired_at || start_date,
     children: childrenMapped,
     parents: parentsMapped,
+    tags: tags || [],
     type: type?.name,
     category: type?.category?.name,
   });
@@ -88,6 +90,7 @@ const toEditAssetView = ({
   price,
   currency,
   acquired_at,
+  tags = [],
 }) => ({
   id: asset_id,
   name,
@@ -100,6 +103,7 @@ const toEditAssetView = ({
   price: toPriceView(price || 0),
   currency: currency || target_currency || 'UAH',
   acquiredAt: fromISO(acquired_at || start_date),
+  tags: tags || [],
 });
 
 const toAddAssetDTO = ({
@@ -114,6 +118,7 @@ const toAddAssetDTO = ({
   price,
   currency,
   withPayment,
+  tags,
 }) => {
   const chosenPrice = targetPrice ? toPrice(targetPrice) : (price ? toPrice(price) : 0);
   const chosenCurrency = targetCurrency || currency || 'UAH';
@@ -130,6 +135,7 @@ const toAddAssetDTO = ({
     price: chosenPrice,
     currency: chosenCurrency,
     with_payment: Boolean(withPayment),
+    tags: Array.isArray(tags) ? tags : [],
   };
 
   if (completedDate) {
@@ -151,6 +157,7 @@ const toUpdateAssetDTO = ({
   targetCurrency,
   price,
   currency,
+  tags,
 }) => {
   const chosenPrice = targetPrice ? toPrice(targetPrice) : (price ? toPrice(price) : 0);
   const chosenCurrency = targetCurrency || currency || 'UAH';
@@ -166,6 +173,7 @@ const toUpdateAssetDTO = ({
     target_currency: chosenCurrency,
     price: chosenPrice,
     currency: chosenCurrency,
+    tags: Array.isArray(tags) ? tags : [],
   };
 
   if (completedDate) {

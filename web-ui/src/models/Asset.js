@@ -27,6 +27,7 @@ export class Asset {
     parents = [],
     acquiredAt,
     rawAcquiredAt,
+    tags = [],
   }) {
     this.id = id;
     this.key = key || id;
@@ -55,6 +56,7 @@ export class Asset {
     this.parents = parents || [];
     this.acquiredAt = acquiredAt || startDate;
     this.rawAcquiredAt = rawAcquiredAt || rawStartDate;
+    this.tags = Array.isArray(tags) ? tags : [];
   }
 
   get isActive() {

@@ -18,25 +18,33 @@ import (
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
+type InvestmentAssetDTO struct {
+	AssetID         string  `json:"asset_id"`
+	AssetName       string  `json:"asset_name"`
+	SharePercentage float64 `json:"share_percentage"`
+	Amount          int64   `json:"amount,omitempty"`
+}
+
 type InvestmentDTO struct {
-	InvestmentID   string   `json:"investment_id"`
-	ProjectID      string   `json:"project_id"`
-	AssetID        string   `json:"asset_id"`
-	AssetName      string   `json:"asset_name"`
-	Contributor    OwnerDTO `json:"contributor"`
-	ResourceType   string   `json:"resource_type"`
-	Amount         int64    `json:"amount"`
-	Currency       string   `json:"currency"`
-	HomeAmount     int64    `json:"home_amount,omitempty"`
-	HomeCurrency   string   `json:"home_currency,omitempty"`
-	TimeHours      *float64 `json:"time_hours,omitempty"`
-	TimeHourlyRate *int64   `json:"time_hourly_rate,omitempty"`
-	GoodsQuantity  *float64 `json:"goods_quantity,omitempty"`
-	GoodsUnit      string   `json:"goods_unit,omitempty"`
-	GoodsItemName  string   `json:"goods_item_name,omitempty"`
-	Description    string   `json:"description"`
-	Date           string   `json:"date"`
-	Tags           []string `json:"tags"`
+	InvestmentID     string               `json:"investment_id"`
+	ProjectID        string               `json:"project_id"`
+	AssetID          string               `json:"asset_id"`
+	AssetName        string               `json:"asset_name"`
+	AssetAllocations []InvestmentAssetDTO `json:"asset_allocations"`
+	Contributor      OwnerDTO             `json:"contributor"`
+	ResourceType     string               `json:"resource_type"`
+	Amount           int64                `json:"amount"`
+	Currency         string               `json:"currency"`
+	HomeAmount       int64                `json:"home_amount,omitempty"`
+	HomeCurrency     string               `json:"home_currency,omitempty"`
+	TimeHours        *float64             `json:"time_hours,omitempty"`
+	TimeHourlyRate   *int64               `json:"time_hourly_rate,omitempty"`
+	GoodsQuantity    *float64             `json:"goods_quantity,omitempty"`
+	GoodsUnit        string               `json:"goods_unit,omitempty"`
+	GoodsItemName    string               `json:"goods_item_name,omitempty"`
+	Description      string               `json:"description"`
+	Date             string               `json:"date"`
+	Tags             []string             `json:"tags"`
 }
 
 func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyRateProvider) InvestmentDTO {
@@ -86,56 +94,75 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 		hourlyRateVal = &v
 	}
 
+	allocationsDTO := make([]InvestmentAssetDTO, 0)
+	for _, a := range inv.AssetAllocations {
+		allocatedAmount := int64(float64(inv.Amount.Amount()) * (a.SharePercentage / 100.0))
+		allocationsDTO = append(allocationsDTO, InvestmentAssetDTO{
+			AssetID:         a.AssetID.String(),
+			AssetName:       a.AssetName,
+			SharePercentage: a.SharePercentage,
+			Amount:          allocatedAmount,
+		})
+	}
+
 	return InvestmentDTO{
-		InvestmentID:   inv.ID.String(),
-		ProjectID:      projectID,
-		AssetID:        assetID,
-		AssetName:      assetName,
-		Contributor:    contribDTO,
-		ResourceType:   inv.ResourceType.String(),
-		Amount:         inv.Amount.Amount(),
-		Currency:       inv.Amount.Currency().Code,
-		HomeAmount:     homeAmount,
-		HomeCurrency:   homeCurrency,
-		TimeHours:      inv.TimeHours,
-		TimeHourlyRate: hourlyRateVal,
-		GoodsQuantity:  inv.GoodsQuantity,
-		GoodsUnit:      inv.GoodsUnit,
-		GoodsItemName:  inv.GoodsItemName,
-		Description:    inv.Description,
-		Date:           inv.Date.Format(time.RFC3339),
-		Tags:           inv.Tags,
+		InvestmentID:     inv.ID.String(),
+		ProjectID:        projectID,
+		AssetID:          assetID,
+		AssetName:        assetName,
+		AssetAllocations: allocationsDTO,
+		Contributor:      contribDTO,
+		ResourceType:     inv.ResourceType.String(),
+		Amount:           inv.Amount.Amount(),
+		Currency:         inv.Amount.Currency().Code,
+		HomeAmount:       homeAmount,
+		HomeCurrency:     homeCurrency,
+		TimeHours:        inv.TimeHours,
+		TimeHourlyRate:   hourlyRateVal,
+		GoodsQuantity:    inv.GoodsQuantity,
+		GoodsUnit:        inv.GoodsUnit,
+		GoodsItemName:    inv.GoodsItemName,
+		Description:      inv.Description,
+		Date:             inv.Date.Format(time.RFC3339),
+		Tags:             inv.Tags,
 	}
 }
 
+type InvestmentAssetInputDTO struct {
+	AssetID         string  `json:"asset_id"`
+	SharePercentage float64 `json:"share_percentage"`
+}
+
 type CreateInvestmentDTO struct {
-	AssetID        string   `json:"asset_id"`
-	ResourceType   string   `json:"resource_type"`
-	Amount         int64    `json:"amount"`
-	Currency       string   `json:"currency"`
-	TimeHours      *float64 `json:"time_hours,omitempty"`
-	TimeHourlyRate *int64   `json:"time_hourly_rate,omitempty"`
-	GoodsQuantity  *float64 `json:"goods_quantity,omitempty"`
-	GoodsUnit      string   `json:"goods_unit,omitempty"`
-	GoodsItemName  string   `json:"goods_item_name,omitempty"`
-	Description    string   `json:"description"`
-	Date           string   `json:"date,omitempty"`
-	Tags           []string `json:"tags,omitempty"`
+	AssetID          string                    `json:"asset_id,omitempty"`
+	AssetAllocations []InvestmentAssetInputDTO `json:"asset_allocations,omitempty"`
+	ResourceType     string                    `json:"resource_type"`
+	Amount           int64                     `json:"amount"`
+	Currency         string                    `json:"currency"`
+	TimeHours        *float64                  `json:"time_hours,omitempty"`
+	TimeHourlyRate   *int64                    `json:"time_hourly_rate,omitempty"`
+	GoodsQuantity    *float64                  `json:"goods_quantity,omitempty"`
+	GoodsUnit        string                    `json:"goods_unit,omitempty"`
+	GoodsItemName    string                    `json:"goods_item_name,omitempty"`
+	Description      string                    `json:"description"`
+	Date             string                    `json:"date,omitempty"`
+	Tags             []string                  `json:"tags,omitempty"`
 }
 
 type UpdateInvestmentDTO struct {
-	AssetID        string   `json:"asset_id,omitempty"`
-	ResourceType   string   `json:"resource_type,omitempty"`
-	Amount         int64    `json:"amount,omitempty"`
-	Currency       string   `json:"currency,omitempty"`
-	TimeHours      *float64 `json:"time_hours,omitempty"`
-	TimeHourlyRate *int64   `json:"time_hourly_rate,omitempty"`
-	GoodsQuantity  *float64 `json:"goods_quantity,omitempty"`
-	GoodsUnit      string   `json:"goods_unit,omitempty"`
-	GoodsItemName  string   `json:"goods_item_name,omitempty"`
-	Description    string   `json:"description,omitempty"`
-	Date           string   `json:"date,omitempty"`
-	Tags           []string `json:"tags,omitempty"`
+	AssetID          string                    `json:"asset_id,omitempty"`
+	AssetAllocations []InvestmentAssetInputDTO `json:"asset_allocations,omitempty"`
+	ResourceType     string                    `json:"resource_type,omitempty"`
+	Amount           int64                     `json:"amount,omitempty"`
+	Currency         string                    `json:"currency,omitempty"`
+	TimeHours        *float64                  `json:"time_hours,omitempty"`
+	TimeHourlyRate   *int64                    `json:"time_hourly_rate,omitempty"`
+	GoodsQuantity    *float64                  `json:"goods_quantity,omitempty"`
+	GoodsUnit        string                    `json:"goods_unit,omitempty"`
+	GoodsItemName    string                    `json:"goods_item_name,omitempty"`
+	Description      string                    `json:"description,omitempty"`
+	Date             string                    `json:"date,omitempty"`
+	Tags             []string                  `json:"tags,omitempty"`
 }
 
 type BatchCreateInvestmentItemDTO struct {
@@ -179,9 +206,27 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
-	assetID, err := uuid.Parse(req.AssetID)
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid asset id", err)
+	var assetID uuid.UUID
+	if req.AssetID != "" {
+		var err error
+		assetID, err = uuid.Parse(req.AssetID)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid asset id", err)
+		}
+	} else if len(req.AssetAllocations) == 0 {
+		return nil, exceptions.NewValidationException("asset_id or asset_allocations required", nil)
+	}
+
+	var assetAllocations []investment.InvestmentAssetInput
+	for _, a := range req.AssetAllocations {
+		aID, err := uuid.Parse(a.AssetID)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid allocation asset id", err)
+		}
+		assetAllocations = append(assetAllocations, investment.InvestmentAssetInput{
+			AssetID:         aID,
+			SharePercentage: a.SharePercentage,
+		})
 	}
 
 	var date time.Time
@@ -208,18 +253,19 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	}
 
 	return investment.CreateInvestmentCommand{
-		ProjectID:      projectID,
-		AssetID:        assetID,
-		ResourceType:   resType,
-		Amount:         amount,
-		TimeHours:      req.TimeHours,
-		TimeHourlyRate: hourlyRate,
-		GoodsQuantity:  req.GoodsQuantity,
-		GoodsUnit:      req.GoodsUnit,
-		GoodsItemName:  req.GoodsItemName,
-		Description:    req.Description,
-		Date:           date,
-		Tags:           req.Tags,
+		ProjectID:        projectID,
+		AssetID:          assetID,
+		AssetAllocations: assetAllocations,
+		ResourceType:     resType,
+		Amount:           amount,
+		TimeHours:        req.TimeHours,
+		TimeHourlyRate:   hourlyRate,
+		GoodsQuantity:    req.GoodsQuantity,
+		GoodsUnit:        req.GoodsUnit,
+		GoodsItemName:    req.GoodsItemName,
+		Description:      req.Description,
+		Date:             date,
+		Tags:             req.Tags,
 	}, nil
 }
 
@@ -253,6 +299,18 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		assetID, _ = uuid.Parse(req.AssetID)
 	}
 
+	var assetAllocations []investment.InvestmentAssetInput
+	for _, a := range req.AssetAllocations {
+		aID, err := uuid.Parse(a.AssetID)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid allocation asset id", err)
+		}
+		assetAllocations = append(assetAllocations, investment.InvestmentAssetInput{
+			AssetID:         aID,
+			SharePercentage: a.SharePercentage,
+		})
+	}
+
 	var date time.Time
 	if req.Date != "" {
 		date, _ = time.Parse(time.RFC3339, req.Date)
@@ -277,19 +335,20 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	}
 
 	return investment.UpdateInvestmentCommand{
-		ID:             invID,
-		ProjectID:      projectID,
-		AssetID:        assetID,
-		ResourceType:   resType,
-		Amount:         amount,
-		TimeHours:      req.TimeHours,
-		TimeHourlyRate: hourlyRate,
-		GoodsQuantity:  req.GoodsQuantity,
-		GoodsUnit:      req.GoodsUnit,
-		GoodsItemName:  req.GoodsItemName,
-		Description:    req.Description,
-		Date:           date,
-		Tags:           req.Tags,
+		ID:               invID,
+		ProjectID:        projectID,
+		AssetID:          assetID,
+		AssetAllocations: assetAllocations,
+		ResourceType:     resType,
+		Amount:           amount,
+		TimeHours:        req.TimeHours,
+		TimeHourlyRate:   hourlyRate,
+		GoodsQuantity:    req.GoodsQuantity,
+		GoodsUnit:        req.GoodsUnit,
+		GoodsItemName:    req.GoodsItemName,
+		Description:      req.Description,
+		Date:             date,
+		Tags:             req.Tags,
 	}, nil
 }
 

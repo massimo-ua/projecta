@@ -43,6 +43,54 @@ const paymentsContent = {
       en: 'Select asset',
       uk: 'Оберіть актив',
     }),
+    splitAcrossAssets: t({
+      en: 'Shared Investment (multiple assets)',
+      uk: 'Спільна інвестиція (кілька активів)',
+    }),
+    singleAssetMode: t({
+      en: 'Single Asset (100%)',
+      uk: 'Один актив (100%)',
+    }),
+    sharedInvestmentMinAssets: t({
+      en: 'Shared investment must include at least 2 assets',
+      uk: 'Спільна інвестиція має містити щонайменше 2 активи',
+    }),
+    addAssetAllocation: t({
+      en: 'Add Asset',
+      uk: 'Додати актив',
+    }),
+    removeAssetAllocation: t({
+      en: 'Remove',
+      uk: 'Видалити',
+    }),
+    sharePercentageLabel: t({
+      en: 'Share (%)',
+      uk: 'Частка (%)',
+    }),
+    equalSplit: t({
+      en: 'Equal Split',
+      uk: 'Порівну',
+    }),
+    totalShareLabel: t({
+      en: 'Total Share',
+      uk: 'Загальна частка',
+    }),
+    sharesMustEqual100: t({
+      en: 'Total allocation shares must equal 100%',
+      uk: 'Сума часток повинна дорівнювати 100%',
+    }),
+    duplicateAssetInAllocations: t({
+      en: 'Duplicate asset selected in allocations',
+      uk: 'Вибрано однаковий актив кілька разів',
+    }),
+    multiAssetBadge: t({
+      en: 'Multi-asset',
+      uk: 'Кілька активів',
+    }),
+    allocationsBreakdown: t({
+      en: 'Asset Allocations',
+      uk: 'Розподіл за активами',
+    }),
     timeHoursLabel: t({
       en: 'Hours Worked',
       uk: 'Відпрацьовані години',
@@ -63,6 +111,30 @@ const paymentsContent = {
       en: 'Item / Material Name',
       uk: 'Назва товару / матеріалу',
     }),
+    timeBreakdown: t({
+      en: 'Time Breakdown',
+      uk: 'Деталізація часу',
+    }),
+    goodsBreakdown: t({
+      en: 'Goods Breakdown',
+      uk: 'Деталізація товарів/матеріалів',
+    }),
+    detailId: t({
+      en: 'ID',
+      uk: 'ID',
+    }),
+    laborBadge: t({
+      en: 'Labor',
+      uk: 'Праця',
+    }),
+    goodsBadge: t({
+      en: 'Goods',
+      uk: 'Матеріали',
+    }),
+    capitalBadge: t({
+      en: 'Capital',
+      uk: 'Капітал',
+    }),
     tagsLabel: t({
       en: 'Tags',
       uk: 'Теги',
@@ -70,6 +142,10 @@ const paymentsContent = {
     tagsPlaceholder: t({
       en: 'Type tag and press Enter',
       uk: 'Введіть тег та натисніть Enter',
+    }),
+    suggestedTags: t({
+      en: 'Existing tags:',
+      uk: 'Існуючі теги:',
     }),
     filterAllAssets: t({
       en: 'All Assets',

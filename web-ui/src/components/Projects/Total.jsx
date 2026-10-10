@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { useIntlayer } from 'react-intlayer';
 import {
@@ -22,15 +23,18 @@ import {
 } from './Charts';
 import './Total.css';
 
-function TotalCard({ total }) {
+function TotalCard({ total, content }) {
   const isBalance = total.key.includes('balance');
   const Icon = isBalance ? Scale : Wallet;
+  const title = isBalance
+    ? String(content?.cards?.projectBalance || content?.labels?.balance || 'Баланс проекту')
+    : String(content?.cards?.totalPayments || content?.labels?.payments || 'Всього інвестовано');
 
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-xs transition-all duration-300 hover:shadow-md hover:border-primary/40">
       <div className="flex items-center justify-between gap-3 mb-4">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          {total.title}
+          {title}
         </span>
         <div
           className={cn(
@@ -56,6 +60,16 @@ function TotalCard({ total }) {
     </div>
   );
 }
+
+TotalCard.propTypes = {
+  total: PropTypes.shape({
+    key: PropTypes.string.isRequired,
+    title: PropTypes.string,
+    amount: PropTypes.string.isRequired,
+    currency: PropTypes.string,
+  }).isRequired,
+  content: PropTypes.object,
+};
 
 export default function Total() {
   const content = useIntlayer('total');
@@ -109,7 +123,7 @@ export default function Total() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {totals.map((total) => (
-              <TotalCard key={total.key} total={total} />
+              <TotalCard key={total.key} total={total} content={content} />
             ))}
           </div>
         )}

@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { useIntlayer } from 'react-intlayer';
 import { assetRepository } from '../../api';
+import TagSelector from './TagSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,6 +43,7 @@ export default function AddAssetModal({
   const [completedDate, setCompletedDate] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
   const [currency, setCurrency] = useState('UAH');
+  const [tags, setTags] = useState([]);
   const [withPayment, setWithPayment] = useState(false);
   const [initialInvestmentPrice, setInitialInvestmentPrice] = useState('');
   const [loading, setLoading] = useState(false);
@@ -66,6 +68,7 @@ export default function AddAssetModal({
         price: withPayment && initialInvestmentPrice ? Number(initialInvestmentPrice) : (targetPrice ? Number(targetPrice) : 0),
         currency,
         withPayment,
+        tags,
       });
       toast.success(String(content?.assetAddedSuccess || 'Asset added successfully'));
       resetForm();
@@ -86,6 +89,7 @@ export default function AddAssetModal({
     setCompletedDate('');
     setTargetPrice('');
     setCurrency('UAH');
+    setTags([]);
     setWithPayment(false);
     setInitialInvestmentPrice('');
   };
@@ -219,6 +223,16 @@ export default function AddAssetModal({
               className="rounded-xl resize-none"
             />
           </div>
+
+          {/* Tags */}
+          <TagSelector
+            id="asset-tags"
+            tags={tags}
+            onChange={setTags}
+            projectId={projectId}
+            label={String(content?.tagsLabel || 'Tags')}
+            placeholder={String(content?.tagsPlaceholder || 'Type tag and press Enter')}
+          />
 
           {/* Initial Investment Switch */}
           <div className="space-y-3 rounded-xl border border-border/70 p-3 bg-muted/20">

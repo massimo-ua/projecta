@@ -128,7 +128,7 @@ SELECT
     ARRAY_REMOVE(ARRAY[
         LOWER(REPLACE(t.name, ' ', '-')), 
         LOWER(REPLACE(c.name, ' ', '-')),
-        LOWER(REPLACE(pay.kind, '_', '-'))
+        LOWER(REPLACE(pay.kind::text, '_', '-'))
     ], NULL),
     pay.created_at,
     pay.updated_at

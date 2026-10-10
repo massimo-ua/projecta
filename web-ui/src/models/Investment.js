@@ -23,12 +23,14 @@ export class Investment {
     date,
     rawDate,
     tags = [],
+    assetAllocations = [],
   }) {
     this.id = id;
     this.key = key || id;
     this.projectId = projectId;
     this.assetId = assetId;
     this.assetName = assetName;
+    this.assetAllocations = Array.isArray(assetAllocations) ? assetAllocations : [];
     this.contributor = contributor;
     this.resourceType = resourceType || 'MONEY';
     this.amount = amount;
@@ -47,6 +49,10 @@ export class Investment {
     this.date = date;
     this.rawDate = rawDate;
     this.tags = Array.isArray(tags) ? tags : [];
+  }
+
+  get isMultiAsset() {
+    return this.assetAllocations.length > 1;
   }
 
   get isMoney() {

@@ -13,6 +13,7 @@ export * from './Login';
 export * from './AuthGuard';
 export * from './GoogleLoginBtn';
 export * from './Projects/Assets';
+export * from './Projects/Tags';
 export * from './Profile/UserProfileSettings';
 export * from './Projects/AcceptShare';
 export * from './ErrorBoundary';

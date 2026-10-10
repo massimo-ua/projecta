@@ -69,6 +69,17 @@ function AssetMainContent({ asset }) {
         </span>
       )}
 
+      {/* Tags */}
+      {asset.tags && asset.tags.length > 0 && (
+        <div className="flex gap-1 flex-wrap mt-0.5">
+          {asset.tags.map((t) => (
+            <Badge key={t} variant="outline" className="text-[10px] py-0 px-1.5 font-normal rounded-md text-muted-foreground">
+              #{t}
+            </Badge>
+          ))}
+        </div>
+      )}
+
       {/* Hierarchy summaries */}
       <div className="flex gap-2 flex-wrap items-center mt-1">
         {asset.hasChildren && (
@@ -167,6 +178,17 @@ function AssetDetails({ asset, onUnlinkChild }) {
         {asset.hasTarget && (
           <DetailItem label="Target Price / Budget">
             <span className="text-sm font-mono">{asset.formattedTargetPrice}</span>
+          </DetailItem>
+        )}
+        {asset.tags && asset.tags.length > 0 && (
+          <DetailItem label="Tags">
+            <div className="flex gap-1 flex-wrap">
+              {asset.tags.map((t) => (
+                <Badge key={t} variant="secondary" className="text-xs py-0.5">
+                  #{t}
+                </Badge>
+              ))}
+            </div>
           </DetailItem>
         )}
       </div>

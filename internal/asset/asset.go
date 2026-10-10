@@ -57,6 +57,7 @@ type Asset struct {
 	totalCost     *money.Money
 	children      []ChildAssetLink
 	parents       []ParentAssetLink
+	tags          []string
 }
 
 func NewAsset(
@@ -87,6 +88,7 @@ func NewAsset(
 		targetPrice: price,
 		children:    make([]ChildAssetLink, 0),
 		parents:     make([]ParentAssetLink, 0),
+		tags:        make([]string, 0),
 	}
 }
 
@@ -175,6 +177,13 @@ func (a *Asset) Parents() []ParentAssetLink {
 	return a.parents
 }
 
+func (a *Asset) Tags() []string {
+	if a.tags == nil {
+		return make([]string, 0)
+	}
+	return a.tags
+}
+
 func (a *Asset) SetName(name string) {
 	a.name = name
 }
@@ -235,6 +244,14 @@ func (a *Asset) SetChildren(children []ChildAssetLink) {
 
 func (a *Asset) SetParents(parents []ParentAssetLink) {
 	a.parents = parents
+}
+
+func (a *Asset) SetTags(tags []string) {
+	if tags == nil {
+		a.tags = make([]string, 0)
+	} else {
+		a.tags = tags
+	}
 }
 
 type Collection = core.PaginatedCollection[*Asset]

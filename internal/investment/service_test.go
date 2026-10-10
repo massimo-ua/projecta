@@ -57,8 +57,9 @@ func (m *mockInvestmentRepo) FindTags(ctx context.Context, projectID uuid.UUID) 
 }
 
 type mockAssetRepo struct {
-	asset *asset.Asset
-	err   error
+	asset  *asset.Asset
+	assets map[uuid.UUID]*asset.Asset
+	err    error
 }
 
 func (m *mockAssetRepo) Save(ctx context.Context, a *asset.Asset) error   { return nil }
@@ -66,6 +67,11 @@ func (m *mockAssetRepo) Remove(ctx context.Context, a *asset.Asset) error { retu
 func (m *mockAssetRepo) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
 	if m.err != nil {
 		return nil, m.err
+	}
+	if m.assets != nil {
+		if a, ok := m.assets[filter.ID]; ok {
+			return a, nil
+		}
 	}
 	return m.asset, nil
 }
@@ -354,5 +360,139 @@ func TestInvestmentService(t *testing.T) {
 		if len(tags) != 3 {
 			t.Errorf("expected 3 tags, got %d", len(tags))
 		}
+	})
+
+	t.Run("MultiAssetInvestment", func(t *testing.T) {
+		asset2 := asset.NewAsset(uuid.New(), "Second Asset", "Car", project, nil, money.New(0, "USD"), time.Now(), owner)
+		assetsMap := map[uuid.UUID]*asset.Asset{
+			existingAsset.ID(): existingAsset,
+			asset2.ID():        asset2,
+		}
+
+		svc := investment.NewService(
+			&mockDb{},
+			&mockInvestmentRepo{},
+			&mockAssetRepo{assets: assetsMap},
+			&mockProjectRepo{project: project},
+			&mockPeopleService{owner: owner},
+		)
+
+		t.Run("creates successfully when shares equal 100", func(t *testing.T) {
+			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
+				ProjectID: project.ProjectID,
+				AssetAllocations: []investment.InvestmentAssetInput{
+					{AssetID: existingAsset.ID(), SharePercentage: 60},
+					{AssetID: asset2.ID(), SharePercentage: 40},
+				},
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(1000, "USD"),
+				Description:  "Multi-asset investment",
+				Date:         time.Now(),
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(inv.AssetAllocations) != 2 {
+				t.Fatalf("expected 2 allocations, got %d", len(inv.AssetAllocations))
+			}
+			if inv.AssetAllocations[0].SharePercentage != 60 || inv.AssetAllocations[1].SharePercentage != 40 {
+				t.Errorf("unexpected allocations: %+v", inv.AssetAllocations)
+			}
+			if inv.Asset.ID() != existingAsset.ID() {
+				t.Errorf("expected primary asset ID to be asset1, got %v", inv.Asset.ID())
+			}
+		})
+
+		t.Run("fails when shares do not equal 100", func(t *testing.T) {
+			_, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
+				ProjectID: project.ProjectID,
+				AssetAllocations: []investment.InvestmentAssetInput{
+					{AssetID: existingAsset.ID(), SharePercentage: 60},
+					{AssetID: asset2.ID(), SharePercentage: 30},
+				},
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(1000, "USD"),
+				Description:  "Invalid shares",
+				Date:         time.Now(),
+			})
+			if err == nil {
+				t.Fatal("expected error for invalid total shares, got nil")
+			}
+		})
+
+		t.Run("fails on duplicate asset allocations", func(t *testing.T) {
+			_, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
+				ProjectID: project.ProjectID,
+				AssetAllocations: []investment.InvestmentAssetInput{
+					{AssetID: existingAsset.ID(), SharePercentage: 50},
+					{AssetID: existingAsset.ID(), SharePercentage: 50},
+				},
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(1000, "USD"),
+				Description:  "Duplicate asset",
+				Date:         time.Now(),
+			})
+			if err == nil {
+				t.Fatal("expected error for duplicate asset, got nil")
+			}
+		})
+
+		t.Run("fails on negative or zero share", func(t *testing.T) {
+			_, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
+				ProjectID: project.ProjectID,
+				AssetAllocations: []investment.InvestmentAssetInput{
+					{AssetID: existingAsset.ID(), SharePercentage: 100},
+					{AssetID: asset2.ID(), SharePercentage: 0},
+				},
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(1000, "USD"),
+				Description:  "Zero share",
+				Date:         time.Now(),
+			})
+			if err == nil {
+				t.Fatal("expected error for zero share, got nil")
+			}
+		})
+		t.Run("defaults to 100% share for single asset investment without user defining share", func(t *testing.T) {
+			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
+				ProjectID:    project.ProjectID,
+				AssetID:      existingAsset.ID(),
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(500, "USD"),
+				Description:  "Single asset investment",
+				Date:         time.Now(),
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(inv.AssetAllocations) != 1 {
+				t.Fatalf("expected 1 allocation, got %d", len(inv.AssetAllocations))
+			}
+			if inv.AssetAllocations[0].SharePercentage != 100.0 {
+				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations[0].SharePercentage)
+			}
+		})
+
+		t.Run("defaults to 100% share when single allocation passed with zero or undefined share", func(t *testing.T) {
+			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
+				ProjectID: project.ProjectID,
+				AssetAllocations: []investment.InvestmentAssetInput{
+					{AssetID: existingAsset.ID(), SharePercentage: 0},
+				},
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(500, "USD"),
+				Description:  "Single asset allocation without share",
+				Date:         time.Now(),
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(inv.AssetAllocations) != 1 {
+				t.Fatalf("expected 1 allocation, got %d", len(inv.AssetAllocations))
+			}
+			if inv.AssetAllocations[0].SharePercentage != 100.0 {
+				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations[0].SharePercentage)
+			}
+		})
 	})
 }

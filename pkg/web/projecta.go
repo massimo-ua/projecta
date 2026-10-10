@@ -637,7 +637,7 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 
 		if hasPayments {
 			totals = append(totals, TotalDTO{
-				Title:    "Total Payments",
+				Title:    "Total Invested",
 				Amount:   totalPaymentsAmount,
 				Currency: homeCurrency,
 			})

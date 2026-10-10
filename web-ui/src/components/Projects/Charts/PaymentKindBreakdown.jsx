@@ -16,21 +16,21 @@ export function PaymentKindBreakdown({ payments = [], currency = '', content = {
     const kindsMap = {
       MONEY: {
         key: 'MONEY',
-        name: 'Capital (Money)',
+        name: String(content?.kinds?.money || 'Капітал (Гроші)'),
         amount: 0,
         count: 0,
         fill: '#10b981',
       },
       TIME: {
         key: 'TIME',
-        name: 'Labor (Time)',
+        name: String(content?.kinds?.time || 'Праця (Час)'),
         amount: 0,
         count: 0,
         fill: '#f59e0b',
       },
       GOODS: {
         key: 'GOODS',
-        name: 'Goods & Materials',
+        name: String(content?.kinds?.goods || 'Товари та матеріали'),
         amount: 0,
         count: 0,
         fill: '#8b5cf6',

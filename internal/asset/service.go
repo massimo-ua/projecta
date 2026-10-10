@@ -140,6 +140,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	anAsset.SetStartDate(startDate)
 	anAsset.SetCompletedDate(command.CompletedDate)
 	anAsset.SetTargetPrice(price)
+	anAsset.SetTags(command.Tags)
 
 	paymentDescription := command.Description
 	if paymentDescription == "" {
@@ -382,6 +383,10 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 
 	if command.CompletedDate != nil {
 		anAsset.SetCompletedDate(command.CompletedDate)
+	}
+
+	if command.Tags != nil {
+		anAsset.SetTags(command.Tags)
 	}
 
 	return s.assets.Save(ctx, anAsset)
