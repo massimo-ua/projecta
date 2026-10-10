@@ -12,6 +12,9 @@ export class Asset {
     targetPrice,
     rawTargetPrice,
     targetCurrency,
+    targetHomeAmount,
+    rawTargetHomeAmount,
+    progressPercentage,
     directCost,
     rawDirectCost,
     totalCost,
@@ -41,6 +44,9 @@ export class Asset {
     this.targetPrice = targetPrice;
     this.rawTargetPrice = rawTargetPrice;
     this.targetCurrency = targetCurrency || currency;
+    this.targetHomeAmount = targetHomeAmount;
+    this.rawTargetHomeAmount = rawTargetHomeAmount;
+    this.progressPercentage = progressPercentage;
     this.directCost = directCost;
     this.rawDirectCost = rawDirectCost;
     this.totalCost = totalCost !== undefined ? totalCost : price;
@@ -72,9 +78,19 @@ export class Asset {
   }
 
   get targetProgress() {
-    if (!this.hasTarget || !this.rawTotalCost) return 0;
-    const pct = Math.round((this.rawTotalCost / this.rawTargetPrice) * 100);
-    return Math.min(Math.max(pct, 0), 100);
+    if (this.progressPercentage !== null && this.progressPercentage !== undefined) {
+      return Math.round(this.progressPercentage);
+    }
+    if (!this.hasTarget) return 0;
+    const target = this.rawTargetHomeAmount
+      || (this.currency === this.targetCurrency ? this.rawTargetPrice : 0);
+    const current = this.rawHomeAmount || this.rawTotalCost;
+    if (!target) return 0;
+    return Math.round((current / target) * 100);
+  }
+
+  get isOverBudget() {
+    return this.targetProgress > 100;
   }
 
   get hasDifferentHomeCurrency() {

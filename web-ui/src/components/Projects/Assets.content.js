@@ -51,6 +51,14 @@ const assetsContent = {
       en: 'Progress',
       uk: 'Прогрес',
     }),
+    budgetLabel: t({
+      en: 'Budget',
+      uk: 'Бюджет',
+    }),
+    overbudgetLabel: t({
+      en: 'Overbudget',
+      uk: 'Перевитрата',
+    }),
     linkSubAsset: t({
       en: 'Link Sub-Asset',
       uk: 'Привʼязати під-актив',

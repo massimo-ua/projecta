@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
@@ -1132,6 +1133,36 @@ func (m *mockAssetServiceWithCol) Find(_ context.Context, _ asset.CollectionFilt
 	return m.col, nil
 }
 
+type mockInvestmentServiceWithCol struct {
+	col *investment.Collection
+	err error
+}
+
+func (m *mockInvestmentServiceWithCol) Create(context.Context, investment.CreateInvestmentCommand) (*investment.Investment, error) {
+	return nil, nil
+}
+func (m *mockInvestmentServiceWithCol) CreateBatch(context.Context, investment.CreateBatchInvestmentsCommand) ([]*investment.Investment, error) {
+	return nil, nil
+}
+func (m *mockInvestmentServiceWithCol) Update(context.Context, investment.UpdateInvestmentCommand) error {
+	return nil
+}
+func (m *mockInvestmentServiceWithCol) Remove(context.Context, investment.RemoveInvestmentCommand) error {
+	return nil
+}
+func (m *mockInvestmentServiceWithCol) FindOne(context.Context, investment.Filter) (*investment.Investment, error) {
+	return nil, nil
+}
+func (m *mockInvestmentServiceWithCol) Find(_ context.Context, _ investment.CollectionFilter) (*investment.Collection, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.col, nil
+}
+func (m *mockInvestmentServiceWithCol) FindTags(context.Context, uuid.UUID) ([]string, error) {
+	return nil, nil
+}
+
 type mockRateProvider struct {
 	err error
 }
@@ -1295,9 +1326,17 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Errorf("expected converted home amount 4000, got %d", pDto.HomeAmount)
 		}
 
+		astUSD.SetTotalCost(money.New(200, money.USD))
+		astUSD.SetTargetPrice(money.New(100, money.USD))
 		aDto := toAssetDTO(astUSD, rateProv)
 		if aDto.HomeAmount != 8000 {
 			t.Errorf("expected converted home amount 8000, got %d", aDto.HomeAmount)
+		}
+		if aDto.TargetHomeAmount == nil || *aDto.TargetHomeAmount != 4000 {
+			t.Errorf("expected TargetHomeAmount 4000, got %v", aDto.TargetHomeAmount)
+		}
+		if aDto.ProgressPercentage == nil || *aDto.ProgressPercentage != 200.0 {
+			t.Errorf("expected ProgressPercentage 200.0, got %v", aDto.ProgressPercentage)
 		}
 
 		paySvc := &mockPaymentService{pay: payUSD}
@@ -1354,6 +1393,43 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		epTotalsErr := makeShowProjectTotalsEndpoint(mProjSvc, mPayColSvc, mAstColSvc, errRateProv)
 		if _, err := epTotalsErr(context.Background(), proj.ProjectID); err == nil {
 			t.Error("expected rate error in makeShowProjectTotalsEndpoint")
+		}
+
+		// Test makeShowProjectTotalsEndpoint with investment service
+		inv1 := &investment.Investment{Amount: money.New(15000, "UAH")}
+		inv2 := &investment.Investment{Amount: money.New(25000, "UAH")}
+		invCol := investment.NewCollection(2)
+		invCol.Add(inv1)
+		invCol.Add(inv2)
+		mInvColSvc := &mockInvestmentServiceWithCol{col: invCol}
+
+		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj, nil, money.New(10000, "UAH"), time.Now(), owner)
+		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj, nil, money.New(5000, "UAH"), time.Now(), owner)
+		childAsset.SetParents([]asset.ParentAssetLink{{ParentID: parentAsset.ID(), SharePercentage: 100}})
+		parentAsset.SetTotalCost(money.New(15000, "UAH"))
+		parentAsset.SetDirectCost(money.New(10000, "UAH"))
+
+		colWithHierarchy := asset.NewCollection(2)
+		colWithHierarchy.Add(parentAsset)
+		colWithHierarchy.Add(childAsset)
+		mAstHierarchySvc := &mockAssetServiceWithCol{col: colWithHierarchy}
+
+		epTotalsInv := makeShowProjectTotalsEndpoint(mProjSvc, nil, mAstHierarchySvc, rateProv, mInvColSvc)
+		resInvTotals, err := epTotalsInv(context.Background(), proj.ProjectID)
+		if err != nil {
+			t.Fatalf("unexpected error with inv service: %v", err)
+		}
+		dtoTotals, ok := resInvTotals.(ProjectTotalsDTO)
+		if !ok || len(dtoTotals.Totals) != 2 {
+			t.Fatalf("expected 2 totals items, got %v", resInvTotals)
+		}
+		// Total Invested should be 15000 + 25000 = 40000
+		if dtoTotals.Totals[0].Title != "Total Invested" || dtoTotals.Totals[0].Amount != 40000 {
+			t.Errorf("expected Total Invested 40000, got %+v", dtoTotals.Totals[0])
+		}
+		// Assets should count parent (15000) and ignore child with parent, so balance = 40000 - 15000 = 25000
+		if dtoTotals.Totals[1].Title != "Project Balance" || dtoTotals.Totals[1].Amount != 25000 {
+			t.Errorf("expected Project Balance 25000, got %+v", dtoTotals.Totals[1])
 		}
 	})
 
