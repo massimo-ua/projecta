@@ -1,5 +1,7 @@
 -- Up migration: 000032_asset_investments_redesign.up.sql
 
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- 1. Update projecta_assets table with status, dates, and target benchmark pricing
 ALTER TABLE projecta_assets
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
@@ -92,7 +94,7 @@ EXECUTE FUNCTION update_timestamp_trigger_function('updated_at');
 -- Step A: For projects with payments where no asset exists, create a default "General Operations" asset
 INSERT INTO projecta_assets (asset_id, name, description, project_id, owner_id, status, start_date, created_at)
 SELECT 
-    gen_random_uuid(),
+    uuid_generate_v4(),
     'General Operations',
     'Auto-generated asset for existing payments and overhead',
     p.project_id,
