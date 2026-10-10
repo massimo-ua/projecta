@@ -816,3 +816,119 @@ func makeAssignInvestmentsEndpoint(s asset.Service) endpoint.Endpoint {
 	}
 }
 
+type GroupAssetsDTO struct {
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	ChildAssetIDs []string `json:"child_asset_ids"`
+	Tags          []string `json:"tags"`
+}
+
+func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid project id", nil)
+	}
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	var req GroupAssetsDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+
+	if req.Name == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+	if len(req.ChildAssetIDs) == 0 {
+		return nil, exceptions.NewValidationException("at least one asset must be selected to group", nil)
+	}
+
+	childUUIDs := make([]uuid.UUID, 0, len(req.ChildAssetIDs))
+	for _, idStr := range req.ChildAssetIDs {
+		u, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid child asset id: %s", idStr), err)
+		}
+		childUUIDs = append(childUUIDs, u)
+	}
+
+	return asset.GroupAssetsCommand{
+		ProjectID:     projectID,
+		Name:          req.Name,
+		Description:   req.Description,
+		ChildAssetIDs: childUUIDs,
+		Tags:          req.Tags,
+	}, nil
+}
+
+func makeGroupAssetsEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		cmd := request.(asset.GroupAssetsCommand)
+		a, err := s.Group(ctx, cmd)
+		if err != nil {
+			return nil, err
+		}
+		return toAssetDTO(a, rateProvider), nil
+	}
+}
+
+type LinkChildrenDTO struct {
+	ChildAssetIDs []string `json:"child_asset_ids"`
+}
+
+func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid project id", nil)
+	}
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	assetIDStr, ok := vars["asset_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid asset id", nil)
+	}
+	parentID, err := uuid.Parse(assetIDStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid asset id", err)
+	}
+
+	var req LinkChildrenDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+
+	if len(req.ChildAssetIDs) == 0 {
+		return nil, exceptions.NewValidationException("child asset ids are required", nil)
+	}
+
+	childUUIDs := make([]uuid.UUID, 0, len(req.ChildAssetIDs))
+	for _, idStr := range req.ChildAssetIDs {
+		u, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid child asset id: %s", idStr), err)
+		}
+		childUUIDs = append(childUUIDs, u)
+	}
+
+	return asset.LinkChildrenCommand{
+		ProjectID:     projectID,
+		ParentID:      parentID,
+		ChildAssetIDs: childUUIDs,
+	}, nil
+}
+
+func makeLinkChildrenEndpoint(s asset.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		cmd := request.(asset.LinkChildrenCommand)
+		return nil, s.LinkChildren(ctx, cmd)
+	}
+}
+
+

@@ -199,6 +199,62 @@ const assetsContent = {
       en: 'View Investments',
       uk: 'Переглянути інвестиції',
     }),
+    groupAssets: t({
+      en: 'Group into New Asset',
+      uk: 'Згрупувати в новий актив',
+    }),
+    addToParentAsset: t({
+      en: 'Add to Existing Asset',
+      uk: 'Додати до існуючого активу',
+    }),
+    groupModalTitle: t({
+      en: 'Group Assets into New Asset',
+      uk: 'Згрупувати активи в новий актив',
+    }),
+    groupModalDesc: t({
+      en: 'The new asset will dynamically aggregate all costs from the selected component assets.',
+      uk: 'Новий актив динамічно підсумовуватиме всі витрати з вибраних активів-компонентів.',
+    }),
+    assignModalTitle: t({
+      en: 'Add to Existing Parent Asset',
+      uk: 'Додати до існуючого батьківського активу',
+    }),
+    assignModalDesc: t({
+      en: 'The selected assets will be linked as components under the chosen parent asset.',
+      uk: 'Вибрані активи будуть підпорядковані як компоненти обраного активу.',
+    }),
+    assetsGroupedSuccess: t({
+      en: 'Assets grouped successfully',
+      uk: 'Активи успішно згруповано',
+    }),
+    failedToGroup: t({
+      en: 'Failed to group assets',
+      uk: 'Не вдалося згрупувати активи',
+    }),
+    selectedAssets: t({
+      en: 'assets selected',
+      uk: 'активів вибрано',
+    }),
+    selectAll: t({
+      en: 'Select all on page',
+      uk: 'Вибрати всі на сторінці',
+    }),
+    clearSelection: t({
+      en: 'Clear',
+      uk: 'Очистити',
+    }),
+    componentsSummary: t({
+      en: 'Selected Component Assets',
+      uk: 'Вибрані активи-компоненти',
+    }),
+    aggregatedCostEstimate: t({
+      en: 'Aggregated Total Cost',
+      uk: 'Загальна вартість групи',
+    }),
+    selectParentAsset: t({
+      en: 'Select Parent Asset',
+      uk: 'Оберіть батьківський актив',
+    }),
   },
 };
 

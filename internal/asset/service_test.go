@@ -157,6 +157,8 @@ type mockInvestmentSource struct {
 	assignErr     error
 	assignedAsset uuid.UUID
 	assignedIDs   []uuid.UUID
+	createErr     error
+	createdItem   asset.InitialInvestment
 }
 
 func (m *mockInvestmentSource) FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]asset.InvestmentItem, error) {
@@ -172,6 +174,14 @@ func (m *mockInvestmentSource) AssignToAsset(ctx context.Context, assetID uuid.U
 	}
 	m.assignedAsset = assetID
 	m.assignedIDs = investmentIDs
+	return nil
+}
+
+func (m *mockInvestmentSource) CreateInitialInvestment(ctx context.Context, item asset.InitialInvestment) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	m.createdItem = item
 	return nil
 }
 
@@ -263,12 +273,32 @@ func TestAssetService(t *testing.T) {
 			t.Fatalf("unexpected error creating asset: %v", err)
 		}
 
+		// Create without TypeID (uuid.Nil)
+		cmdNoType := cmd
+		cmdNoType.TypeID = uuid.Nil
+		aNoType, err := svc.Create(authedCtx, cmdNoType)
+		if err != nil || aNoType == nil {
+			t.Fatalf("unexpected error creating asset without type: %v", err)
+		}
+
 		cmdWithPayment := cmd
 		cmdWithPayment.WithPayment = true
 		cmdWithPayment.Description = ""
 		aPay, err := svc.Create(authedCtx, cmdWithPayment)
 		if err != nil || aPay == nil {
 			t.Fatalf("unexpected error creating asset with payment: %v", err)
+		}
+
+		// Create with InvestmentSource
+		mockInv := &mockInvestmentSource{}
+		svcWithInv := asset.NewService(&mockDb{}, assetRepo, peopleSvc, typeRepo, projRepo, payRepo)
+		svcWithInv.SetInvestmentSource(mockInv)
+		aInv, err := svcWithInv.Create(authedCtx, cmdWithPayment)
+		if err != nil || aInv == nil {
+			t.Fatalf("unexpected error creating asset with investment: %v", err)
+		}
+		if mockInv.createdItem.AssetID != aInv.ID() {
+			t.Fatalf("expected investment to be linked to asset %v, got %v", aInv.ID(), mockInv.createdItem.AssetID)
 		}
 	})
 
@@ -296,8 +326,10 @@ func TestAssetService(t *testing.T) {
 			t.Errorf("expected project repo error")
 		}
 
+		cmdWithType := cmd
+		cmdWithType.TypeID = costType.ID
 		svc = asset.NewService(&mockDb{}, &mockAssetRepo{}, peopleSvc, &mockTypeRepo{err: errors.New("err")}, projRepo, &mockPaymentRepo{})
-		_, err = svc.Create(authedCtx, cmd)
+		_, err = svc.Create(authedCtx, cmdWithType)
 		if err == nil {
 			t.Errorf("expected type repo error")
 		}
@@ -306,6 +338,15 @@ func TestAssetService(t *testing.T) {
 		_, err = svc.Create(authedCtx, asset.CreateAssetCommand{WithPayment: true, ProjectID: project.ProjectID, TypeID: costType.ID})
 		if err == nil {
 			t.Errorf("expected payment save error")
+		}
+
+		// Investment source error
+		mockInvErr := &mockInvestmentSource{createErr: errors.New("inv create err")}
+		svcInvErr := asset.NewService(&mockDb{}, &mockAssetRepo{}, peopleSvc, typeRepo, projRepo, &mockPaymentRepo{})
+		svcInvErr.SetInvestmentSource(mockInvErr)
+		_, err = svcInvErr.Create(authedCtx, asset.CreateAssetCommand{WithPayment: true, ProjectID: project.ProjectID})
+		if err == nil {
+			t.Errorf("expected investment source create error")
 		}
 
 		svc = asset.NewService(&mockDb{}, &mockAssetRepo{saveErr: errors.New("asset save err")}, peopleSvc, typeRepo, projRepo, &mockPaymentRepo{})
@@ -692,6 +733,69 @@ func TestAssetService(t *testing.T) {
 		}
 		if len(mockInv.assignedIDs) != 2 {
 			t.Errorf("expected 2 assigned investments, got %d", len(mockInv.assignedIDs))
+		}
+	})
+
+	t.Run("Group assets success and validation", func(t *testing.T) {
+		child1 := asset.NewAsset(uuid.New(), "Child 1", "", project, nil, money.New(100, "UAH"), now, owner)
+		child2 := asset.NewAsset(uuid.New(), "Child 2", "", project, nil, money.New(200, "UAH"), now, owner)
+
+		assetRepo := &mockAssetRepo{asset: child1}
+		peopleSvc := &mockPeopleService{owner: owner}
+		projRepo := &mockProjectRepo{project: project}
+		svc := asset.NewService(&mockDb{}, assetRepo, peopleSvc, &mockTypeRepo{}, projRepo, &mockPaymentRepo{})
+
+		// Validation errors
+		_, err := svc.Group(context.Background(), asset.GroupAssetsCommand{})
+		if err == nil {
+			t.Errorf("expected unauthorized")
+		}
+
+		_, err = svc.Group(authedCtx, asset.GroupAssetsCommand{
+			ProjectID: uuid.Nil,
+		})
+		if err == nil {
+			t.Errorf("expected validation error for project id")
+		}
+
+		_, err = svc.Group(authedCtx, asset.GroupAssetsCommand{
+			ProjectID: project.ProjectID,
+			Name:      "",
+		})
+		if err == nil {
+			t.Errorf("expected validation error for name")
+		}
+
+		_, err = svc.Group(authedCtx, asset.GroupAssetsCommand{
+			ProjectID:     project.ProjectID,
+			Name:          "Group 1",
+			ChildAssetIDs: nil,
+		})
+		if err == nil {
+			t.Errorf("expected validation error for empty child ids")
+		}
+
+		// Success
+		grouped, err := svc.Group(authedCtx, asset.GroupAssetsCommand{
+			ProjectID:     project.ProjectID,
+			Name:          "Rent Aggregate",
+			Description:   "All rent",
+			ChildAssetIDs: []uuid.UUID{child1.ID(), child2.ID()},
+			Tags:          []string{"rent"},
+		})
+		if err != nil || grouped == nil {
+			t.Fatalf("unexpected error grouping assets: %v", err)
+		}
+
+		// LinkChildren success
+		otherChild := asset.NewAsset(uuid.New(), "Other Child", "", project, nil, money.New(50, "UAH"), now, owner)
+		err = svc.LinkChildren(authedCtx, asset.LinkChildrenCommand{
+			ProjectID:     project.ProjectID,
+			ParentID:      grouped.ID(),
+			ChildAssetIDs: []uuid.UUID{otherChild.ID()},
+		})
+		if err != nil {
+			t.Errorf("unexpected error linking children: %v", err)
 		}
 	})
 }

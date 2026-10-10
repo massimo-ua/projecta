@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/Rhymond/go-money"
@@ -71,6 +72,11 @@ func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) er
 		targetCurrVal = anAsset.Price().Currency().Code
 	}
 
+	tags := anAsset.Tags()
+	if tags == nil {
+		tags = []string{}
+	}
+
 	qb.Values(
 		anAsset.ID().String(),
 		anAsset.Name(),
@@ -83,7 +89,7 @@ func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) er
 		targetPriceVal,
 		targetCurrVal,
 		anAsset.AcquiredAt(),
-		anAsset.Tags())
+		tags)
 
 	sql, args := qb.Build()
 
@@ -107,6 +113,11 @@ func (r *PgAssetRepository) update(ctx context.Context, anAsset *asset.Asset) er
 		targetCurrVal = anAsset.Price().Currency().Code
 	}
 
+	tags := anAsset.Tags()
+	if tags == nil {
+		tags = []string{}
+	}
+
 	qb.Update("projecta_assets")
 	qb.Set(
 		qb.Assign("name", anAsset.Name()),
@@ -117,7 +128,7 @@ func (r *PgAssetRepository) update(ctx context.Context, anAsset *asset.Asset) er
 		qb.Assign("target_price", targetPriceVal),
 		qb.Assign("target_currency", targetCurrVal),
 		qb.Assign("acquired_at", anAsset.AcquiredAt()),
-		qb.Assign("tags", anAsset.Tags()),
+		qb.Assign("tags", tags),
 	)
 	qb.Where(qb.Equal("asset_id", anAsset.ID().String()))
 	qb.Where(qb.Equal("owner_id", anAsset.Owner().PersonID.String()))
@@ -350,14 +361,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
 
-	directCost := r.loadDirectCost(ctx, a.ID())
-	a.SetDirectCost(directCost)
-
-	children, _ := r.FindChildren(ctx, a.ID())
-	a.SetChildren(children)
-	parents, _ := r.FindParents(ctx, a.ID())
-	a.SetParents(parents)
-
+	r.loadCompositionsAndRollup(ctx, []*asset.Asset{a}, a.Project().ProjectID)
 	return a, nil
 }
 
@@ -410,7 +414,6 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	defer rows.Close()
 
 	collection := asset.NewCollection(total)
-	var assetIDs []string
 
 	for rows.Next() {
 		var (
@@ -480,70 +483,186 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 		}
 
 		collection.Add(a)
-		assetIDs = append(assetIDs, a.ID().String())
 	}
 
-	directCosts := r.loadDirectCosts(ctx, assetIDs)
-	for _, a := range collection.Elements() {
-		if dc, ok := directCosts[a.ID().String()]; ok {
-			a.SetDirectCost(dc)
-		} else {
-			a.SetDirectCost(money.New(0, "UAH"))
-		}
-	}
+	r.loadCompositionsAndRollup(ctx, collection.Elements(), filter.ProjectID)
 
 	return collection, nil
 }
 
-func (r *PgAssetRepository) loadDirectCost(ctx context.Context, assetID uuid.UUID) *money.Money {
-	sql := `
-		SELECT COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
-		       COALESCE(MAX(inv.currency), '')
-		FROM projecta_investment_assets ia
-		JOIN projecta_investments inv ON inv.investment_id = ia.investment_id
-		WHERE ia.asset_id = $1
-	`
-	var (
-		amount int64
-		curr   string
-	)
-	if err := r.db.QueryRow(ctx, sql, assetID.String()).Scan(&amount, &curr); err != nil || curr == "" {
-		return money.New(0, "UAH")
-	}
-	return money.New(amount, curr)
+type rollupContext struct {
+	directCosts map[string]*money.Money
+	childrenMap map[string][]asset.ChildAssetLink
+	parentsMap  map[string][]asset.ParentAssetLink
+	memo        map[string]*money.Money
+	visiting    map[string]bool
 }
 
-func (r *PgAssetRepository) loadDirectCosts(ctx context.Context, assetIDs []string) map[string]*money.Money {
-	result := make(map[string]*money.Money)
-	if len(assetIDs) == 0 {
-		return result
+func (rc *rollupContext) compute(id string) *money.Money {
+	if cost, ok := rc.memo[id]; ok {
+		return cost
 	}
-	sql := `
-		SELECT ia.asset_id,
-		       COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
-		       COALESCE(MAX(inv.currency), 'UAH')
-		FROM projecta_investment_assets ia
-		JOIN projecta_investments inv ON inv.investment_id = ia.investment_id
-		WHERE ia.asset_id = ANY($1::uuid[])
-		GROUP BY ia.asset_id
-	`
-	rows, err := r.db.Query(ctx, sql, assetIDs)
-	if err != nil {
-		return result
+	if rc.visiting[id] {
+		if dc, ok := rc.directCosts[id]; ok {
+			return dc
+		}
+		return money.New(0, "UAH")
 	}
-	defer rows.Close()
+	rc.visiting[id] = true
 
-	for rows.Next() {
-		var (
-			aid    string
-			amount int64
-			curr   string
-		)
-		if err := rows.Scan(&aid, &amount, &curr); err == nil {
-			result[aid] = money.New(amount, curr)
+	dc, ok := rc.directCosts[id]
+	if !ok || dc == nil {
+		dc = money.New(0, "UAH")
+	}
+	amount := dc.Amount()
+	curr := dc.Currency().Code
+
+	for _, ch := range rc.childrenMap[id] {
+		chCost := rc.compute(ch.ChildID.String())
+		if chCost != nil {
+			contrib := int64(math.Round(float64(chCost.Amount()) * ch.SharePercentage / 100.0))
+			amount += contrib
 		}
 	}
-	return result
+	rc.visiting[id] = false
+
+	res := money.New(amount, curr)
+	rc.memo[id] = res
+	return res
+}
+
+func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, assets []*asset.Asset, projectID uuid.UUID) {
+	if len(assets) == 0 {
+		return
+	}
+
+	rc := &rollupContext{
+		directCosts: make(map[string]*money.Money),
+		childrenMap: make(map[string][]asset.ChildAssetLink),
+		parentsMap:  make(map[string][]asset.ParentAssetLink),
+		memo:        make(map[string]*money.Money),
+		visiting:    make(map[string]bool),
+	}
+
+	assetIDs := make([]string, len(assets))
+	for i, a := range assets {
+		assetIDs[i] = a.ID().String()
+	}
+
+	// 1. Direct costs
+	var dcSql string
+	var dcArgs []any
+	if projectID != uuid.Nil {
+		dcSql = `
+			SELECT ia.asset_id,
+			       COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
+			       COALESCE(MAX(inv.currency), 'UAH')
+			FROM projecta_investment_assets ia
+			JOIN projecta_investments inv ON inv.investment_id = ia.investment_id
+			WHERE inv.project_id = $1
+			GROUP BY ia.asset_id
+		`
+		dcArgs = []any{projectID.String()}
+	} else {
+		dcSql = `
+			SELECT ia.asset_id,
+			       COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
+			       COALESCE(MAX(inv.currency), 'UAH')
+			FROM projecta_investment_assets ia
+			JOIN projecta_investments inv ON inv.investment_id = ia.investment_id
+			WHERE ia.asset_id = ANY($1::uuid[])
+			GROUP BY ia.asset_id
+		`
+		dcArgs = []any{assetIDs}
+	}
+
+	if rows, err := r.db.Query(ctx, dcSql, dcArgs...); err == nil {
+		for rows.Next() {
+			var (
+				aid    string
+				amount int64
+				curr   string
+			)
+			if err := rows.Scan(&aid, &amount, &curr); err == nil {
+				rc.directCosts[aid] = money.New(amount, curr)
+			}
+		}
+		rows.Close()
+	}
+
+	// 2. Compositions
+	var compSql string
+	var compArgs []any
+	if projectID != uuid.Nil {
+		compSql = `
+			SELECT c.parent_asset_id, c.child_asset_id, ca.name, pa.name, c.share_percentage
+			FROM projecta_asset_compositions c
+			JOIN projecta_assets ca ON ca.asset_id = c.child_asset_id
+			JOIN projecta_assets pa ON pa.asset_id = c.parent_asset_id
+			WHERE pa.project_id = $1
+		`
+		compArgs = []any{projectID.String()}
+	} else {
+		compSql = `
+			SELECT c.parent_asset_id, c.child_asset_id, ca.name, pa.name, c.share_percentage
+			FROM projecta_asset_compositions c
+			JOIN projecta_assets ca ON ca.asset_id = c.child_asset_id
+			JOIN projecta_assets pa ON pa.asset_id = c.parent_asset_id
+			WHERE c.parent_asset_id = ANY($1::uuid[]) OR c.child_asset_id = ANY($1::uuid[])
+		`
+		compArgs = []any{assetIDs}
+	}
+
+	if rows, err := r.db.Query(ctx, compSql, compArgs...); err == nil {
+		for rows.Next() {
+			var (
+				parentID   string
+				childID    string
+				childName  string
+				parentName string
+				share      float64
+			)
+			if err := rows.Scan(&parentID, &childID, &childName, &parentName, &share); err == nil {
+				cUUID, err1 := uuid.Parse(childID)
+				pUUID, err2 := uuid.Parse(parentID)
+				if err1 == nil && err2 == nil {
+					rc.childrenMap[parentID] = append(rc.childrenMap[parentID], asset.ChildAssetLink{
+						ChildID:         cUUID,
+						ChildName:       childName,
+						SharePercentage: share,
+					})
+					rc.parentsMap[childID] = append(rc.parentsMap[childID], asset.ParentAssetLink{
+						ParentID:        pUUID,
+						ParentName:      parentName,
+						SharePercentage: share,
+					})
+				}
+			}
+		}
+		rows.Close()
+	}
+
+	// 3. Set rolled up total costs and components on each asset
+	for _, a := range assets {
+		aid := a.ID().String()
+		dc, ok := rc.directCosts[aid]
+		if !ok || dc == nil {
+			dc = money.New(0, "UAH")
+		}
+		a.SetDirectCost(dc)
+
+		tc := rc.compute(aid)
+		a.SetTotalCost(tc)
+
+		children := rc.childrenMap[aid]
+		resolvedChildren := make([]asset.ChildAssetLink, len(children))
+		for i, ch := range children {
+			resolvedChildren[i] = ch
+			resolvedChildren[i].TotalCost = rc.compute(ch.ChildID.String())
+		}
+		a.SetChildren(resolvedChildren)
+		a.SetParents(rc.parentsMap[aid])
+	}
 }
 
 func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {

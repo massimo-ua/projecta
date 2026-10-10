@@ -108,7 +108,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	}
 
 	var costType *projecta.CostType
-	if s.types != nil {
+	if s.types != nil && command.TypeID != uuid.Nil {
 		var err error
 		costType, err = s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
 		if err != nil {
@@ -152,25 +152,39 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		paymentDescription = command.Name
 	}
 
-	if command.WithPayment && s.payments != nil {
-		payment := projecta.NewPayment(
-			uuid.New(),
-			project,
-			owner,
-			costType,
-			paymentDescription,
-			price,
-			startDate,
-			projecta.UponCompletionPayment,
-		)
-
+	if command.WithPayment {
 		_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
-			if err = s.payments.Save(ctx, payment); err != nil {
+			if err = s.assets.Save(ctx, anAsset); err != nil {
 				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 			}
 
-			if err = s.assets.Save(ctx, anAsset); err != nil {
-				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+			if s.investments != nil {
+				if err = s.investments.CreateInitialInvestment(ctx, InitialInvestment{
+					ID:            uuid.New(),
+					ProjectID:     command.ProjectID,
+					AssetID:       anAsset.ID(),
+					ContributorID: owner.PersonID,
+					Amount:        price,
+					Date:          startDate,
+					Description:   paymentDescription,
+					Tags:          command.Tags,
+				}); err != nil {
+					return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+				}
+			} else if s.payments != nil {
+				payment := projecta.NewPayment(
+					uuid.New(),
+					project,
+					owner,
+					costType,
+					paymentDescription,
+					price,
+					startDate,
+					projecta.UponCompletionPayment,
+				)
+				if err = s.payments.Save(ctx, payment); err != nil {
+					return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+				}
 			}
 
 			return nil, nil
@@ -574,4 +588,96 @@ func (s *ServiceImpl) AssignInvestments(ctx context.Context, command AssignInves
 
 	return nil
 }
+
+func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*Asset, error) {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to group assets", err)
+	}
+
+	if command.ProjectID == uuid.Nil {
+		return nil, exceptions.NewValidationException("project id is required", nil)
+	}
+
+	if strings.TrimSpace(command.Name) == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+
+	if len(command.ChildAssetIDs) == 0 {
+		return nil, exceptions.NewValidationException("at least one asset must be selected to group", nil)
+	}
+
+	owner, err := s.people.FindOwner(ctx, personID)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to group assets", err)
+	}
+
+	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to group assets", err)
+	}
+
+	// Verify all child assets exist and belong to the project
+	for _, childID := range command.ChildAssetIDs {
+		child, err := s.assets.FindOne(ctx, Filter{ID: childID, OwnerID: personID})
+		if err != nil || child == nil {
+			return nil, exceptions.NewValidationException(fmt.Sprintf("child asset %s not found in project", childID), err)
+		}
+	}
+
+	now := time.Now()
+	parentID := uuid.New()
+	parentAsset := NewAsset(
+		parentID,
+		command.Name,
+		command.Description,
+		project,
+		nil,
+		money.New(0, "UAH"),
+		now,
+		owner,
+	)
+	parentAsset.SetStatus(AssetStatusActive)
+	parentAsset.SetStartDate(now)
+	tags := command.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	parentAsset.SetTags(tags)
+
+	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
+		if err := s.assets.Save(ctx, parentAsset); err != nil {
+			return nil, exceptions.NewInternalException("failed to group assets", err)
+		}
+
+		for _, childID := range command.ChildAssetIDs {
+			if err := s.assets.AddChild(ctx, parentID, childID, 100.0); err != nil {
+				return nil, exceptions.NewInternalException("failed to link child asset", err)
+			}
+		}
+
+		return nil, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return s.assets.FindOne(ctx, Filter{ID: parentID, OwnerID: personID})
+}
+
+func (s *ServiceImpl) LinkChildren(ctx context.Context, command LinkChildrenCommand) error {
+	for _, childID := range command.ChildAssetIDs {
+		if err := s.LinkChild(ctx, LinkChildCommand{
+			ParentID:        command.ParentID,
+			ChildID:         childID,
+			ProjectID:       command.ProjectID,
+			SharePercentage: 100.0,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 

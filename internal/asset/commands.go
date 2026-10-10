@@ -71,3 +71,18 @@ type AssignInvestmentsCommand struct {
 	InvestmentIDs []uuid.UUID
 }
 
+type GroupAssetsCommand struct {
+	ProjectID     uuid.UUID
+	Name          string
+	Description   string
+	ChildAssetIDs []uuid.UUID
+	Tags          []string
+}
+
+type LinkChildrenCommand struct {
+	ProjectID     uuid.UUID
+	ParentID      uuid.UUID
+	ChildAssetIDs []uuid.UUID
+}
+
+

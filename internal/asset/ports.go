@@ -18,6 +18,8 @@ type Service interface {
 	LinkChild(ctx context.Context, command LinkChildCommand) error
 	UnlinkChild(ctx context.Context, command UnlinkChildCommand) error
 	AssignInvestments(ctx context.Context, command AssignInvestmentsCommand) error
+	Group(ctx context.Context, command GroupAssetsCommand) (*Asset, error)
+	LinkChildren(ctx context.Context, command LinkChildrenCommand) error
 }
 
 type Repository interface {
@@ -39,7 +41,20 @@ type InvestmentItem struct {
 	Tags   []string
 }
 
+type InitialInvestment struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	AssetID       uuid.UUID
+	ContributorID uuid.UUID
+	Amount        *money.Money
+	Date          time.Time
+	Description   string
+	Tags          []string
+}
+
 type InvestmentSource interface {
 	FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]InvestmentItem, error)
 	AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error
+	CreateInitialInvestment(ctx context.Context, item InitialInvestment) error
 }
+

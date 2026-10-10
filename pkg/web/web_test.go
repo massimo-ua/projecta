@@ -317,6 +317,12 @@ func (m *mockAssetService) UnlinkChild(_ context.Context, _ asset.UnlinkChildCom
 func (m *mockAssetService) AssignInvestments(_ context.Context, _ asset.AssignInvestmentsCommand) error {
 	return m.err
 }
+func (m *mockAssetService) Group(_ context.Context, _ asset.GroupAssetsCommand) (*asset.Asset, error) {
+	return m.asset, m.err
+}
+func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenCommand) error {
+	return m.err
+}
 
 
 func TestWebHandlersAndEndpoints(t *testing.T) {

@@ -649,6 +649,60 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 			t.Errorf("unexpected endpoint error: %v", err)
 		}
 	})
+
+	t.Run("decodeGroupAssetsRequest validation and success", func(t *testing.T) {
+		reqNoProj, _ := http.NewRequest("POST", "/", nil)
+		_, err := decodeGroupAssetsRequest(context.Background(), reqNoProj)
+		if err == nil {
+			t.Errorf("expected no project id error")
+		}
+
+		childID := uuid.New().String()
+		bodyValid, _ := json.Marshal(GroupAssetsDTO{Name: "Rent", ChildAssetIDs: []string{childID}})
+		reqValid, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValid))
+		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": validUUID})
+		cmdAny, err := decodeGroupAssetsRequest(context.Background(), reqValid)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd := cmdAny.(asset.GroupAssetsCommand)
+		if cmd.Name != "Rent" || len(cmd.ChildAssetIDs) != 1 {
+			t.Errorf("unexpected cmd: %+v", cmd)
+		}
+
+		// Test makeGroupAssetsEndpoint
+		now := time.Now()
+		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John"}
+		proj, _ := projecta.NewProject(uuid.New(), "P", "", owner, now, now)
+		mockAst := asset.NewAsset(uuid.New(), "Rent", "", proj, nil, money.New(0, "UAH"), now, owner)
+		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst}, &mockRateProvider{})
+		_, err = ep(context.Background(), cmd)
+		if err != nil {
+			t.Errorf("unexpected group endpoint error: %v", err)
+		}
+	})
+
+	t.Run("decodeLinkChildrenRequest validation and success", func(t *testing.T) {
+		childID := uuid.New().String()
+		bodyValid, _ := json.Marshal(LinkChildrenDTO{ChildAssetIDs: []string{childID}})
+		reqValid, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValid))
+		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		cmdAny, err := decodeLinkChildrenRequest(context.Background(), reqValid)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd := cmdAny.(asset.LinkChildrenCommand)
+		if len(cmd.ChildAssetIDs) != 1 {
+			t.Errorf("unexpected cmd: %+v", cmd)
+		}
+
+		// Test makeLinkChildrenEndpoint
+		ep := makeLinkChildrenEndpoint(&mockAssetService{})
+		_, err = ep(context.Background(), cmd)
+		if err != nil {
+			t.Errorf("unexpected link children endpoint error: %v", err)
+		}
+	})
 }
 
 func TestPaymentsDecodersValidationErrors(t *testing.T) {
