@@ -33,27 +33,29 @@ type ParentAssetDTO struct {
 }
 
 type AssetDTO struct {
-	AssetID        string           `json:"asset_id"`
-	Name           string           `json:"name"`
-	Description    string           `json:"description"`
-	Status         string           `json:"status"`
-	StartDate      string           `json:"start_date"`
-	CompletedDate  *string          `json:"completed_date,omitempty"`
-	TargetPrice    *int64           `json:"target_price,omitempty"`
-	TargetCurrency string           `json:"target_currency,omitempty"`
-	DirectCost     int64            `json:"direct_cost"`
-	TotalCost      int64            `json:"total_cost"`
-	Price          int64            `json:"price"` // backward compatibility
-	Currency       string           `json:"currency"`
-	HomeAmount     int64            `json:"home_amount,omitempty"`
-	HomeCurrency   string           `json:"home_currency,omitempty"`
-	AcquiredAt     string           `json:"acquired_at"`
-	Owner          OwnerDTO         `json:"owner"`
-	Project        ProjectDTO       `json:"project"`
-	Type           *TypeDTO         `json:"type,omitempty"`
-	Children       []ChildAssetDTO  `json:"children"`
-	Parents        []ParentAssetDTO `json:"parents"`
-	Tags           []string         `json:"tags"`
+	AssetID            string           `json:"asset_id"`
+	Name               string           `json:"name"`
+	Description        string           `json:"description"`
+	Status             string           `json:"status"`
+	StartDate          string           `json:"start_date"`
+	CompletedDate      *string          `json:"completed_date,omitempty"`
+	TargetPrice        *int64           `json:"target_price,omitempty"`
+	TargetCurrency     string           `json:"target_currency,omitempty"`
+	TargetHomeAmount   *int64           `json:"target_home_amount,omitempty"`
+	ProgressPercentage *float64         `json:"progress_percentage,omitempty"`
+	DirectCost         int64            `json:"direct_cost"`
+	TotalCost          int64            `json:"total_cost"`
+	Price              int64            `json:"price"` // backward compatibility
+	Currency           string           `json:"currency"`
+	HomeAmount         int64            `json:"home_amount,omitempty"`
+	HomeCurrency       string           `json:"home_currency,omitempty"`
+	AcquiredAt         string           `json:"acquired_at"`
+	Owner              OwnerDTO         `json:"owner"`
+	Project            ProjectDTO       `json:"project"`
+	Type               *TypeDTO         `json:"type,omitempty"`
+	Children           []ChildAssetDTO  `json:"children"`
+	Parents            []ParentAssetDTO `json:"parents"`
+	Tags               []string         `json:"tags"`
 }
 
 func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) AssetDTO {
@@ -90,18 +92,57 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 	}
 
 	var totalCostVal int64
+	var totalCostCurr string
 	if a.TotalCost() != nil {
 		totalCostVal = a.TotalCost().Amount()
+		totalCostCurr = a.TotalCost().Currency().Code
+	} else if a.Price() != nil {
+		totalCostVal = a.Price().Amount()
+		totalCostCurr = a.Price().Currency().Code
 	} else {
 		totalCostVal = priceAmount
+		totalCostCurr = priceCurrency
 	}
 
 	var targetPriceVal *int64
 	var targetCurrVal string
-	if a.TargetPrice() != nil {
+	var targetHomeAmountVal *int64
+	var progressPercentageVal *float64
+
+	if a.TargetPrice() != nil && a.TargetPrice().Amount() > 0 {
 		v := a.TargetPrice().Amount()
 		targetPriceVal = &v
 		targetCurrVal = a.TargetPrice().Currency().Code
+
+		targetHomeVal := v
+		if rateProvider != nil && targetCurrVal != homeCurrency && v > 0 {
+			converted, err := rateProvider.Convert(
+				currency.NewCurrency(v, targetCurrVal),
+				currency.NewCurrency(0, homeCurrency),
+			)
+			if err == nil {
+				targetHomeVal = converted.Amount
+			}
+		}
+		targetHomeAmountVal = &targetHomeVal
+
+		if targetHomeVal > 0 {
+			totalHomeVal := totalCostVal
+			if totalCostCurr != homeCurrency && rateProvider != nil && totalCostVal > 0 {
+				converted, err := rateProvider.Convert(
+					currency.NewCurrency(totalCostVal, totalCostCurr),
+					currency.NewCurrency(0, homeCurrency),
+				)
+				if err == nil {
+					totalHomeVal = converted.Amount
+				}
+			} else if totalCostCurr == homeCurrency {
+				totalHomeVal = totalCostVal
+			}
+
+			pct := (float64(totalHomeVal) / float64(targetHomeVal)) * 100.0
+			progressPercentageVal = &pct
+		}
 	}
 
 	var completedDateStr *string
@@ -159,9 +200,11 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		Status:         a.Status().String(),
 		StartDate:      a.StartDate().Format(time.RFC3339),
 		CompletedDate:  completedDateStr,
-		TargetPrice:    targetPriceVal,
-		TargetCurrency: targetCurrVal,
-		DirectCost:     directCostVal,
+		TargetPrice:        targetPriceVal,
+		TargetCurrency:     targetCurrVal,
+		TargetHomeAmount:   targetHomeAmountVal,
+		ProgressPercentage: progressPercentageVal,
+		DirectCost:         directCostVal,
 		TotalCost:      totalCostVal,
 		Price:          totalCostVal,
 		Currency:       priceCurrency,

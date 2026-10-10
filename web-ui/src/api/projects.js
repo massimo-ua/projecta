@@ -85,7 +85,7 @@ export class ProjectsRepository {
     const response = await this.#request.get(`/projects/${projectId}/totals`)
       .catch(() => ({
         totals: [
-          { title: 'Total Expenses', amount: 0, currency: 'UAH' },
+          { title: 'Total Invested', amount: 0, currency: 'UAH' },
         ],
       }));
 

@@ -531,7 +531,13 @@ func makeListPaymentsEndpoint(svc projecta.PaymentService, rateProvider currency
 	}
 }
 
-func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments projecta.PaymentService, assets asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeShowProjectTotalsEndpoint(
+	projectSvc projecta.ProjectService,
+	payments projecta.PaymentService,
+	assets asset.Service,
+	rateProvider currency.CurrencyRateProvider,
+	investments ...investment.Service,
+) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		projectID := request.(uuid.UUID)
 
@@ -545,52 +551,98 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 			homeCurrency = "UAH"
 		}
 
+		var invSvc investment.Service
+		if len(investments) > 0 {
+			invSvc = investments[0]
+		}
+
 		offset := 0
 		limit := 100
 		next := true
-		var totalPaymentsAmount int64
+		var totalInvestedAmount int64
 		var totalAssetsAmount int64
-		hasPayments := false
+		hasInvestments := false
 		hasAssets := false
 
-		for next {
-			page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
-				ProjectID: projectID,
-				Pagination: core.Pagination{
-					Limit:  limit,
-					Offset: offset,
-				},
-			})
-
-			if err != nil {
-				return nil, err
-			}
-
-			if page.Total() == 0 {
-				break
-			}
-
-			for _, e := range page.Elements() {
-				hasPayments = true
-				amount := e.Amount.Amount()
-				if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
-					converted, err := rateProvider.Convert(
-						currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
-						currency.NewCurrency(0, homeCurrency),
-					)
-					if err != nil {
-						return nil, err
-					}
-					amount = converted.Amount
+		if invSvc != nil {
+			for next {
+				page, err := invSvc.Find(ctx, investment.CollectionFilter{
+					ProjectID: projectID,
+					Pagination: core.Pagination{
+						Limit:  limit,
+						Offset: offset,
+					},
+				})
+				if err != nil {
+					return nil, err
 				}
-				totalPaymentsAmount += amount
-			}
 
-			if len(page.Elements()) < limit {
-				next = false
-			}
+				if page.Total() == 0 {
+					break
+				}
 
-			offset += limit
+				for _, e := range page.Elements() {
+					hasInvestments = true
+					amount := e.Amount.Amount()
+					if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
+						converted, err := rateProvider.Convert(
+							currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
+							currency.NewCurrency(0, homeCurrency),
+						)
+						if err != nil {
+							return nil, err
+						}
+						amount = converted.Amount
+					}
+					totalInvestedAmount += amount
+				}
+
+				if len(page.Elements()) < limit {
+					next = false
+				}
+
+				offset += limit
+			}
+		} else if payments != nil {
+			for next {
+				page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
+					ProjectID: projectID,
+					Pagination: core.Pagination{
+						Limit:  limit,
+						Offset: offset,
+					},
+				})
+
+				if err != nil {
+					return nil, err
+				}
+
+				if page.Total() == 0 {
+					break
+				}
+
+				for _, e := range page.Elements() {
+					hasInvestments = true
+					amount := e.Amount.Amount()
+					if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
+						converted, err := rateProvider.Convert(
+							currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
+							currency.NewCurrency(0, homeCurrency),
+						)
+						if err != nil {
+							return nil, err
+						}
+						amount = converted.Amount
+					}
+					totalInvestedAmount += amount
+				}
+
+				if len(page.Elements()) < limit {
+					next = false
+				}
+
+				offset += limit
+			}
 		}
 
 		next = true
@@ -614,19 +666,35 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 			}
 
 			for _, e := range page.Elements() {
-				hasAssets = true
-				price := e.Price().Amount()
-				if rateProvider != nil && e.Price().Currency().Code != homeCurrency {
-					converted, err := rateProvider.Convert(
-						currency.NewCurrency(e.Price().Amount(), e.Price().Currency().Code),
-						currency.NewCurrency(0, homeCurrency),
-					)
-					if err != nil {
-						return nil, err
-					}
-					price = converted.Amount
+				// Don't count child assets if they have parents to avoid double-counting in project valuation
+				if len(e.Parents()) > 0 {
+					continue
 				}
-				totalAssetsAmount += price
+
+				var price int64
+				var priceCurrency string
+				if e.TotalCost() != nil {
+					price = e.TotalCost().Amount()
+					priceCurrency = e.TotalCost().Currency().Code
+				} else if e.Price() != nil {
+					price = e.Price().Amount()
+					priceCurrency = e.Price().Currency().Code
+				}
+
+				if price > 0 {
+					hasAssets = true
+					if rateProvider != nil && priceCurrency != "" && priceCurrency != homeCurrency {
+						converted, err := rateProvider.Convert(
+							currency.NewCurrency(price, priceCurrency),
+							currency.NewCurrency(0, homeCurrency),
+						)
+						if err != nil {
+							return nil, err
+						}
+						price = converted.Amount
+					}
+					totalAssetsAmount += price
+				}
 			}
 
 			if len(page.Elements()) < limit {
@@ -638,18 +706,16 @@ func makeShowProjectTotalsEndpoint(projectSvc projecta.ProjectService, payments 
 
 		totals := make([]TotalDTO, 0)
 
-		if hasPayments {
-			totals = append(totals, TotalDTO{
-				Title:    "Total Invested",
-				Amount:   totalPaymentsAmount,
-				Currency: homeCurrency,
-			})
-		}
+		totals = append(totals, TotalDTO{
+			Title:    "Total Invested",
+			Amount:   totalInvestedAmount,
+			Currency: homeCurrency,
+		})
 
-		if hasAssets || hasPayments {
+		if hasAssets || hasInvestments {
 			totals = append(totals, TotalDTO{
 				Title:    "Project Balance",
-				Amount:   totalPaymentsAmount - totalAssetsAmount,
+				Amount:   totalInvestedAmount - totalAssetsAmount,
 				Currency: homeCurrency,
 			})
 		}
@@ -842,7 +908,7 @@ func MakeProjectEndpoints(
 		ListTypes:         makeListProjectTypesEndpoint(typeService),
 		ListCategories:    makeListCategoriesEndpoint(categoryService),
 		ListPayments:      makeListPaymentsEndpoint(expenseService, rateProvider),
-		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService, expenseService, assetService, rateProvider),
+		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService, expenseService, assetService, rateProvider, invSvc),
 		RemoveType:        makeRemoveTypeEndpoint(typeService),
 		RemovePayment:     makeRemovePaymentEndpoint(expenseService),
 		CreateAsset:             makeCreateAssetEndpoint(assetService, rateProvider),

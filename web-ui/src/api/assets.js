@@ -12,6 +12,10 @@ const toDomain = ({
   completed_date,
   target_price,
   target_currency,
+  target_home_amount,
+  targetHomeAmount,
+  progress_percentage,
+  progressPercentage,
   direct_cost,
   total_cost,
   price,
@@ -31,6 +35,8 @@ const toDomain = ({
   const finalHomeAmount = home_amount !== undefined ? home_amount : (homeAmount !== undefined ? homeAmount : finalPrice);
   const finalHomeCurrency = home_currency || homeCurrency || project?.mainCurrency || currency;
   const finalCurrency = currency || target_currency || finalHomeCurrency;
+  const finalTargetHome = target_home_amount !== undefined ? target_home_amount : targetHomeAmount;
+  const finalProgress = progress_percentage !== undefined ? progress_percentage : progressPercentage;
 
   const childrenMapped = (children || []).map((c) => ({
     childId: c.child_id,
@@ -59,6 +65,9 @@ const toDomain = ({
     targetPrice: target_price ? toPriceView(target_price) : null,
     rawTargetPrice: target_price,
     targetCurrency: target_currency || finalCurrency,
+    targetHomeAmount: finalTargetHome ? toPriceView(finalTargetHome) : null,
+    rawTargetHomeAmount: finalTargetHome,
+    progressPercentage: finalProgress,
     directCost: toPriceView(direct_cost || 0),
     rawDirectCost: direct_cost || 0,
     totalCost: toPriceView(finalPrice),

@@ -111,7 +111,7 @@ AssetMainContent.propTypes = {
   asset: PropTypes.object.isRequired,
 };
 
-function AssetAmount({ asset }) {
+function AssetAmount({ asset, content }) {
   return (
     <div className="flex flex-col items-end gap-1">
       {/* Total Rolled-up Cost */}
@@ -136,17 +136,35 @@ function AssetAmount({ asset }) {
       {/* Target Budget Progress Bar */}
       {asset.hasTarget && (
         <div className="w-28 sm:w-36 space-y-1 mt-1 text-right">
-          <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
-            <span>Budget</span>
-            <span>{asset.targetProgress}%</span>
+          <div className="flex justify-between items-center text-[10px] font-mono">
+            <span
+              className={cn(
+                asset.isOverBudget
+                  ? 'text-orange-600 dark:text-orange-400 font-semibold'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {asset.isOverBudget
+                ? String(content?.overbudgetLabel || 'Overbudget')
+                : String(content?.budgetLabel || 'Budget')}
+            </span>
+            <span
+              className={cn(
+                asset.isOverBudget
+                  ? 'text-orange-600 dark:text-orange-400 font-bold'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {asset.targetProgress}%
+            </span>
           </div>
           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-300',
-                asset.targetProgress > 100 ? 'bg-rose-500' : 'bg-primary',
+                asset.isOverBudget ? 'bg-orange-500' : 'bg-primary',
               )}
-              style={{ width: `${asset.targetProgress}%` }}
+              style={{ width: `${Math.min(asset.targetProgress, 100)}%` }}
             />
           </div>
         </div>
@@ -157,9 +175,10 @@ function AssetAmount({ asset }) {
 
 AssetAmount.propTypes = {
   asset: PropTypes.object.isRequired,
+  content: PropTypes.object,
 };
 
-function AssetDetails({ asset, onUnlinkChild, onViewInvestments }) {
+function AssetDetails({ asset, onUnlinkChild, onViewInvestments, content }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -198,8 +217,20 @@ function AssetDetails({ asset, onUnlinkChild, onViewInvestments }) {
           <span className="text-sm font-mono font-bold text-primary">{asset.formattedTotalCost}</span>
         </DetailItem>
         {asset.hasTarget && (
-          <DetailItem label="Target Price / Budget">
-            <span className="text-sm font-mono">{asset.formattedTargetPrice}</span>
+          <DetailItem label={String(content?.targetPriceLabel || 'Target Price / Budget')}>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-mono">{asset.formattedTargetPrice}</span>
+              {asset.targetHomeAmount && asset.targetCurrency !== asset.homeCurrency && (
+                <span className="text-xs text-muted-foreground font-mono">
+                  (≈ {asset.targetHomeAmount} {asset.homeCurrency})
+                </span>
+              )}
+              {asset.isOverBudget && (
+                <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold uppercase tracking-wider bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30">
+                  {String(content?.overbudgetLabel || 'Overbudget')}
+                </Badge>
+              )}
+            </div>
           </DetailItem>
         )}
         {asset.tags && asset.tags.length > 0 && (
@@ -440,10 +471,11 @@ export function Assets() {
           />
         )}
         renderItemMainContent={(asset) => <AssetMainContent asset={asset} />}
-        renderItemAmount={(asset) => <AssetAmount asset={asset} />}
+        renderItemAmount={(asset) => <AssetAmount asset={asset} content={content} />}
         renderItemDetails={(asset) => (
           <AssetDetails
             asset={asset}
+            content={content}
             onUnlinkChild={unlinkChild}
             onViewInvestments={handleViewInvestments}
           />

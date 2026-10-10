@@ -21,6 +21,9 @@ export function PaymentsVsAssets({ payments = [], assets = [], currency = '', co
     }, 0);
 
     const aSum = assets.reduce((sum, a) => {
+      if (a.parents && a.parents.length > 0) {
+        return sum;
+      }
       const price = parseFloat(a.homeAmount) || parseFloat(a.price) || 0;
       return sum + price;
     }, 0);
