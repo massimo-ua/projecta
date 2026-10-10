@@ -19,6 +19,7 @@ const toDomain = ({
     type: type?.name,
     category: type?.category?.name,
     acquiredAt: toDateView(acquired_at),
+    rawAcquiredAt: acquired_at,
     name,
   });
 };
