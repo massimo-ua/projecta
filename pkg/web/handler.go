@@ -358,6 +358,24 @@ func MakeHTTPHandler(
 		))
 	}
 
+	if projectEndpoints.GroupAssets != nil {
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/group").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.GroupAssets),
+			decodeGroupAssetsRequest,
+			encodeJSON(http.StatusCreated),
+			withAuth...,
+		))
+	}
+
+	if projectEndpoints.LinkChildren != nil {
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/{asset_id}/children/batch").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.LinkChildren),
+			decodeLinkChildrenRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
+
 	if projectEndpoints.CreateInvestment != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
 			requireRole(string(people.RoleUser), projectEndpoints.CreateInvestment),

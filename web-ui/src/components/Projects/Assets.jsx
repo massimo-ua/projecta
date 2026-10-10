@@ -13,14 +13,19 @@ import {
   ArrowRight,
   Boxes,
   DollarSign,
+  FolderPlus,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import useAssets from '../../hooks/assets';
 import AddAssetModal from './AddAssetModal';
 import EditAssetModal from './EditAssetModal';
 import LinkChildAssetModal from './LinkChildAssetModal';
 import AddPaymentModal from './AddPaymentModal';
+import GroupAssetsModal from './GroupAssetsModal';
+import AssignToParentModal from './AssignToParentModal';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
@@ -285,6 +290,9 @@ export function Assets() {
   const navigate = useNavigate();
   const { locale } = useLocale();
   const [investAssetId, setInvestAssetId] = useState('');
+  const [selectedAssetsMap, setSelectedAssetsMap] = useState({});
+  const [groupModalOpened, setGroupModalOpened] = useState(false);
+  const [assignModalOpened, setAssignModalOpened] = useState(false);
 
   const {
     loading,
@@ -310,6 +318,39 @@ export function Assets() {
     refresh,
   } = useAssets(projectId);
 
+  const selectedAssets = Object.values(selectedAssetsMap);
+  const selectedCount = selectedAssets.length;
+
+  const toggleSelectAsset = (asset) => {
+    setSelectedAssetsMap((prev) => {
+      const next = { ...prev };
+      if (next[asset.id]) {
+        delete next[asset.id];
+      } else {
+        next[asset.id] = asset;
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedAssetsMap({});
+  };
+
+  const isAllPageSelected = assets.length > 0 && assets.every((a) => selectedAssetsMap[a.id]);
+
+  const toggleSelectAllPage = () => {
+    if (isAllPageSelected) {
+      clearSelection();
+    } else {
+      const next = { ...selectedAssetsMap };
+      assets.forEach((a) => {
+        next[a.id] = a;
+      });
+      setSelectedAssetsMap(next);
+    }
+  };
+
   const handleViewInvestments = (assetId) => {
     navigate(getLocalizedUrl(`/projects/${projectId}/payments?assetId=${assetId}`, locale));
   };
@@ -334,6 +375,70 @@ export function Assets() {
         addButtonIcon={<Package className="h-4 w-4" />}
         addButtonText={String(content.addAsset)}
         addButtonDisabled={addModalOpened}
+        filterBar={assets.length > 0 ? (
+          <div className="flex items-center justify-end px-1">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-all-assets-page"
+                checked={isAllPageSelected}
+                onCheckedChange={toggleSelectAllPage}
+              />
+              <Label htmlFor="select-all-assets-page" className="text-xs text-muted-foreground cursor-pointer select-none">
+                {String(content.selectAll || 'Select all on page')}
+              </Label>
+            </div>
+          </div>
+        ) : null}
+        batchActionBar={selectedCount > 0 ? (
+          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-primary/5 border border-primary/20 shadow-xs flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="rounded-lg font-bold">
+                  {selectedCount}
+                </Badge>
+                <span className="text-xs font-semibold text-foreground">
+                  {String(content.selectedAssets || 'assets selected')}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+              >
+                {String(content.clearSelection || 'Clear')}
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setAssignModalOpened(true)}
+                className="gap-2 rounded-xl font-semibold shadow-xs"
+              >
+                <FolderPlus className="h-4 w-4" />
+                <span>{String(content.addToParentAsset || 'Add to Existing Asset')}</span>
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={() => setGroupModalOpened(true)}
+                className="gap-2 rounded-xl font-semibold shadow-sm shadow-primary/20"
+              >
+                <Boxes className="h-4 w-4" />
+                <span>{String(content.groupAssets || 'Group into New Asset')}</span>
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        renderItemPrefix={(asset) => (
+          <Checkbox
+            checked={Boolean(selectedAssetsMap[asset.id])}
+            onCheckedChange={() => toggleSelectAsset(asset)}
+            aria-label={`Select asset ${asset.name}`}
+          />
+        )}
         renderItemMainContent={(asset) => <AssetMainContent asset={asset} />}
         renderItemAmount={(asset) => <AssetAmount asset={asset} />}
         renderItemDetails={(asset) => (
@@ -406,6 +511,35 @@ export function Assets() {
           }}
           assets={assets}
           defaultAssetId={investAssetId}
+        />
+      )}
+
+      {groupModalOpened && (
+        <GroupAssetsModal
+          open={groupModalOpened}
+          projectId={projectId}
+          selectedAssets={selectedAssets}
+          onCancel={() => setGroupModalOpened(false)}
+          onSuccess={() => {
+            setGroupModalOpened(false);
+            clearSelection();
+            refresh();
+          }}
+        />
+      )}
+
+      {assignModalOpened && (
+        <AssignToParentModal
+          open={assignModalOpened}
+          projectId={projectId}
+          selectedAssets={selectedAssets}
+          allAssets={assets}
+          onCancel={() => setAssignModalOpened(false)}
+          onSuccess={() => {
+            setAssignModalOpened(false);
+            clearSelection();
+            refresh();
+          }}
         />
       )}
     </>

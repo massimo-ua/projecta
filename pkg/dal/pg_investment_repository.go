@@ -581,3 +581,59 @@ func (r *PgInvestmentRepository) AssignToAsset(ctx context.Context, assetID uuid
 
 	return nil
 }
+
+func (r *PgInvestmentRepository) CreateInitialInvestment(ctx context.Context, item asset.InitialInvestment) error {
+	amountVal := int64(0)
+	currVal := "UAH"
+	if item.Amount != nil {
+		amountVal = item.Amount.Amount()
+		currVal = item.Amount.Currency().Code
+	}
+	dateVal := item.Date
+	if dateVal.IsZero() {
+		dateVal = time.Now()
+	}
+	tagsVal := item.Tags
+	if tagsVal == nil {
+		tagsVal = []string{}
+	}
+	invID := item.ID
+	if invID == uuid.Nil {
+		invID = uuid.New()
+	}
+
+	insertInvSql := `
+		INSERT INTO projecta_investments (
+			investment_id, project_id, asset_id, contributor_id, resource_type,
+			amount, currency, description, date, tags, created_at
+		) VALUES (
+			$1, $2, $3, $4, 'MONEY',
+			$5, $6, $7, $8, $9, current_timestamp
+		)
+	`
+	if _, err := r.db.Exec(ctx, insertInvSql,
+		invID.String(),
+		item.ProjectID.String(),
+		item.AssetID.String(),
+		item.ContributorID.String(),
+		amountVal,
+		currVal,
+		item.Description,
+		dateVal,
+		tagsVal,
+	); err != nil {
+		return err
+	}
+
+	insertLinkSql := `
+		INSERT INTO projecta_investment_assets (investment_id, asset_id, share_percentage)
+		VALUES ($1, $2, 100.00)
+		ON CONFLICT (investment_id, asset_id) DO UPDATE SET share_percentage = EXCLUDED.share_percentage
+	`
+	if _, err := r.db.Exec(ctx, insertLinkSql, invID.String(), item.AssetID.String()); err != nil {
+		return err
+	}
+
+	return nil
+}
+

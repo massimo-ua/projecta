@@ -258,6 +258,23 @@ export class AssetRepository {
       { investment_ids: investmentIds },
     );
   }
+
+  async groupAssets(projectId, { name, description, childAssetIds, tags }) {
+    const response = await this.#request.post(`/projects/${projectId}/assets/group`, {
+      name,
+      description: description || '',
+      child_asset_ids: childAssetIds,
+      tags: Array.isArray(tags) ? tags : [],
+    });
+    return toDomain(response);
+  }
+
+  async linkChildren(projectId, parentId, childAssetIds) {
+    return await this.#request.post(
+      `/projects/${projectId}/assets/${parentId}/children/batch`,
+      { child_asset_ids: childAssetIds },
+    );
+  }
 }
 
 export default AssetRepository;
