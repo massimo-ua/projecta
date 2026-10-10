@@ -89,6 +89,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	)
 
 	investmentRepository := dal.NewPgInvestmentRepository(db)
+	assetService.SetInvestmentSource(investmentRepository)
 	investmentService := investment.NewService(
 		db,
 		investmentRepository,

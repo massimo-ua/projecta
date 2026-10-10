@@ -43,7 +43,7 @@ func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) erro
 	return r.update(ctx, anAsset)
 }
 
-func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) error {
+func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 
 	qb.InsertInto("projecta_assets")
@@ -52,24 +52,38 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 		"name",
 		"description",
 		"project_id",
-		"type_id",
-		"price",
-		"currency",
-		"acquired_at",
 		"owner_id",
+		"status",
+		"start_date",
+		"completed_date",
+		"target_price",
+		"target_currency",
+		"acquired_at",
 		"tags")
 
+	var targetPriceVal any
+	var targetCurrVal any
+	if anAsset.TargetPrice() != nil {
+		targetPriceVal = anAsset.TargetPrice().Amount()
+		targetCurrVal = anAsset.TargetPrice().Currency().Code
+	} else if anAsset.Price() != nil {
+		targetPriceVal = anAsset.Price().Amount()
+		targetCurrVal = anAsset.Price().Currency().Code
+	}
+
 	qb.Values(
-		asset.ID().String(),
-		asset.Name(),
-		asset.Description(),
-		asset.Project().ProjectID.String(),
-		asset.Type().ID.String(),
-		asset.Price().Amount(),
-		asset.Price().Currency().Code,
-		asset.AcquiredAt(),
-		asset.Owner().PersonID.String(),
-		asset.Tags())
+		anAsset.ID().String(),
+		anAsset.Name(),
+		anAsset.Description(),
+		anAsset.Project().ProjectID.String(),
+		anAsset.Owner().PersonID.String(),
+		anAsset.Status().String(),
+		anAsset.StartDate(),
+		anAsset.CompletedDate(),
+		targetPriceVal,
+		targetCurrVal,
+		anAsset.AcquiredAt(),
+		anAsset.Tags())
 
 	sql, args := qb.Build()
 
@@ -80,21 +94,33 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 	return nil
 }
 
-func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) error {
+func (r *PgAssetRepository) update(ctx context.Context, anAsset *asset.Asset) error {
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
+
+	var targetPriceVal any
+	var targetCurrVal any
+	if anAsset.TargetPrice() != nil {
+		targetPriceVal = anAsset.TargetPrice().Amount()
+		targetCurrVal = anAsset.TargetPrice().Currency().Code
+	} else if anAsset.Price() != nil {
+		targetPriceVal = anAsset.Price().Amount()
+		targetCurrVal = anAsset.Price().Currency().Code
+	}
 
 	qb.Update("projecta_assets")
 	qb.Set(
-		qb.Assign("name", asset.Name()),
-		qb.Assign("description", asset.Description()),
-		qb.Assign("type_id", asset.Type().ID.String()),
-		qb.Assign("price", asset.Price().Amount()),
-		qb.Assign("currency", asset.Price().Currency().Code),
-		qb.Assign("acquired_at", asset.AcquiredAt()),
-		qb.Assign("tags", asset.Tags()),
+		qb.Assign("name", anAsset.Name()),
+		qb.Assign("description", anAsset.Description()),
+		qb.Assign("status", anAsset.Status().String()),
+		qb.Assign("start_date", anAsset.StartDate()),
+		qb.Assign("completed_date", anAsset.CompletedDate()),
+		qb.Assign("target_price", targetPriceVal),
+		qb.Assign("target_currency", targetCurrVal),
+		qb.Assign("acquired_at", anAsset.AcquiredAt()),
+		qb.Assign("tags", anAsset.Tags()),
 	)
-	qb.Where(qb.Equal("asset_id", asset.ID().String()))
-	qb.Where(qb.Equal("owner_id", asset.Owner().PersonID.String()))
+	qb.Where(qb.Equal("asset_id", anAsset.ID().String()))
+	qb.Where(qb.Equal("owner_id", anAsset.Owner().PersonID.String()))
 
 	sql, args := qb.Build()
 
@@ -257,18 +283,16 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		projectID           string
 		projectName         string
 		projectDescription  string
-		typeID              string
-		typeName            string
-		typeDescription     string
-		price               int64
-		currencyCode        string
+		projectMainCurrency string
 		acquiredAt          time.Time
 		ownerID             string
 		ownerFirstName      string
 		ownerDisplayName    string
-		categoryID          string
-		categoryName        string
-		categoryDescription string
+		status              string
+		startDate           time.Time
+		completedDate       *time.Time
+		targetPrice         *int64
+		targetCurrency      *string
 		tags                []string
 	)
 
@@ -283,18 +307,16 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		&projectID,
 		&projectName,
 		&projectDescription,
-		&typeID,
-		&typeName,
-		&typeDescription,
-		&price,
-		&currencyCode,
+		&projectMainCurrency,
 		&acquiredAt,
 		&ownerID,
 		&ownerFirstName,
 		&ownerDisplayName,
-		&categoryID,
-		&categoryName,
-		&categoryDescription,
+		&status,
+		&startDate,
+		&completedDate,
+		&targetPrice,
+		&targetCurrency,
 		&tags,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -311,25 +333,25 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		projectID,
 		projectName,
 		projectDescription,
-		typeID,
-		typeName,
-		typeDescription,
-		price,
-		currencyCode,
+		projectMainCurrency,
 		acquiredAt,
 		ownerID,
 		ownerFirstName,
 		ownerDisplayName,
-		categoryID,
-		categoryName,
-		categoryDescription,
+		status,
+		startDate,
+		completedDate,
+		targetPrice,
+		targetCurrency,
+		tags,
 	)
 
 	if err != nil {
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
 
-	a.SetTags(tags)
+	directCost := r.loadDirectCost(ctx, a.ID())
+	a.SetDirectCost(directCost)
 
 	children, _ := r.FindChildren(ctx, a.ID())
 	a.SetChildren(children)
@@ -353,10 +375,6 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 
 	if filter.Name != "" {
 		qb.Where(qb.ILike("projecta_assets.name", fmt.Sprintf("%s%%", filter.Name)))
-	}
-
-	if filter.TypeID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_assets.type_id", filter.TypeID.String()))
 	}
 
 	qb.Select(qb.As("COUNT(*)", "total"))
@@ -389,8 +407,10 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	collection := asset.NewCollection(total)
+	var assetIDs []string
 
 	for rows.Next() {
 		var (
@@ -400,18 +420,16 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			projectID           string
 			projectName         string
 			projectDescription  string
-			typeID              string
-			typeName            string
-			typeDescription     string
-			price               int64
-			currencyCode        string
+			projectMainCurrency string
 			acquiredAt          time.Time
 			ownerID             string
 			ownerFirstName      string
 			ownerDisplayName    string
-			categoryID          string
-			categoryName        string
-			categoryDescription string
+			status              string
+			startDate           time.Time
+			completedDate       *time.Time
+			targetPrice         *int64
+			targetCurrency      *string
 			tags                []string
 		)
 
@@ -422,18 +440,16 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			&projectID,
 			&projectName,
 			&projectDescription,
-			&typeID,
-			&typeName,
-			&typeDescription,
-			&price,
-			&currencyCode,
+			&projectMainCurrency,
 			&acquiredAt,
 			&ownerID,
 			&ownerFirstName,
 			&ownerDisplayName,
-			&categoryID,
-			&categoryName,
-			&categoryDescription,
+			&status,
+			&startDate,
+			&completedDate,
+			&targetPrice,
+			&targetCurrency,
 			&tags,
 		); err != nil {
 			return nil, err
@@ -446,59 +462,113 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			projectID,
 			projectName,
 			projectDescription,
-			typeID,
-			typeName,
-			typeDescription,
-			price,
-			currencyCode,
+			projectMainCurrency,
 			acquiredAt,
 			ownerID,
 			ownerFirstName,
 			ownerDisplayName,
-			categoryID,
-			categoryName,
-			categoryDescription,
+			status,
+			startDate,
+			completedDate,
+			targetPrice,
+			targetCurrency,
+			tags,
 		)
 
 		if err != nil {
 			return nil, err
 		}
 
-		a.SetTags(tags)
-
 		collection.Add(a)
+		assetIDs = append(assetIDs, a.ID().String())
+	}
+
+	directCosts := r.loadDirectCosts(ctx, assetIDs)
+	for _, a := range collection.Elements() {
+		if dc, ok := directCosts[a.ID().String()]; ok {
+			a.SetDirectCost(dc)
+		} else {
+			a.SetDirectCost(money.New(0, "UAH"))
+		}
 	}
 
 	return collection, nil
 }
 
+func (r *PgAssetRepository) loadDirectCost(ctx context.Context, assetID uuid.UUID) *money.Money {
+	sql := `
+		SELECT COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
+		       COALESCE(MAX(inv.currency), '')
+		FROM projecta_investment_assets ia
+		JOIN projecta_investments inv ON inv.investment_id = ia.investment_id
+		WHERE ia.asset_id = $1
+	`
+	var (
+		amount int64
+		curr   string
+	)
+	if err := r.db.QueryRow(ctx, sql, assetID.String()).Scan(&amount, &curr); err != nil || curr == "" {
+		return money.New(0, "UAH")
+	}
+	return money.New(amount, curr)
+}
+
+func (r *PgAssetRepository) loadDirectCosts(ctx context.Context, assetIDs []string) map[string]*money.Money {
+	result := make(map[string]*money.Money)
+	if len(assetIDs) == 0 {
+		return result
+	}
+	sql := `
+		SELECT ia.asset_id,
+		       COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
+		       COALESCE(MAX(inv.currency), 'UAH')
+		FROM projecta_investment_assets ia
+		JOIN projecta_investments inv ON inv.investment_id = ia.investment_id
+		WHERE ia.asset_id = ANY($1::uuid[])
+		GROUP BY ia.asset_id
+	`
+	rows, err := r.db.Query(ctx, sql, assetIDs)
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			aid    string
+			amount int64
+			curr   string
+		)
+		if err := rows.Scan(&aid, &amount, &curr); err == nil {
+			result[aid] = money.New(amount, curr)
+		}
+	}
+	return result
+}
+
 func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {
 	qb.Select(
-		"asset_id",
+		"projecta_assets.asset_id",
 		"projecta_assets.name",
-		"projecta_assets.description",
+		qb.As("COALESCE(projecta_assets.description, '')", "description"),
 		"projecta_projects.project_id",
 		qb.As("projecta_projects.name", "project_name"),
-		qb.As("projecta_projects.description", "project_description"),
-		"projecta_assets.type_id",
-		qb.As("projecta_cost_types.name", "type_name"),
-		qb.As("projecta_cost_types.description", "type_description"),
-		"projecta_assets.price",
-		"projecta_assets.currency",
+		qb.As("COALESCE(projecta_projects.description, '')", "project_description"),
+		qb.As("COALESCE(projecta_projects.main_currency, 'UAH')", "project_main_currency"),
 		"projecta_assets.acquired_at",
 		"projecta_assets.owner_id",
 		"people.first_name",
 		qb.As("COALESCE(people.display_name, '')", "display_name"),
-		"projecta_cost_categories.category_id",
-		qb.As("projecta_cost_categories.name", "category_name"),
-		qb.As("projecta_cost_categories.description", "category_description"),
+		"projecta_assets.status",
+		"projecta_assets.start_date",
+		"projecta_assets.completed_date",
+		"projecta_assets.target_price",
+		"projecta_assets.target_currency",
 		"projecta_assets.tags",
 	)
 
 	qb.Join("people", "people.person_id = projecta_assets.owner_id")
 	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_assets.project_id")
-	qb.Join("projecta_cost_types", "projecta_cost_types.type_id = projecta_assets.type_id")
-	qb.Join("projecta_cost_categories", "projecta_cost_categories.category_id = projecta_cost_types.category_id")
 }
 
 func toAssetFromPg(
@@ -508,18 +578,17 @@ func toAssetFromPg(
 	projectID string,
 	projectName string,
 	projectDescription string,
-	typeID string,
-	typeName string,
-	typeDescription string,
-	price int64,
-	currencyCode string,
+	projectMainCurrency string,
 	acquiredAt time.Time,
 	ownerID string,
 	ownerFirstName string,
 	ownerDisplayName string,
-	categoryID string,
-	categoryName string,
-	categoryDescription string,
+	status string,
+	startDate time.Time,
+	completedDate *time.Time,
+	targetPrice *int64,
+	targetCurrency *string,
+	tags []string,
 ) (*asset.Asset, error) {
 	owner := &projecta.Owner{
 		PersonID:    uuid.MustParse(ownerID),
@@ -528,34 +597,33 @@ func toAssetFromPg(
 	}
 
 	project := &projecta.Project{
-		ProjectID:   uuid.MustParse(projectID),
-		Name:        projectName,
-		Description: projectDescription,
+		ProjectID:    uuid.MustParse(projectID),
+		Name:         projectName,
+		Description:  projectDescription,
+		MainCurrency: projectMainCurrency,
 	}
 
-	category := &projecta.CostCategory{
-		ID:          uuid.MustParse(categoryID),
-		Name:        categoryName,
-		Description: categoryDescription,
+	var targetPriceMoney *money.Money
+	if targetPrice != nil && targetCurrency != nil && *targetCurrency != "" {
+		targetPriceMoney = money.New(*targetPrice, *targetCurrency)
 	}
 
-	costType := &projecta.CostType{
-		ID:          uuid.MustParse(typeID),
-		Name:        typeName,
-		Description: typeDescription,
-		Category:    category,
-	}
-
-	priceMoney := money.New(price, currencyCode)
-
-	return asset.NewAsset(
+	anAsset := asset.NewAsset(
 		uuid.MustParse(assetID),
 		name,
 		description,
 		project,
-		costType,
-		priceMoney,
+		nil,
+		targetPriceMoney,
 		acquiredAt,
 		owner,
-	), nil
+	)
+
+	anAsset.SetStatus(asset.ToAssetStatus(status))
+	anAsset.SetStartDate(startDate)
+	anAsset.SetCompletedDate(completedDate)
+	anAsset.SetTargetPrice(targetPriceMoney)
+	anAsset.SetTags(tags)
+
+	return anAsset, nil
 }

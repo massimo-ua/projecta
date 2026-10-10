@@ -191,6 +191,14 @@ const assetsContent = {
       en: 'Failed to load asset details',
       uk: 'Не вдалося завантажити деталі активу',
     }),
+    investInAsset: t({
+      en: 'Log Investment',
+      uk: 'Інвестувати',
+    }),
+    viewInvestments: t({
+      en: 'View Investments',
+      uk: 'Переглянути інвестиції',
+    }),
   },
 };
 

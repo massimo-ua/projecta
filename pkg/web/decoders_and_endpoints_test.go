@@ -577,6 +577,78 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 			t.Errorf("expected invalid offset")
 		}
 	})
+
+	t.Run("decodeAssignInvestmentsRequest validation and success", func(t *testing.T) {
+		reqNoProj, _ := http.NewRequest("POST", "/", nil)
+		_, err := decodeAssignInvestmentsRequest(context.Background(), reqNoProj)
+		if err == nil {
+			t.Errorf("expected missing project_id")
+		}
+
+		reqBadProj, _ := http.NewRequest("POST", "/", nil)
+		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
+		_, err = decodeAssignInvestmentsRequest(context.Background(), reqBadProj)
+		if err == nil {
+			t.Errorf("expected invalid project_id")
+		}
+
+		reqNoAsset, _ := http.NewRequest("POST", "/", nil)
+		reqNoAsset = mux.SetURLVars(reqNoAsset, map[string]string{"project_id": validUUID})
+		_, err = decodeAssignInvestmentsRequest(context.Background(), reqNoAsset)
+		if err == nil {
+			t.Errorf("expected missing asset_id")
+		}
+
+		reqBadAsset, _ := http.NewRequest("POST", "/", nil)
+		reqBadAsset = mux.SetURLVars(reqBadAsset, map[string]string{"project_id": validUUID, "asset_id": "bad"})
+		_, err = decodeAssignInvestmentsRequest(context.Background(), reqBadAsset)
+		if err == nil {
+			t.Errorf("expected invalid asset_id")
+		}
+
+		reqBadJSON, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("not json")))
+		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		_, err = decodeAssignInvestmentsRequest(context.Background(), reqBadJSON)
+		if err == nil {
+			t.Errorf("expected invalid json error")
+		}
+
+		bodyEmpty, _ := json.Marshal(AssignInvestmentsDTO{InvestmentIDs: []string{}})
+		reqEmpty, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyEmpty))
+		reqEmpty = mux.SetURLVars(reqEmpty, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		_, err = decodeAssignInvestmentsRequest(context.Background(), reqEmpty)
+		if err == nil {
+			t.Errorf("expected empty investment_ids error")
+		}
+
+		bodyBadID, _ := json.Marshal(AssignInvestmentsDTO{InvestmentIDs: []string{"bad-uuid"}})
+		reqBadID, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadID))
+		reqBadID = mux.SetURLVars(reqBadID, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		_, err = decodeAssignInvestmentsRequest(context.Background(), reqBadID)
+		if err == nil {
+			t.Errorf("expected invalid investment id error")
+		}
+
+		invID := uuid.New().String()
+		bodyValid, _ := json.Marshal(AssignInvestmentsDTO{InvestmentIDs: []string{invID}})
+		reqValid, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValid))
+		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		cmdAny, err := decodeAssignInvestmentsRequest(context.Background(), reqValid)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		cmd := cmdAny.(asset.AssignInvestmentsCommand)
+		if len(cmd.InvestmentIDs) != 1 || cmd.InvestmentIDs[0].String() != invID {
+			t.Errorf("unexpected command: %+v", cmd)
+		}
+
+		// Test makeAssignInvestmentsEndpoint
+		ep := makeAssignInvestmentsEndpoint(&mockAssetService{})
+		_, err = ep(context.Background(), cmd)
+		if err != nil {
+			t.Errorf("unexpected endpoint error: %v", err)
+		}
+	})
 }
 
 func TestPaymentsDecodersValidationErrors(t *testing.T) {

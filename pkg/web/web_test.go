@@ -314,6 +314,10 @@ func (m *mockAssetService) LinkChild(_ context.Context, _ asset.LinkChildCommand
 func (m *mockAssetService) UnlinkChild(_ context.Context, _ asset.UnlinkChildCommand) error {
 	return m.err
 }
+func (m *mockAssetService) AssignInvestments(_ context.Context, _ asset.AssignInvestmentsCommand) error {
+	return m.err
+}
+
 
 func TestWebHandlersAndEndpoints(t *testing.T) {
 	personID := uuid.New()

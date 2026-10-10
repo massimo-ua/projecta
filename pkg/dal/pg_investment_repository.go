@@ -177,7 +177,7 @@ func (r *PgInvestmentRepository) loadAllocations(ctx context.Context, investment
 		SELECT ia.investment_id, ia.asset_id, a.name, ia.share_percentage
 		FROM projecta_investment_assets ia
 		JOIN projecta_assets a ON a.asset_id = ia.asset_id
-		WHERE ia.investment_id = ANY($1)
+		WHERE ia.investment_id = ANY($1::uuid[])
 		ORDER BY ia.share_percentage DESC
 	`
 	rows, err := r.db.Query(ctx, sql, investmentIDs)
@@ -505,4 +505,79 @@ func scanInvestment(s scannable) (*investment.Investment, error) {
 		date,
 		tags,
 	), nil
+}
+
+func (r *PgInvestmentRepository) FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]asset.InvestmentItem, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	idStrs := make([]string, len(ids))
+	for i, id := range ids {
+		idStrs[i] = id.String()
+	}
+	sql := `
+		SELECT investment_id, amount, currency, date, tags
+		FROM projecta_investments
+		WHERE project_id = $1 AND investment_id = ANY($2::uuid[])
+	`
+	rows, err := r.db.Query(ctx, sql, projectID.String(), idStrs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []asset.InvestmentItem
+	for rows.Next() {
+		var (
+			invIDStr string
+			amount   int64
+			curr     string
+			date     time.Time
+			tags     []string
+		)
+		if err := rows.Scan(&invIDStr, &amount, &curr, &date, &tags); err != nil {
+			return nil, err
+		}
+		items = append(items, asset.InvestmentItem{
+			ID:     uuid.MustParse(invIDStr),
+			Amount: money.New(amount, curr),
+			Date:   date,
+			Tags:   tags,
+		})
+	}
+	return items, nil
+}
+
+func (r *PgInvestmentRepository) AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error {
+	if len(investmentIDs) == 0 {
+		return nil
+	}
+	idStrs := make([]string, len(investmentIDs))
+	for i, id := range investmentIDs {
+		idStrs[i] = id.String()
+	}
+
+	updateSql := `
+		UPDATE projecta_investments
+		SET asset_id = $1, updated_at = current_timestamp
+		WHERE investment_id = ANY($2::uuid[])
+	`
+	if _, err := r.db.Exec(ctx, updateSql, assetID.String(), idStrs); err != nil {
+		return err
+	}
+
+	delSql := `DELETE FROM projecta_investment_assets WHERE investment_id = ANY($1::uuid[])`
+	if _, err := r.db.Exec(ctx, delSql, idStrs); err != nil {
+		return err
+	}
+
+	insertSql := `
+		INSERT INTO projecta_investment_assets (investment_id, asset_id, share_percentage)
+		SELECT unnest($1::uuid[]), $2, 100.00
+	`
+	if _, err := r.db.Exec(ctx, insertSql, idStrs, assetID.String()); err != nil {
+		return err
+	}
+
+	return nil
 }

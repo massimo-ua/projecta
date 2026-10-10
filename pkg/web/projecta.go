@@ -191,6 +191,7 @@ type ProjectEndpoints struct {
 	GetAsset          endpoint.Endpoint
 	LinkChildAsset          endpoint.Endpoint
 	UnlinkChildAsset        endpoint.Endpoint
+	AssignInvestments       endpoint.Endpoint
 	CreateInvestment        endpoint.Endpoint
 	ListInvestments         endpoint.Endpoint
 	GetInvestment           endpoint.Endpoint
@@ -850,6 +851,7 @@ func MakeProjectEndpoints(
 		GetAsset:          makeGetAssetEndpoint(assetService, rateProvider),
 		LinkChildAsset:    makeLinkChildAssetEndpoint(assetService),
 		UnlinkChildAsset:  makeUnlinkChildAssetEndpoint(assetService),
+		AssignInvestments: makeAssignInvestmentsEndpoint(assetService),
 		CreateInvestment:  epCreateInv,
 		ListInvestments:   epListInv,
 		GetInvestment:     epGetInv,

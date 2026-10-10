@@ -2,7 +2,9 @@ package asset
 
 import (
 	"context"
+	"time"
 
+	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 )
 
@@ -15,6 +17,7 @@ type Service interface {
 	Remove(ctx context.Context, command RemoveAssetCommand) error
 	LinkChild(ctx context.Context, command LinkChildCommand) error
 	UnlinkChild(ctx context.Context, command UnlinkChildCommand) error
+	AssignInvestments(ctx context.Context, command AssignInvestmentsCommand) error
 }
 
 type Repository interface {
@@ -27,4 +30,16 @@ type Repository interface {
 	FindChildren(ctx context.Context, parentID uuid.UUID) ([]ChildAssetLink, error)
 	FindParents(ctx context.Context, childID uuid.UUID) ([]ParentAssetLink, error)
 	FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error)
+}
+
+type InvestmentItem struct {
+	ID     uuid.UUID
+	Amount *money.Money
+	Date   time.Time
+	Tags   []string
+}
+
+type InvestmentSource interface {
+	FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]InvestmentItem, error)
+	AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error
 }

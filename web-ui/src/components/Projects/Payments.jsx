@@ -13,6 +13,7 @@ import {
   Briefcase,
   User,
   Tag,
+  FolderPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,7 @@ import AddPaymentModal from './AddPaymentModal';
 import EditPaymentModal from './EditPaymentModal';
 import ImportStatementModal from './ImportStatementModal';
 import CreateAssetFromPaymentsModal from './CreateAssetFromPaymentsModal';
+import AssignToAssetModal from './AssignToAssetModal';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
@@ -237,16 +239,24 @@ export function Payments() {
     closeEditModal,
     onEditSuccess,
     removeInvestment,
+    refresh,
   } = useInvestments(projectId);
 
   const [searchParams] = useSearchParams();
   const urlTag = searchParams.get('tag');
+  const urlAssetId = searchParams.get('assetId');
 
   useEffect(() => {
     if (urlTag) {
       setFilter('tag', urlTag);
     }
   }, [urlTag, setFilter]);
+
+  useEffect(() => {
+    if (urlAssetId) {
+      setFilter('assetId', urlAssetId);
+    }
+  }, [urlAssetId, setFilter]);
 
   const [importModalOpened, setImportModalOpened] = useState(false);
   const openImportModal = () => setImportModalOpened(true);
@@ -255,6 +265,16 @@ export function Payments() {
   const [createAssetModalOpened, setCreateAssetModalOpened] = useState(false);
   const openCreateAssetModal = () => setCreateAssetModalOpened(true);
   const closeCreateAssetModal = () => setCreateAssetModalOpened(false);
+
+  const [assignAssetModalOpened, setAssignAssetModalOpened] = useState(false);
+  const openAssignAssetModal = () => setAssignAssetModalOpened(true);
+  const closeAssignAssetModal = () => setAssignAssetModalOpened(false);
+
+  const handleAssignSuccess = () => {
+    closeAssignAssetModal();
+    clearSelection();
+    refresh();
+  };
 
   const handleRemove = (investmentId) => {
     removeInvestment(investmentId, {
@@ -432,14 +452,26 @@ export function Payments() {
               </Button>
             </div>
 
-            <Button
-              size="sm"
-              onClick={openCreateAssetModal}
-              className="gap-2 rounded-xl font-semibold shadow-sm shadow-primary/20"
-            >
-              <Package className="h-4 w-4" />
-              <span>{String(content.createAssetFromSelected || 'Create Asset from Selected')}</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={openAssignAssetModal}
+                className="gap-2 rounded-xl font-semibold shadow-xs"
+              >
+                <FolderPlus className="h-4 w-4" />
+                <span>{String(content.assignToExistingAsset || 'Add to Existing Asset')}</span>
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={openCreateAssetModal}
+                className="gap-2 rounded-xl font-semibold shadow-sm shadow-primary/20"
+              >
+                <Package className="h-4 w-4" />
+                <span>{String(content.createAssetFromSelected || 'Create Asset from Selected')}</span>
+              </Button>
+            </div>
           </div>
         ) : null}
         renderItemPrefix={(inv) => (
@@ -494,6 +526,15 @@ export function Payments() {
         onSuccess={handleAssetCreated}
         projectId={projectId}
         payments={selectedInvestmentsList}
+      />
+
+      <AssignToAssetModal
+        open={assignAssetModalOpened}
+        onCancel={closeAssignAssetModal}
+        onSuccess={handleAssignSuccess}
+        projectId={projectId}
+        investments={selectedInvestmentsList}
+        availableAssets={availableAssets}
       />
     </>
   );

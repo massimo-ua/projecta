@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { useParams } from 'react-router-dom';
-import { useIntlayer } from 'react-intlayer';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useIntlayer, useLocale } from 'react-intlayer';
+import { getLocalizedUrl } from 'intlayer';
 import {
   Package,
   Calendar,
@@ -11,6 +12,7 @@ import {
   Clock,
   ArrowRight,
   Boxes,
+  DollarSign,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +20,7 @@ import useAssets from '../../hooks/assets';
 import AddAssetModal from './AddAssetModal';
 import EditAssetModal from './EditAssetModal';
 import LinkChildAssetModal from './LinkChildAssetModal';
+import AddPaymentModal from './AddPaymentModal';
 import { ListView } from './ListView';
 import { EditButton } from './ListView/EditButton';
 import { RemoveButton } from './ListView/RemoveButton';
@@ -151,7 +154,7 @@ AssetAmount.propTypes = {
   asset: PropTypes.object.isRequired,
 };
 
-function AssetDetails({ asset, onUnlinkChild }) {
+function AssetDetails({ asset, onUnlinkChild, onViewInvestments }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -170,7 +173,21 @@ function AssetDetails({ asset, onUnlinkChild }) {
           </DetailItem>
         )}
         <DetailItem label="Direct Cost">
-          <span className="text-sm font-mono font-medium">{asset.formattedDirectCost}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-mono font-medium">{asset.formattedDirectCost}</span>
+            {onViewInvestments && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onViewInvestments(asset.id)}
+                className="h-6 px-1.5 text-xs text-muted-foreground hover:text-primary gap-1"
+                title="View investments for this asset"
+              >
+                <span>Investments</span>
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </DetailItem>
         <DetailItem label="Total Cost (Rollup)">
           <span className="text-sm font-mono font-bold text-primary">{asset.formattedTotalCost}</span>
@@ -254,11 +271,21 @@ function AssetDetails({ asset, onUnlinkChild }) {
 AssetDetails.propTypes = {
   asset: PropTypes.object.isRequired,
   onUnlinkChild: PropTypes.func.isRequired,
+  onViewInvestments: PropTypes.func,
 };
+
+AssetDetails.defaultProps = {
+  onViewInvestments: undefined,
+};
+
 
 export function Assets() {
   const content = useIntlayer('assets');
   const { projectId } = useParams();
+  const navigate = useNavigate();
+  const { locale } = useLocale();
+  const [investAssetId, setInvestAssetId] = useState('');
+
   const {
     loading,
     assets,
@@ -280,7 +307,12 @@ export function Assets() {
     linkChild,
     unlinkChild,
     removeAsset,
+    refresh,
   } = useAssets(projectId);
+
+  const handleViewInvestments = (assetId) => {
+    navigate(getLocalizedUrl(`/projects/${projectId}/payments?assetId=${assetId}`, locale));
+  };
 
   const handleRemove = (assetId) => {
     removeAsset(assetId, {
@@ -308,10 +340,21 @@ export function Assets() {
           <AssetDetails
             asset={asset}
             onUnlinkChild={unlinkChild}
+            onViewInvestments={handleViewInvestments}
           />
         )}
         renderItemActions={(asset) => (
           <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setInvestAssetId(asset.id)}
+              className="h-8 px-2.5 gap-1.5 rounded-xl text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10"
+              title={String(content.investInAsset || 'Log Investment')}
+            >
+              <DollarSign className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{String(content.investInAsset || 'Invest')}</span>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -350,6 +393,19 @@ export function Assets() {
           onLink={linkChild}
           parentAsset={linkModalAsset}
           allAssets={assets}
+        />
+      )}
+
+      {investAssetId && (
+        <AddPaymentModal
+          open={Boolean(investAssetId)}
+          onCancel={() => setInvestAssetId('')}
+          onSuccess={() => {
+            setInvestAssetId('');
+            refresh();
+          }}
+          assets={assets}
+          defaultAssetId={investAssetId}
         />
       )}
     </>

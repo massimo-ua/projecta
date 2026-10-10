@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -220,6 +221,11 @@ type LinkChildAssetDTO struct {
 	ChildAssetID    string  `json:"child_asset_id"`
 	SharePercentage float64 `json:"share_percentage"`
 }
+
+type AssignInvestmentsDTO struct {
+	InvestmentIDs []string `json:"investment_ids"`
+}
+
 
 type ListAssetsResponse struct {
 	Assets []AssetDTO `json:"assets"`
@@ -757,3 +763,56 @@ func makeUnlinkChildAssetEndpoint(svc asset.Service) endpoint.Endpoint {
 		return nil, svc.UnlinkChild(ctx, cmd)
 	}
 }
+
+func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid project id", nil)
+	}
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	assetIDStr, ok := vars["asset_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("invalid asset id", nil)
+	}
+	assetID, err := uuid.Parse(assetIDStr)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid asset id", err)
+	}
+
+	var req AssignInvestmentsDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+
+	if len(req.InvestmentIDs) == 0 {
+		return nil, exceptions.NewValidationException("at least one investment must be selected", nil)
+	}
+
+	invUUIDs := make([]uuid.UUID, 0, len(req.InvestmentIDs))
+	for _, idStr := range req.InvestmentIDs {
+		u, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid investment id: %s", idStr), err)
+		}
+		invUUIDs = append(invUUIDs, u)
+	}
+
+	return asset.AssignInvestmentsCommand{
+		AssetID:       assetID,
+		ProjectID:     projectID,
+		InvestmentIDs: invUUIDs,
+	}, nil
+}
+
+func makeAssignInvestmentsEndpoint(s asset.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		cmd := request.(asset.AssignInvestmentsCommand)
+		return nil, s.AssignInvestments(ctx, cmd)
+	}
+}
+
