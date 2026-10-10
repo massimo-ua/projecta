@@ -14,6 +14,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
@@ -188,6 +189,15 @@ type ProjectEndpoints struct {
 	ListAssets        endpoint.Endpoint
 	UpdateAsset       endpoint.Endpoint
 	GetAsset          endpoint.Endpoint
+	LinkChildAsset          endpoint.Endpoint
+	UnlinkChildAsset        endpoint.Endpoint
+	CreateInvestment        endpoint.Endpoint
+	ListInvestments         endpoint.Endpoint
+	GetInvestment           endpoint.Endpoint
+	UpdateInvestment        endpoint.Endpoint
+	RemoveInvestment        endpoint.Endpoint
+	CreateBatchInvestments  endpoint.Endpoint
+	ListTags                endpoint.Endpoint
 	UpdatePayment       endpoint.Endpoint
 	GetPayment          endpoint.Endpoint
 	UpdateProject       endpoint.Endpoint
@@ -794,7 +804,30 @@ func MakeProjectEndpoints(
 	expenseService projecta.PaymentService,
 	assetService asset.Service,
 	rateProvider currency.CurrencyRateProvider,
+	investmentService ...investment.Service,
 ) (ProjectEndpoints, error) {
+	var invSvc investment.Service
+	if len(investmentService) > 0 {
+		invSvc = investmentService[0]
+	}
+
+	var epCreateInv endpoint.Endpoint
+	var epListInv endpoint.Endpoint
+	var epGetInv endpoint.Endpoint
+	var epUpdInv endpoint.Endpoint
+	var epRemInv endpoint.Endpoint
+	var epBatchInv endpoint.Endpoint
+	var epListTags endpoint.Endpoint
+	if invSvc != nil {
+		epCreateInv = makeCreateInvestmentEndpoint(invSvc, rateProvider)
+		epListInv = makeListInvestmentsEndpoint(invSvc, rateProvider)
+		epGetInv = makeGetInvestmentEndpoint(invSvc, rateProvider)
+		epUpdInv = makeUpdateInvestmentEndpoint(invSvc)
+		epRemInv = makeRemoveInvestmentEndpoint(invSvc)
+		epBatchInv = makeCreateBatchInvestmentsEndpoint(invSvc, rateProvider)
+		epListTags = makeListTagsEndpoint(invSvc)
+	}
+
 	return ProjectEndpoints{
 		CreateProject:     makeCreateProjectEndpoint(projectService),
 		GetProject:        makeGetProjectEndpoint(projectService),
@@ -815,6 +848,15 @@ func MakeProjectEndpoints(
 		ListAssets:        makeListAssetsEndpoint(assetService, rateProvider),
 		UpdateAsset:       makeUpdateAssetEndpoint(assetService),
 		GetAsset:          makeGetAssetEndpoint(assetService, rateProvider),
+		LinkChildAsset:    makeLinkChildAssetEndpoint(assetService),
+		UnlinkChildAsset:  makeUnlinkChildAssetEndpoint(assetService),
+		CreateInvestment:  epCreateInv,
+		ListInvestments:   epListInv,
+		GetInvestment:     epGetInv,
+		UpdateInvestment:  epUpdInv,
+		RemoveInvestment:  epRemInv,
+		CreateBatchInvestments: epBatchInv,
+		ListTags:          epListTags,
 		UpdatePayment:       makeUpdatePaymentEndpoint(expenseService),
 		GetPayment:          makeGetPaymentEndpoint(expenseService, rateProvider),
 		UpdateProject:       makeUpdateProjectEndpoint(projectService),

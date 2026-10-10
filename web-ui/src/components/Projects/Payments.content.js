@@ -4,32 +4,100 @@ const paymentsContent = {
   key: 'payments',
   content: {
     addPayment: t({
-      en: 'Add Payment',
-      uk: 'Додати платіж',
+      en: 'Log Investment',
+      uk: 'Зафіксувати інвестицію',
     }),
     addPaymentTitle: t({
-      en: 'Add Payment',
-      uk: 'Додати платіж',
+      en: 'Log Investment',
+      uk: 'Зафіксувати інвестицію',
     }),
     editPaymentTitle: t({
-      en: 'Edit Payment',
-      uk: 'Редагувати платіж',
+      en: 'Edit Investment',
+      uk: 'Редагувати інвестицію',
+    }),
+    investmentsTitle: t({
+      en: 'Investments',
+      uk: 'Інвестиції',
+    }),
+    resourceTypeLabel: t({
+      en: 'Resource Type',
+      uk: 'Тип ресурсу',
+    }),
+    moneyResource: t({
+      en: 'Capital (Money)',
+      uk: 'Капітал (Гроші)',
+    }),
+    timeResource: t({
+      en: 'Labor (Time)',
+      uk: 'Праця (Час)',
+    }),
+    goodsResource: t({
+      en: 'Goods & Materials',
+      uk: 'Товари та матеріали',
+    }),
+    assetTargetLabel: t({
+      en: 'Target Asset',
+      uk: 'Цільовий актив',
+    }),
+    selectAssetPlaceholder: t({
+      en: 'Select asset',
+      uk: 'Оберіть актив',
+    }),
+    timeHoursLabel: t({
+      en: 'Hours Worked',
+      uk: 'Відпрацьовані години',
+    }),
+    timeHourlyRateLabel: t({
+      en: 'Hourly Rate',
+      uk: 'Погодинна ставка',
+    }),
+    goodsQuantityLabel: t({
+      en: 'Quantity',
+      uk: 'Кількість',
+    }),
+    goodsUnitLabel: t({
+      en: 'Unit (e.g. pcs, kg, m)',
+      uk: 'Одиниця (напр. шт, кг, м)',
+    }),
+    goodsItemNameLabel: t({
+      en: 'Item / Material Name',
+      uk: 'Назва товару / матеріалу',
+    }),
+    tagsLabel: t({
+      en: 'Tags',
+      uk: 'Теги',
+    }),
+    tagsPlaceholder: t({
+      en: 'Type tag and press Enter',
+      uk: 'Введіть тег та натисніть Enter',
+    }),
+    filterAllAssets: t({
+      en: 'All Assets',
+      uk: 'Усі активи',
+    }),
+    filterAllResourceTypes: t({
+      en: 'All Resources',
+      uk: 'Усі ресурси',
+    }),
+    filterTagPlaceholder: t({
+      en: 'Filter by tag...',
+      uk: 'Фільтр за тегом...',
     }),
     typeLabel: t({
-      en: 'Type',
-      uk: 'Тип',
+      en: 'Asset',
+      uk: 'Актив',
     }),
     selectTypePlaceholder: t({
-      en: 'Select type',
-      uk: 'Оберіть тип',
+      en: 'Select asset',
+      uk: 'Оберіть актив',
     }),
     categoryLabel: t({
-      en: 'Category',
-      uk: 'Категорія',
+      en: 'Tags / Resource',
+      uk: 'Теги / Ресурс',
     }),
     kindLabel: t({
-      en: 'Kind',
-      uk: 'Вид',
+      en: 'Resource',
+      uk: 'Ресурс',
     }),
     kindDownPayment: t({
       en: 'Down Payment',
@@ -48,8 +116,8 @@ const paymentsContent = {
       uk: 'Дата',
     }),
     amountLabel: t({
-      en: 'Amount',
-      uk: 'Сума',
+      en: 'Valuation Amount',
+      uk: 'Грошова оцінка',
     }),
     amountPlaceholder: t({
       en: '0.00',
@@ -64,48 +132,48 @@ const paymentsContent = {
       uk: 'Опис',
     }),
     descriptionPlaceholder: t({
-      en: 'Payment description...',
-      uk: 'Опис платежу...',
+      en: 'Investment description, details...',
+      uk: 'Опис інвестиції, деталі...',
     }),
     cancelButton: t({
       en: 'Cancel',
       uk: 'Скасувати',
     }),
     submitButton: t({
-      en: 'Submit',
+      en: 'Save',
       uk: 'Зберегти',
     }),
     validationRequiredFields: t({
-      en: 'Type, Amount, and Payment Date are required',
-      uk: 'Тип, Сума та Дата платежу є обовʼязковими',
+      en: 'Asset, Amount, and Date are required',
+      uk: 'Актив, Сума та Дата є обовʼязковими',
     }),
     paymentAddedSuccess: t({
-      en: 'Payment added successfully',
-      uk: 'Платіж успішно додано',
+      en: 'Investment logged successfully',
+      uk: 'Інвестицію успішно зафіксовано',
     }),
     paymentRemovedSuccess: t({
-      en: 'Payment removed successfully',
-      uk: 'Платіж успішно видалено',
+      en: 'Investment removed successfully',
+      uk: 'Інвестицію видалено',
     }),
     paymentUpdatedSuccess: t({
-      en: 'Payment updated successfully',
-      uk: 'Платіж успішно оновлено',
+      en: 'Investment updated successfully',
+      uk: 'Інвестицію оновлено',
     }),
     failedToAdd: t({
-      en: 'Failed to add payment',
-      uk: 'Не вдалося додати платіж',
+      en: 'Failed to log investment',
+      uk: 'Не вдалося зафіксувати інвестицію',
     }),
     failedToUpdate: t({
-      en: 'Failed to update payment',
-      uk: 'Не вдалося оновити платіж',
+      en: 'Failed to update investment',
+      uk: 'Не вдалося оновити інвестицію',
     }),
     failedToRemove: t({
-      en: 'Failed to remove payment',
-      uk: 'Не вдалося видалити платіж',
+      en: 'Failed to remove investment',
+      uk: 'Не вдалося видалити інвестицію',
     }),
     failedToLoadDetails: t({
-      en: 'Failed to load payment details',
-      uk: 'Не вдалося завантажити деталі платежу',
+      en: 'Failed to load details',
+      uk: 'Не вдалося завантажити деталі',
     }),
     importStatement: t({
       en: 'Import Statement',
@@ -116,8 +184,8 @@ const paymentsContent = {
       uk: 'Імпорт виписки (Кредобанк)',
     }),
     importStatementDesc: t({
-      en: 'Upload a Kredobank PDF account statement to extract and import payments.',
-      uk: 'Завантажте PDF-виписку Кредобанку для вилучення та імпорту платежів.',
+      en: 'Upload a Kredobank PDF account statement to extract and import payments as investments.',
+      uk: 'Завантажте PDF-виписку Кредобанку для вилучення та імпорту витрат як інвестицій.',
     }),
     dropFilePrompt: t({
       en: 'Choose a PDF statement or drag & drop here',
@@ -128,8 +196,8 @@ const paymentsContent = {
       uk: 'Обробка PDF-виписки...',
     }),
     defaultCostType: t({
-      en: 'Default Cost Type',
-      uk: 'Тип витрат за замовчуванням',
+      en: 'Default Target Asset',
+      uk: 'Цільовий актив за замовчуванням',
     }),
     applyToAll: t({
       en: 'Apply to all',
@@ -140,24 +208,24 @@ const paymentsContent = {
       uk: 'Можливий дублікат',
     }),
     importPaymentsCount: t({
-      en: 'Import Payments',
-      uk: 'Імпортувати платежі',
+      en: 'Import Investments',
+      uk: 'Імпортувати інвестиції',
     }),
     selectedCount: t({
       en: 'selected',
       uk: 'обрано',
     }),
     paymentsImportedSuccess: t({
-      en: 'Payments imported successfully',
-      uk: 'Платежі успішно імпортовано',
+      en: 'Investments imported successfully',
+      uk: 'Інвестиції успішно імпортовано',
     }),
     failedToParseStatement: t({
       en: 'Failed to parse statement',
       uk: 'Не вдалося обробити виписку',
     }),
     failedToImportPayments: t({
-      en: 'Failed to import payments',
-      uk: 'Не вдалося імпортувати платежі',
+      en: 'Failed to import investments',
+      uk: 'Не вдалося імпортувати інвестиції',
     }),
     accountLabel: t({
       en: 'Account',
@@ -176,12 +244,12 @@ const paymentsContent = {
       uk: 'Вибрати всі',
     }),
     selectTypeForSelectedWarning: t({
-      en: 'Please select a Cost Type for all checked payments',
-      uk: 'Будь ласка, оберіть тип витрат для всіх вибраних платежів',
+      en: 'Please select a Target Asset for all checked items',
+      uk: 'Будь ласка, оберіть цільовий актив для всіх вибраних записів',
     }),
     filterAllTypes: t({
-      en: 'All Types',
-      uk: 'Усі типи',
+      en: 'All Assets',
+      uk: 'Усі активи',
     }),
     filterDateFrom: t({
       en: 'From date',
@@ -196,8 +264,8 @@ const paymentsContent = {
       uk: 'Скинути фільтри',
     }),
     selectedPayments: t({
-      en: 'payments selected',
-      uk: 'платежів вибрано',
+      en: 'investments selected',
+      uk: 'інвестицій вибрано',
     }),
     createAssetFromSelected: t({
       en: 'Create Asset from Selected',
@@ -208,12 +276,12 @@ const paymentsContent = {
       uk: 'Очистити вибір',
     }),
     createAssetTitle: t({
-      en: 'Create Asset from Payments',
-      uk: 'Створити актив з платежів',
+      en: 'Create Asset from Investments',
+      uk: 'Створити актив з інвестицій',
     }),
     createAssetDesc: t({
-      en: 'Summarize the selected payments into a new asset record.',
-      uk: 'Обʼєднайте вибрані платежі у новий актив.',
+      en: 'Summarize the selected investments into a new asset record.',
+      uk: 'Обʼєднайте вибрані інвестиції у новий актив.',
     }),
     assetNameLabel: t({
       en: 'Asset Name',
@@ -232,12 +300,12 @@ const paymentsContent = {
       uk: 'Підсумкова ціна',
     }),
     currencyConversionNotice: t({
-      en: 'Payments in differing currencies will be converted into',
-      uk: 'Платежі в інших валютах буде сконвертовано у',
+      en: 'Investments in differing currencies will be converted into',
+      uk: 'Інвестиції в інших валютах буде сконвертовано у',
     }),
     assetCreatedSuccess: t({
-      en: 'Asset created successfully from selected payments',
-      uk: 'Актив успішно створено з вибраних платежів',
+      en: 'Asset created successfully from selected investments',
+      uk: 'Актив успішно створено з вибраних інвестицій',
     }),
     viewInAssets: t({
       en: 'View in Assets',

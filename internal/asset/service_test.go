@@ -50,6 +50,21 @@ func (m *mockAssetRepo) FindOne(ctx context.Context, filter asset.Filter) (*asse
 	}
 	return m.asset, nil
 }
+func (m *mockAssetRepo) AddChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID, sharePercentage float64) error {
+	return nil
+}
+func (m *mockAssetRepo) RemoveChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID) error {
+	return nil
+}
+func (m *mockAssetRepo) FindChildren(ctx context.Context, parentID uuid.UUID) ([]asset.ChildAssetLink, error) {
+	return nil, nil
+}
+func (m *mockAssetRepo) FindParents(ctx context.Context, childID uuid.UUID) ([]asset.ParentAssetLink, error) {
+	return nil, nil
+}
+func (m *mockAssetRepo) FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
+	return nil, nil
+}
 
 type mockPeopleService struct {
 	owner *projecta.Owner
@@ -480,4 +495,61 @@ func TestAssetService(t *testing.T) {
 			t.Errorf("expected rate provider error")
 		}
 	})
+
+	t.Run("LinkChild and UnlinkChild tests", func(t *testing.T) {
+		pID := uuid.New()
+		cID := uuid.New()
+		svc := asset.NewService(&mockDb{}, &mockAssetRepo{asset: existingAsset}, &mockPeopleService{owner: owner}, &mockTypeRepo{}, &mockProjectRepo{project: project}, &mockPaymentRepo{})
+
+		// Unauthorized
+		err := svc.LinkChild(context.Background(), asset.LinkChildCommand{ParentID: pID, ChildID: cID, SharePercentage: 50})
+		if err == nil {
+			t.Errorf("expected unauthorized")
+		}
+
+		// Self link
+		err = svc.LinkChild(authedCtx, asset.LinkChildCommand{ParentID: pID, ChildID: pID, SharePercentage: 50})
+		if err == nil {
+			t.Errorf("expected error for self-link")
+		}
+
+		// Invalid share
+		err = svc.LinkChild(authedCtx, asset.LinkChildCommand{ParentID: pID, ChildID: cID, SharePercentage: 0})
+		if err == nil {
+			t.Errorf("expected error for 0 share")
+		}
+		err = svc.LinkChild(authedCtx, asset.LinkChildCommand{ParentID: pID, ChildID: cID, SharePercentage: 101})
+		if err == nil {
+			t.Errorf("expected error for >100 share")
+		}
+
+		// Cycle detection
+		mockSvcCycle := asset.NewService(&mockDb{}, &mockAssetRepoWithAncestors{mockAssetRepo: mockAssetRepo{asset: existingAsset}, ancestors: []uuid.UUID{cID}}, &mockPeopleService{owner: owner}, &mockTypeRepo{}, &mockProjectRepo{project: project}, &mockPaymentRepo{})
+		err = mockSvcCycle.LinkChild(authedCtx, asset.LinkChildCommand{ParentID: pID, ChildID: cID, SharePercentage: 50})
+		if err == nil {
+			t.Errorf("expected circular dependency error")
+		}
+
+		// Success link
+		err = svc.LinkChild(authedCtx, asset.LinkChildCommand{ParentID: pID, ChildID: cID, SharePercentage: 50})
+		if err != nil {
+			t.Errorf("unexpected link error: %v", err)
+		}
+
+		// Success unlink
+		err = svc.UnlinkChild(authedCtx, asset.UnlinkChildCommand{ParentID: pID, ChildID: cID})
+		if err != nil {
+			t.Errorf("unexpected unlink error: %v", err)
+		}
+	})
 }
+
+type mockAssetRepoWithAncestors struct {
+	mockAssetRepo
+	ancestors []uuid.UUID
+}
+
+func (m *mockAssetRepoWithAncestors) FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
+	return m.ancestors, nil
+}
+

@@ -14,6 +14,27 @@ import { ChartTooltip } from './ChartTooltip';
 export function PaymentKindBreakdown({ payments = [], currency = '', content = {} }) {
   const paymentKindData = useMemo(() => {
     const kindsMap = {
+      MONEY: {
+        key: 'MONEY',
+        name: 'Capital (Money)',
+        amount: 0,
+        count: 0,
+        fill: '#10b981',
+      },
+      TIME: {
+        key: 'TIME',
+        name: 'Labor (Time)',
+        amount: 0,
+        count: 0,
+        fill: '#f59e0b',
+      },
+      GOODS: {
+        key: 'GOODS',
+        name: 'Goods & Materials',
+        amount: 0,
+        count: 0,
+        fill: '#8b5cf6',
+      },
       DOWN_PAYMENT: {
         key: 'DOWN_PAYMENT',
         name: String(content.kinds?.downPayment || 'Down Payment'),
@@ -23,10 +44,10 @@ export function PaymentKindBreakdown({ payments = [], currency = '', content = {
       },
       UPON_COMPLETION: {
         key: 'UPON_COMPLETION',
-        name: String(content.kinds?.uponCompletion || 'Upon Completion'),
+        name: String(content.kinds?.uponCompletion || 'Direct Payment'),
         amount: 0,
         count: 0,
-        fill: '#10b981',
+        fill: '#06b6d4',
       },
       CREDIT_PAYMENT: {
         key: 'CREDIT_PAYMENT',
@@ -39,7 +60,7 @@ export function PaymentKindBreakdown({ payments = [], currency = '', content = {
     let total = 0;
 
     payments.forEach((p) => {
-      const kindKey = p.kind || 'UPON_COMPLETION';
+      const kindKey = p.kind || p.resourceType || 'MONEY';
       const amount = parseFloat(p.homeAmount) || (p.rawHomeAmount ? p.rawHomeAmount / 100 : 0) || 0;
       total += amount;
 
@@ -53,7 +74,7 @@ export function PaymentKindBreakdown({ payments = [], currency = '', content = {
             name: String(content.kinds?.other || 'Other'),
             amount: 0,
             count: 0,
-            fill: '#a855f7',
+            fill: '#64748b',
           };
         }
         kindsMap.OTHER.amount += amount;
@@ -78,11 +99,11 @@ export function PaymentKindBreakdown({ payments = [], currency = '', content = {
             <Layers className="h-4 w-4" />
           </div>
           <CardTitle className="text-base font-bold tracking-tight">
-            {String(content.charts?.paymentKinds?.title || 'Payment Kinds')}
+            {String(content.charts?.paymentKinds?.title || 'Resource Breakdown')}
           </CardTitle>
         </div>
         <CardDescription className="text-xs">
-          {String(content.charts?.paymentKinds?.description || 'Down payments vs upon completion')}
+          {String(content.charts?.paymentKinds?.description || 'Investments across capital, labor hours, and goods')}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-between pt-2">

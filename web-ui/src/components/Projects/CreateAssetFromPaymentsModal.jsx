@@ -128,23 +128,19 @@ export default function CreateAssetFromPaymentsModal({
       return;
     }
 
-    if (!typeId) {
-      toast.error(String(content?.selectTypePlaceholder || 'Please select a type'));
-      return;
-    }
-
     setLoading(true);
     try {
       const paymentIds = payments.map((p) => p.id);
-      const createdAsset = await assetRepository.createAssetFromPayments(projectId, {
+      const payload = {
         paymentIds,
         name: name.trim(),
         description: description.trim(),
-        typeId,
         acquiredAt: acquiredAt ? new Date(acquiredAt) : undefined,
         targetCurrency: currency,
-      });
+      };
+      if (typeId) payload.typeId = typeId;
 
+      const createdAsset = await assetRepository.createAssetFromPayments(projectId, payload);
       onSuccess(createdAsset);
     } catch (err) {
       toast.error(`${String(content?.failedToCreateAsset || 'Failed to create asset')}: ${err.message}`);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
@@ -9,11 +9,14 @@ import {
   FileUp,
   Package,
   X,
+  Clock,
+  Briefcase,
+  User,
+  Tag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
@@ -24,7 +27,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import usePayments from '../../hooks/payments';
+import useInvestments from '../../hooks/investments';
 import AddPaymentModal from './AddPaymentModal';
 import EditPaymentModal from './EditPaymentModal';
 import ImportStatementModal from './ImportStatementModal';
@@ -36,197 +39,137 @@ import { CopyableText } from './ListView/CopyableText';
 import { DetailItem } from './ListView/DetailItem';
 import './Payments.css';
 
-function PaymentMainContent({ payment }) {
+function InvestmentMainContent({ investment }) {
+  const isTime = investment.resourceType === 'TIME';
+  const isGoods = investment.resourceType === 'GOODS';
+
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
           <Calendar className="h-3 w-3" />
-          {payment.paymentDate}
+          {investment.date || investment.paymentDate}
         </span>
-        <span className="font-semibold text-base text-foreground">{payment.description}</span>
+
+        {/* Target Asset Badge */}
+        <Badge variant="outline" className="text-xs font-semibold gap-1 border-primary/30 bg-primary/5 text-primary rounded-md">
+          <Package className="h-3 w-3" />
+          <span>{investment.assetName || investment.type || 'General Operations'}</span>
+        </Badge>
+
+        {/* Resource Type Badge */}
+        {isTime && (
+          <Badge variant="secondary" className="text-[11px] font-medium gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 rounded-md">
+            <Clock className="h-3 w-3" />
+            <span>{investment.resourceSummary || 'Labor'}</span>
+          </Badge>
+        )}
+
+        {isGoods && (
+          <Badge variant="secondary" className="text-[11px] font-medium gap-1 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 rounded-md">
+            <Briefcase className="h-3 w-3" />
+            <span>{investment.resourceSummary || 'Goods'}</span>
+          </Badge>
+        )}
+
+        {/* Contributor */}
+        {investment.contributorName && (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <User className="h-3 w-3" />
+            <span>{investment.contributorName}</span>
+          </span>
+        )}
       </div>
-      <div className="flex gap-1.5 flex-wrap">
-        <Badge variant="outline" className="rounded-md text-[11px] font-medium border-border/70 text-muted-foreground">{payment.category}</Badge>
-        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">{payment.type}</Badge>
-      </div>
+
+      {/* Description */}
+      {investment.description && (
+        <span className="font-semibold text-sm text-foreground">
+          {investment.description}
+        </span>
+      )}
+
+      {/* Tags */}
+      {Array.isArray(investment.tags) && investment.tags.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap items-center mt-0.5">
+          {investment.tags.map((tag) => (
+            <Badge
+              key={tag}
+              variant="outline"
+              className="text-[10px] font-mono px-1.5 py-0 rounded-md border-border/60 text-muted-foreground"
+            >
+              #{tag}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-PaymentMainContent.propTypes = {
-  payment: PropTypes.shape({
-    paymentDate: PropTypes.string,
-    description: PropTypes.string,
-    category: PropTypes.string,
-    type: PropTypes.string,
-  }).isRequired,
+InvestmentMainContent.propTypes = {
+  investment: PropTypes.object.isRequired,
 };
 
-function PaymentAmount({ payment }) {
+function InvestmentAmount({ investment }) {
   return (
     <div className="flex flex-col items-end gap-0.5">
-      <span
-        className={cn(
-          'px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block',
-          payment.isDownPayment
-            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20',
-        )}
-      >
-        {payment.formattedAmount}
+      <span className="px-2.5 py-1 rounded-xl text-sm font-bold tracking-tight inline-block bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+        {investment.formattedAmount}
       </span>
-      {payment.hasDifferentHomeCurrency && payment.formattedHomeAmount && (
+      {investment.hasDifferentHomeCurrency && investment.formattedHomeAmount && (
         <span className="text-[11px] text-muted-foreground font-mono">
-          {payment.formattedHomeAmount}
+          {investment.formattedHomeAmount}
         </span>
       )}
     </div>
   );
 }
 
-PaymentAmount.propTypes = {
-  payment: PropTypes.shape({
-    isDownPayment: PropTypes.bool,
-    formattedAmount: PropTypes.string,
-    hasDifferentHomeCurrency: PropTypes.bool,
-    formattedHomeAmount: PropTypes.string,
-  }).isRequired,
+InvestmentAmount.propTypes = {
+  investment: PropTypes.object.isRequired,
 };
 
-function PaymentDetails({ payment, typeLabel, categoryLabel }) {
+function InvestmentDetails({ investment }) {
   return (
     <div className="space-y-2">
       <DetailItem label="ID">
-        <CopyableText text={payment.id} truncate />
+        <CopyableText text={investment.id} truncate />
       </DetailItem>
-      <DetailItem label={typeLabel}>
-        <span className="text-sm text-foreground">{payment.type}</span>
+      <DetailItem label="Asset">
+        <span className="text-sm font-semibold text-foreground">
+          {investment.assetName || investment.type || 'General Operations'}
+        </span>
       </DetailItem>
-      <DetailItem label={categoryLabel}>
-        <span className="text-sm text-foreground">{payment.category}</span>
+      <DetailItem label="Resource Type">
+        <span className="text-sm text-foreground">{investment.resourceType || 'Capital'}</span>
       </DetailItem>
+      {investment.isTime && investment.timeHours && (
+        <DetailItem label="Time Breakdown">
+          <span className="text-sm text-foreground">
+            {investment.timeHours} hrs {investment.timeHourlyRate ? `@ ${investment.timeHourlyRate} ${investment.currency}/hr` : ''}
+          </span>
+        </DetailItem>
+      )}
+      {investment.isGoods && (
+        <DetailItem label="Goods Breakdown">
+          <span className="text-sm text-foreground">
+            {investment.goodsItemName} {investment.goodsQuantity ? `(${investment.goodsQuantity} ${investment.goodsUnit || 'units'})` : ''}
+          </span>
+        </DetailItem>
+      )}
+      {investment.tags && investment.tags.length > 0 && (
+        <DetailItem label="Tags">
+          <span className="text-sm text-foreground font-mono">
+            {investment.tags.map((t) => `#${t}`).join(', ')}
+          </span>
+        </DetailItem>
+      )}
     </div>
   );
 }
 
-PaymentDetails.propTypes = {
-  payment: PropTypes.shape({
-    id: PropTypes.string,
-    type: PropTypes.string,
-    category: PropTypes.string,
-  }).isRequired,
-  typeLabel: PropTypes.string.isRequired,
-  categoryLabel: PropTypes.string.isRequired,
-};
-
-function DebouncedDateInput({
-  value,
-  onChange,
-  className,
-}) {
-  const [localValue, setLocalValue] = useState(value || '');
-  const timerRef = useRef(null);
-
-  useEffect(() => {
-    setLocalValue(value || '');
-  }, [value]);
-
-  useEffect(() => () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-  }, []);
-
-  const isValidFilterDate = (val) => {
-    if (!val) return true;
-    return /^\d{4}-\d{2}-\d{2}$/.test(val) && parseInt(val.slice(0, 4), 10) >= 1000;
-  };
-
-  const handleChange = (e) => {
-    const nextVal = e.target.value;
-    setLocalValue(nextVal);
-
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (!nextVal) {
-      if (value !== '') {
-        onChange('');
-      }
-      return;
-    }
-
-    if (isValidFilterDate(nextVal)) {
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        onChange(nextVal);
-      }, 500);
-    }
-  };
-
-  const handleBlur = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (!localValue) {
-      if (value !== '') {
-        onChange('');
-      }
-    } else if (isValidFilterDate(localValue)) {
-      if (localValue !== value) {
-        onChange(localValue);
-      }
-    } else {
-      setLocalValue(value || '');
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      if (!localValue) {
-        if (value !== '') {
-          onChange('');
-        }
-      } else if (isValidFilterDate(localValue)) {
-        if (localValue !== value) {
-          onChange(localValue);
-        }
-      } else {
-        setLocalValue(value || '');
-      }
-    }
-  };
-
-  return (
-    <Input
-      type="date"
-      value={localValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      className={className}
-    />
-  );
-}
-
-DebouncedDateInput.propTypes = {
-  value: PropTypes.string,
-  onChange: PropTypes.func.isRequired,
-  className: PropTypes.string,
-};
-
-DebouncedDateInput.defaultProps = {
-  value: '',
-  className: '',
+InvestmentDetails.propTypes = {
+  investment: PropTypes.object.isRequired,
 };
 
 export function Payments() {
@@ -237,23 +180,24 @@ export function Payments() {
 
   const {
     loading,
-    payments,
+    investments,
     total,
     currentPage,
     pageSize,
-    types,
+    availableTags,
+    availableAssets,
     filters,
     setFilter,
     resetFilters,
-    selectedPaymentsMap,
-    selectedPaymentsList,
+    selectedInvestmentsMap,
+    selectedInvestmentsList,
     selectedCount,
-    toggleSelectPayment,
+    toggleSelectInvestment,
     toggleSelectAllPage,
     isAllPageSelected,
     clearSelection,
     addModalOpened,
-    paymentIdToEdit,
+    investmentIdToEdit,
     onPaginationChange,
     openAddModal,
     closeAddModal,
@@ -261,8 +205,8 @@ export function Payments() {
     openEditModal,
     closeEditModal,
     onEditSuccess,
-    removePayment,
-  } = usePayments(projectId);
+    removeInvestment,
+  } = useInvestments(projectId);
 
   const [importModalOpened, setImportModalOpened] = useState(false);
   const openImportModal = () => setImportModalOpened(true);
@@ -272,17 +216,17 @@ export function Payments() {
   const openCreateAssetModal = () => setCreateAssetModalOpened(true);
   const closeCreateAssetModal = () => setCreateAssetModalOpened(false);
 
-  const handleRemove = (paymentId) => {
-    removePayment(paymentId, {
-      successMessage: String(content.paymentRemovedSuccess),
-      errorMessage: String(content.failedToRemove),
+  const handleRemove = (investmentId) => {
+    removeInvestment(investmentId, {
+      successMessage: String(content.paymentRemovedSuccess || 'Investment removed'),
+      errorMessage: String(content.failedToRemove || 'Failed to remove investment'),
     });
   };
 
   const handleAssetCreated = () => {
     closeCreateAssetModal();
     clearSelection();
-    toast.success(String(content.assetCreatedSuccess || 'Asset created successfully from selected payments'), {
+    toast.success(String(content.assetCreatedSuccess || 'Asset created successfully from selected investments'), {
       action: {
         label: String(content.viewInAssets || 'View in Assets'),
         onClick: () => navigate(getLocalizedUrl(`/projects/${projectId}/assets`, locale)),
@@ -290,20 +234,20 @@ export function Payments() {
     });
   };
 
-  const hasActiveFilters = Boolean(filters.typeId || filters.fromDate || filters.toDate);
+  const hasActiveFilters = Boolean(filters.assetId || filters.resourceType || filters.tag);
 
   return (
     <>
       <ListView
         loading={loading}
-        items={payments}
+        items={investments}
         total={total}
         pageSize={pageSize}
         currentPage={currentPage}
         onPaginationChange={onPaginationChange}
         onAddButtonClick={openAddModal}
         addButtonIcon={<DollarSign className="h-4 w-4" />}
-        addButtonText={String(content.addPayment)}
+        addButtonText={String(content.addPayment || 'Log Investment')}
         addButtonDisabled={addModalOpened}
         extraActions={(
           <Button
@@ -319,51 +263,83 @@ export function Payments() {
           <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap flex-1">
-                {/* Type Filter */}
+                {/* Asset Filter */}
                 <div className="w-full sm:w-48">
                   <Select
-                    value={filters.typeId || 'ALL'}
-                    onValueChange={(val) => setFilter('typeId', val === 'ALL' ? '' : val)}
+                    value={filters.assetId || 'ALL'}
+                    onValueChange={(val) => setFilter('assetId', val === 'ALL' ? '' : val)}
                   >
                     <SelectTrigger className="rounded-xl h-9 text-xs">
-                      <SelectValue placeholder={String(content.filterAllTypes || 'All Types')} />
+                      <SelectValue placeholder={String(content.filterAllAssets || 'All Assets')} />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl">
+                    <SelectContent className="rounded-xl max-h-56">
                       <SelectItem value="ALL" className="rounded-lg text-xs font-medium">
-                        {String(content.filterAllTypes || 'All Types')}
+                        {String(content.filterAllAssets || 'All Assets')}
                       </SelectItem>
-                      {types.map((type) => (
-                        <SelectItem key={type.id} value={type.id} className="rounded-lg text-xs">
-                          {type.name} [{type.category}]
+                      {availableAssets.map((asset) => (
+                        <SelectItem key={asset.id} value={asset.id} className="rounded-lg text-xs">
+                          {asset.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Date Range: From */}
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <Label className="text-[11px] text-muted-foreground whitespace-nowrap">
-                    {String(content.filterDateFrom || 'From')}:
-                  </Label>
-                  <DebouncedDateInput
-                    value={filters.fromDate}
-                    onChange={(val) => setFilter('fromDate', val)}
-                    className="rounded-xl h-9 text-xs w-full sm:w-36"
-                  />
+                {/* Resource Type Filter */}
+                <div className="w-full sm:w-40">
+                  <Select
+                    value={filters.resourceType || 'ALL'}
+                    onValueChange={(val) => setFilter('resourceType', val === 'ALL' ? '' : val)}
+                  >
+                    <SelectTrigger className="rounded-xl h-9 text-xs">
+                      <SelectValue placeholder={String(content.filterAllResourceTypes || 'All Resources')} />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="ALL" className="rounded-lg text-xs font-medium">
+                        {String(content.filterAllResourceTypes || 'All Resources')}
+                      </SelectItem>
+                      <SelectItem value="MONEY" className="rounded-lg text-xs">
+                        Capital (Money)
+                      </SelectItem>
+                      <SelectItem value="TIME" className="rounded-lg text-xs">
+                        Labor (Time)
+                      </SelectItem>
+                      <SelectItem value="GOODS" className="rounded-lg text-xs">
+                        Goods & Materials
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Date Range: To */}
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <Label className="text-[11px] text-muted-foreground whitespace-nowrap">
-                    {String(content.filterDateTo || 'To')}:
-                  </Label>
-                  <DebouncedDateInput
-                    value={filters.toDate}
-                    onChange={(val) => setFilter('toDate', val)}
-                    className="rounded-xl h-9 text-xs w-full sm:w-36"
-                  />
+                {/* Tag Filter */}
+                <div className="w-full sm:w-44">
+                  <div className="relative">
+                    <Tag className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder={String(content.filterTagPlaceholder || 'Filter by tag...')}
+                      value={filters.tag || ''}
+                      onChange={(e) => setFilter('tag', e.target.value.trim().replace(/^#/, ''))}
+                      className="rounded-xl h-9 text-xs pl-8"
+                    />
+                  </div>
                 </div>
+
+                {/* Available Quick Tag Pills */}
+                {availableTags.length > 0 && !filters.tag && (
+                  <div className="hidden lg:flex items-center gap-1 text-[11px] text-muted-foreground overflow-x-auto">
+                    <span>Popular:</span>
+                    {availableTags.slice(0, 4).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setFilter('tag', t)}
+                        className="px-2 py-0.5 rounded-md bg-muted/60 hover:bg-muted text-foreground transition-colors font-mono"
+                      >
+                        #{t}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Reset Filters */}
                 {hasActiveFilters && (
@@ -380,7 +356,7 @@ export function Payments() {
               </div>
 
               {/* Select All on Page Toggle */}
-              {payments.length > 0 && (
+              {investments.length > 0 && (
                 <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-0 border-border/40">
                   <Checkbox
                     id="select-all-page"
@@ -403,7 +379,7 @@ export function Payments() {
                   {selectedCount}
                 </Badge>
                 <span className="text-xs font-semibold text-foreground">
-                  {String(content.selectedPayments || 'payments selected')}
+                  {String(content.selectedPayments || 'investments selected')}
                 </span>
               </div>
               <Button
@@ -426,32 +402,26 @@ export function Payments() {
             </Button>
           </div>
         ) : null}
-        renderItemPrefix={(payment) => (
+        renderItemPrefix={(inv) => (
           <Checkbox
-            checked={Boolean(selectedPaymentsMap[payment.id])}
-            onCheckedChange={() => toggleSelectPayment(payment)}
-            aria-label={`Select payment ${payment.description}`}
+            checked={Boolean(selectedInvestmentsMap[inv.id])}
+            onCheckedChange={() => toggleSelectInvestment(inv)}
+            aria-label={`Select investment ${inv.description}`}
           />
         )}
-        renderItemMainContent={(payment) => <PaymentMainContent payment={payment} />}
-        renderItemAmount={(payment) => <PaymentAmount payment={payment} />}
-        renderItemDetails={(payment) => (
-          <PaymentDetails
-            payment={payment}
-            typeLabel={String(content.typeLabel)}
-            categoryLabel={String(content.categoryLabel)}
-          />
-        )}
-        renderItemActions={(payment) => (
+        renderItemMainContent={(inv) => <InvestmentMainContent investment={inv} />}
+        renderItemAmount={(inv) => <InvestmentAmount investment={inv} />}
+        renderItemDetails={(inv) => <InvestmentDetails investment={inv} />}
+        renderItemActions={(inv) => (
           <>
-            <EditButton onClick={() => openEditModal(payment.id)} />
-            <RemoveButton onRemove={() => handleRemove(payment.id)} />
+            <EditButton onClick={() => openEditModal(inv.id)} />
+            <RemoveButton onRemove={() => handleRemove(inv.id)} />
           </>
         )}
       />
 
       <AddPaymentModal
-        types={types}
+        assets={availableAssets}
         projectId={projectId}
         open={addModalOpened}
         onCancel={closeAddModal}
@@ -459,21 +429,21 @@ export function Payments() {
       />
 
       <ImportStatementModal
-        types={types}
+        assets={availableAssets}
         projectId={projectId}
         open={importModalOpened}
         onCancel={closeImportModal}
         onSuccess={() => {
           closeImportModal();
-          onAddSuccess(String(content.paymentsImportedSuccess || 'Payments imported successfully'));
+          onAddSuccess(String(content.paymentsImportedSuccess || 'Investments imported successfully'));
         }}
       />
 
       <EditPaymentModal
-        types={types}
+        assets={availableAssets}
         projectId={projectId}
-        paymentId={paymentIdToEdit}
-        open={!!paymentIdToEdit}
+        paymentId={investmentIdToEdit}
+        open={Boolean(investmentIdToEdit)}
         onCancel={closeEditModal}
         onSuccess={() => onEditSuccess(String(content.paymentUpdatedSuccess))}
       />
@@ -483,11 +453,11 @@ export function Payments() {
         onCancel={closeCreateAssetModal}
         onSuccess={handleAssetCreated}
         projectId={projectId}
-        types={types}
-        payments={selectedPaymentsList}
+        payments={selectedInvestmentsList}
       />
     </>
   );
 }
 
+export const Investments = Payments;
 export default Payments;

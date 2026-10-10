@@ -4,6 +4,7 @@ import { ProjectsRepository } from './projects';
 import { TypesRepository } from './types';
 import { CategoriesRepository } from './categories';
 import { PaymentRepository } from './payments';
+import { InvestmentRepository } from './investments';
 import { AssetRepository } from './assets';
 import { UsersRepository } from './users';
 import { InvitationsRepository } from './invitations';
@@ -16,6 +17,18 @@ export const projectsRepository = new ProjectsRepository(request);
 export const typesRepository = new TypesRepository(request);
 export const categoriesRepository = new CategoriesRepository(request);
 export const paymentRepository = new PaymentRepository(request);
+export const investmentRepository = new InvestmentRepository(request);
 export const assetRepository = new AssetRepository(request);
 export const usersRepository = new UsersRepository(request);
 export const invitationsRepository = new InvitationsRepository(request);
+
+export {
+  ProjectsRepository,
+  TypesRepository,
+  CategoriesRepository,
+  PaymentRepository,
+  InvestmentRepository,
+  AssetRepository,
+  UsersRepository,
+  InvitationsRepository,
+};

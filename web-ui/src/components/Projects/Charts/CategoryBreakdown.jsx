@@ -6,23 +6,32 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { PieChart as PieIcon } from 'lucide-react';
+import { Tag } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ChartTooltip } from './ChartTooltip';
 import { CHART_COLORS } from './colors';
 
 export function CategoryBreakdown({ payments = [], currency = '', content = {} }) {
-  const uncategorizedLabel = String(content.labels?.uncategorized || 'Uncategorized');
+  const uncategorizedLabel = String(content.labels?.uncategorized || 'General');
 
   const categoryData = useMemo(() => {
     const map = new Map();
     let total = 0;
 
     payments.forEach((p) => {
-      const cat = p.category || uncategorizedLabel;
+      const tagList = Array.isArray(p.tags) && p.tags.length > 0
+        ? p.tags
+        : (p.category ? p.category.split(',').map((s) => s.trim()).filter(Boolean) : [uncategorizedLabel]);
+
+      const effectiveTags = tagList.length > 0 ? tagList : [uncategorizedLabel];
       const amount = parseFloat(p.homeAmount) || (p.rawHomeAmount ? p.rawHomeAmount / 100 : 0) || 0;
       total += amount;
-      map.set(cat, (map.get(cat) || 0) + amount);
+
+      const sharePerTag = amount / effectiveTags.length;
+      effectiveTags.forEach((tag) => {
+        const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
+        map.set(cleanTag, (map.get(cleanTag) || 0) + sharePerTag);
+      });
     });
 
     const sorted = Array.from(map.entries())
@@ -41,14 +50,14 @@ export function CategoryBreakdown({ payments = [], currency = '', content = {} }
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <PieIcon className="h-4 w-4" />
+            <Tag className="h-4 w-4" />
           </div>
           <CardTitle className="text-base font-bold tracking-tight">
-            {String(content.charts?.byCategory?.title || 'Expenses by Category')}
+            {String(content.charts?.byCategory?.title || 'Investments by Tag')}
           </CardTitle>
         </div>
         <CardDescription className="text-xs">
-          {String(content.charts?.byCategory?.description || 'Payment breakdown across categories')}
+          {String(content.charts?.byCategory?.description || 'Breakdown across resource tags')}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-between pt-2">
@@ -83,7 +92,7 @@ export function CategoryBreakdown({ payments = [], currency = '', content = {} }
               </ResponsiveContainer>
             </div>
 
-            {/* Category breakdown legend list */}
+            {/* Category/Tag breakdown legend list */}
             <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
               {categoryData.map((item, index) => (
                 <div
@@ -95,7 +104,7 @@ export function CategoryBreakdown({ payments = [], currency = '', content = {} }
                       className="h-2.5 w-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                     />
-                    <span className="truncate font-medium text-foreground" title={item.name}>
+                    <span className="truncate font-mono font-medium text-foreground" title={item.name}>
                       {item.name}
                     </span>
                   </div>
