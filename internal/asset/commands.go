@@ -19,6 +19,7 @@ type CreateAssetCommand struct {
 	Price         *money.Money
 	AcquiredAt    time.Time
 	WithPayment   bool
+	Tags          []string
 }
 
 type CreateAssetFromPaymentsCommand struct {
@@ -43,6 +44,7 @@ type UpdateAssetCommand struct {
 	TargetPrice   *money.Money
 	Price         *money.Money
 	AcquiredAt    time.Time
+	Tags          []string
 }
 
 type RemoveAssetCommand struct {

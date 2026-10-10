@@ -5,6 +5,7 @@ import {
   Projects,
   ProjectDetails,
   Total,
+  Tags,
   Settings,
   Login,
   AuthenticatedOnly,
@@ -93,6 +94,11 @@ const createRoutesForPrefix = (prefix) => [
       {
         path: 'total',
         Component: AuthenticatedOnly(Total),
+        errorElement,
+      },
+      {
+        path: 'tags',
+        Component: AuthenticatedOnly(Tags),
         errorElement,
       },
       {

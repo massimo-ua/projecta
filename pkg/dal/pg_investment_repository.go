@@ -93,6 +93,10 @@ func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Inv
 		return errors.Join(ErrFailedToSaveInvestment, err)
 	}
 
+	if err := r.saveAllocations(ctx, inv); err != nil {
+		return errors.Join(ErrFailedToSaveInvestment, err)
+	}
+
 	return nil
 }
 
@@ -127,7 +131,73 @@ func (r *PgInvestmentRepository) update(ctx context.Context, inv *investment.Inv
 		return errors.Join(ErrFailedToSaveInvestment, err)
 	}
 
+	if err := r.saveAllocations(ctx, inv); err != nil {
+		return errors.Join(ErrFailedToSaveInvestment, err)
+	}
+
 	return nil
+}
+
+func (r *PgInvestmentRepository) saveAllocations(ctx context.Context, inv *investment.Investment) error {
+	delSql := "DELETE FROM projecta_investment_assets WHERE investment_id = $1"
+	if _, err := r.db.Exec(ctx, delSql, inv.ID.String()); err != nil {
+		return err
+	}
+
+	allocations := inv.AssetAllocations
+	if len(allocations) == 0 && inv.Asset != nil {
+		allocations = []investment.InvestmentAssetLink{
+			{
+				AssetID:         inv.Asset.ID(),
+				SharePercentage: 100.0,
+			},
+		}
+	}
+
+	for _, a := range allocations {
+		insertSql := `
+			INSERT INTO projecta_investment_assets (investment_id, asset_id, share_percentage)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (investment_id, asset_id) DO UPDATE SET share_percentage = EXCLUDED.share_percentage
+		`
+		if _, err := r.db.Exec(ctx, insertSql, inv.ID.String(), a.AssetID.String(), a.SharePercentage); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *PgInvestmentRepository) loadAllocations(ctx context.Context, investmentIDs []string) (map[string][]investment.InvestmentAssetLink, error) {
+	result := make(map[string][]investment.InvestmentAssetLink)
+	if len(investmentIDs) == 0 {
+		return result, nil
+	}
+
+	sql := `
+		SELECT ia.investment_id, ia.asset_id, a.name, ia.share_percentage
+		FROM projecta_investment_assets ia
+		JOIN projecta_assets a ON a.asset_id = ia.asset_id
+		WHERE ia.investment_id = ANY($1)
+		ORDER BY ia.share_percentage DESC
+	`
+	rows, err := r.db.Query(ctx, sql, investmentIDs)
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var invID, astID, astName string
+		var share float64
+		if err := rows.Scan(&invID, &astID, &astName, &share); err == nil {
+			result[invID] = append(result[invID], investment.InvestmentAssetLink{
+				AssetID:         uuid.MustParse(astID),
+				AssetName:       astName,
+				SharePercentage: share,
+			})
+		}
+	}
+	return result, nil
 }
 
 func (r *PgInvestmentRepository) Remove(ctx context.Context, inv *investment.Investment) error {
@@ -158,7 +228,7 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 		qb.Where(qb.Equal("projecta_investments.project_id", filter.ProjectID.String()))
 	}
 	if filter.AssetID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_investments.asset_id", filter.AssetID.String()))
+		qb.Where(fmt.Sprintf("(projecta_investments.asset_id = %s OR projecta_investments.investment_id IN (SELECT investment_id FROM projecta_investment_assets WHERE asset_id = %s))", qb.Var(filter.AssetID.String()), qb.Var(filter.AssetID.String())))
 	}
 
 	sql, args := qb.Build()
@@ -170,6 +240,11 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 			return nil, ErrInvestmentNotFound
 		}
 		return nil, err
+	}
+
+	allocsMap, _ := r.loadAllocations(ctx, []string{inv.ID.String()})
+	if allocs, ok := allocsMap[inv.ID.String()]; ok && len(allocs) > 0 {
+		inv.SetAssetAllocations(allocs)
 	}
 
 	return inv, nil
@@ -213,12 +288,23 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 	defer rows.Close()
 
 	col := investment.NewCollection(total)
+	invIDs := make([]string, 0, total)
 	for rows.Next() {
 		inv, err := scanInvestment(rows)
 		if err != nil {
 			return nil, err
 		}
 		col.Add(inv)
+		invIDs = append(invIDs, inv.ID.String())
+	}
+
+	if len(invIDs) > 0 {
+		allocsMap, _ := r.loadAllocations(ctx, invIDs)
+		for _, inv := range col.Elements() {
+			if allocs, ok := allocsMap[inv.ID.String()]; ok && len(allocs) > 0 {
+				inv.SetAssetAllocations(allocs)
+			}
+		}
 	}
 
 	return col, nil
@@ -226,9 +312,16 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 
 func (r *PgInvestmentRepository) FindTags(ctx context.Context, projectID uuid.UUID) ([]string, error) {
 	sql := `
-		SELECT DISTINCT unnest(tags) AS tag 
-		FROM projecta_investments 
-		WHERE project_id = $1 
+		SELECT DISTINCT tag FROM (
+			SELECT unnest(tags) AS tag 
+			FROM projecta_investments 
+			WHERE project_id = $1 
+			UNION 
+			SELECT unnest(tags) AS tag 
+			FROM projecta_assets 
+			WHERE project_id = $1
+		) t 
+		WHERE tag <> '' 
 		ORDER BY tag ASC
 	`
 	rows, err := r.db.Query(ctx, sql, projectID.String())
@@ -282,7 +375,7 @@ func applyInvestmentFilters(qb *sqlbuilder.SelectBuilder, filter investment.Coll
 		qb.Where(qb.Equal("projecta_investments.project_id", filter.ProjectID.String()))
 	}
 	if filter.AssetID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_investments.asset_id", filter.AssetID.String()))
+		qb.Where(fmt.Sprintf("(projecta_investments.asset_id = %s OR projecta_investments.investment_id IN (SELECT investment_id FROM projecta_investment_assets WHERE asset_id = %s))", qb.Var(filter.AssetID.String()), qb.Var(filter.AssetID.String())))
 	}
 	if filter.OwnerID != uuid.Nil {
 		qb.Where(qb.Equal("projecta_investments.contributor_id", filter.OwnerID.String()))

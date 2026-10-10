@@ -52,6 +52,7 @@ type AssetDTO struct {
 	Type           *TypeDTO         `json:"type,omitempty"`
 	Children       []ChildAssetDTO  `json:"children"`
 	Parents        []ParentAssetDTO `json:"parents"`
+	Tags           []string         `json:"tags"`
 }
 
 func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) AssetDTO {
@@ -171,22 +172,24 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		Type:           typeDTO,
 		Children:       childrenDTO,
 		Parents:        parentsDTO,
+		Tags:           a.Tags(),
 	}
 }
 
 type CreateAssetDTO struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	TypeID         string `json:"type_id,omitempty"`
-	Price          int64  `json:"price,omitempty"`
-	Currency       string `json:"currency,omitempty"`
-	TargetPrice    int64  `json:"target_price,omitempty"`
-	TargetCurrency string `json:"target_currency,omitempty"`
-	Status         string `json:"status,omitempty"`
-	StartDate      string `json:"start_date,omitempty"`
-	CompletedDate  string `json:"completed_date,omitempty"`
-	AcquiredAt     string `json:"acquired_at,omitempty"`
-	WithPayment    bool   `json:"with_payment"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	TypeID         string   `json:"type_id,omitempty"`
+	Price          int64    `json:"price,omitempty"`
+	Currency       string   `json:"currency,omitempty"`
+	TargetPrice    int64    `json:"target_price,omitempty"`
+	TargetCurrency string   `json:"target_currency,omitempty"`
+	Status         string   `json:"status,omitempty"`
+	StartDate      string   `json:"start_date,omitempty"`
+	CompletedDate  string   `json:"completed_date,omitempty"`
+	AcquiredAt     string   `json:"acquired_at,omitempty"`
+	WithPayment    bool     `json:"with_payment"`
+	Tags           []string `json:"tags,omitempty"`
 }
 
 type CreateAssetFromPaymentsDTO struct {
@@ -199,17 +202,18 @@ type CreateAssetFromPaymentsDTO struct {
 }
 
 type UpdateAssetDTO struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	TypeID         string `json:"type_id,omitempty"`
-	Price          int64  `json:"price,omitempty"`
-	Currency       string `json:"currency,omitempty"`
-	TargetPrice    int64  `json:"target_price,omitempty"`
-	TargetCurrency string `json:"target_currency,omitempty"`
-	Status         string `json:"status,omitempty"`
-	StartDate      string `json:"start_date,omitempty"`
-	CompletedDate  string `json:"completed_date,omitempty"`
-	AcquiredAt     string `json:"acquired_at,omitempty"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	TypeID         string   `json:"type_id,omitempty"`
+	Price          int64    `json:"price,omitempty"`
+	Currency       string   `json:"currency,omitempty"`
+	TargetPrice    int64    `json:"target_price,omitempty"`
+	TargetCurrency string   `json:"target_currency,omitempty"`
+	Status         string   `json:"status,omitempty"`
+	StartDate      string   `json:"start_date,omitempty"`
+	CompletedDate  string   `json:"completed_date,omitempty"`
+	AcquiredAt     string   `json:"acquired_at,omitempty"`
+	Tags           []string `json:"tags,omitempty"`
 }
 
 type LinkChildAssetDTO struct {
@@ -320,6 +324,7 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		CompletedDate: completedDate,
 		AcquiredAt:    date,
 		WithPayment:   req.WithPayment,
+		Tags:          req.Tags,
 	}, nil
 }
 
@@ -522,6 +527,7 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		StartDate:     date,
 		CompletedDate: completedDate,
 		AcquiredAt:    date,
+		Tags:          req.Tags,
 	}, nil
 }
 

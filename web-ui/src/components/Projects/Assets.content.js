@@ -139,6 +139,18 @@ const assetsContent = {
       en: 'Asset description...',
       uk: 'Опис активу...',
     }),
+    tagsLabel: t({
+      en: 'Tags',
+      uk: 'Теги',
+    }),
+    tagsPlaceholder: t({
+      en: 'Type tag and press Enter',
+      uk: 'Введіть тег та натисніть Enter',
+    }),
+    suggestedTags: t({
+      en: 'Existing tags:',
+      uk: 'Існуючі теги:',
+    }),
     cancelButton: t({
       en: 'Cancel',
       uk: 'Скасувати',

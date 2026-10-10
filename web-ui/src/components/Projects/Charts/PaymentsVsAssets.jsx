@@ -120,7 +120,7 @@ export function PaymentsVsAssets({ payments = [], assets = [], currency = '', co
               </div>
               <div className="p-2.5 rounded-xl border border-border/60 bg-card/60">
                 <span className="text-[11px] font-medium text-muted-foreground block truncate">
-                  Net Delta
+                  {String(content.labels?.balance || 'Баланс проекту')}
                 </span>
                 <span className="font-mono font-bold text-foreground text-xs sm:text-sm">
                   {new Intl.NumberFormat().format(netBalance)} {currency}

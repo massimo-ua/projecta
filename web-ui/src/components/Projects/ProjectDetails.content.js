@@ -27,6 +27,10 @@ const projectDetailsContent = {
       en: 'Types',
       uk: 'Типи',
     }),
+    tags: t({
+      en: 'Tags',
+      uk: 'Теги',
+    }),
     settings: t({
       en: 'Settings',
       uk: 'Налаштування',

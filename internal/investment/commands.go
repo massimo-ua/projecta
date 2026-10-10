@@ -7,35 +7,42 @@ import (
 	"github.com/google/uuid"
 )
 
+type InvestmentAssetInput struct {
+	AssetID         uuid.UUID
+	SharePercentage float64
+}
+
 type CreateInvestmentCommand struct {
-	ProjectID      uuid.UUID
-	AssetID        uuid.UUID
-	ResourceType   ResourceType
-	Amount         *money.Money
-	TimeHours      *float64
-	TimeHourlyRate *money.Money
-	GoodsQuantity  *float64
-	GoodsUnit      string
-	GoodsItemName  string
-	Description    string
-	Date           time.Time
-	Tags           []string
+	ProjectID        uuid.UUID
+	AssetID          uuid.UUID
+	AssetAllocations []InvestmentAssetInput
+	ResourceType     ResourceType
+	Amount           *money.Money
+	TimeHours        *float64
+	TimeHourlyRate   *money.Money
+	GoodsQuantity    *float64
+	GoodsUnit        string
+	GoodsItemName    string
+	Description      string
+	Date             time.Time
+	Tags             []string
 }
 
 type UpdateInvestmentCommand struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	AssetID        uuid.UUID
-	ResourceType   ResourceType
-	Amount         *money.Money
-	TimeHours      *float64
-	TimeHourlyRate *money.Money
-	GoodsQuantity  *float64
-	GoodsUnit      string
-	GoodsItemName  string
-	Description    string
-	Date           time.Time
-	Tags           []string
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	AssetID          uuid.UUID
+	AssetAllocations []InvestmentAssetInput
+	ResourceType     ResourceType
+	Amount           *money.Money
+	TimeHours        *float64
+	TimeHourlyRate   *money.Money
+	GoodsQuantity    *float64
+	GoodsUnit        string
+	GoodsItemName    string
+	Description      string
+	Date             time.Time
+	Tags             []string
 }
 
 type RemoveInvestmentCommand struct {

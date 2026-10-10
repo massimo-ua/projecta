@@ -85,7 +85,29 @@ const totalContent = {
         }),
       },
     },
+    cards: {
+      totalPayments: t({
+        en: 'Total Invested',
+        uk: 'Всього інвестовано',
+      }),
+      projectBalance: t({
+        en: 'Project Balance',
+        uk: 'Баланс проекту',
+      }),
+    },
     kinds: {
+      money: t({
+        en: 'Capital (Money)',
+        uk: 'Капітал (Гроші)',
+      }),
+      time: t({
+        en: 'Labor (Time)',
+        uk: 'Праця (Час)',
+      }),
+      goods: t({
+        en: 'Goods & Materials',
+        uk: 'Товари та матеріали',
+      }),
       downPayment: t({
         en: 'Down Payment',
         uk: 'Авансовий платіж',
@@ -105,8 +127,12 @@ const totalContent = {
     },
     labels: {
       payments: t({
-        en: 'Total Investments',
-        uk: 'Всього інвестицій',
+        en: 'Total Invested',
+        uk: 'Всього інвестовано',
+      }),
+      balance: t({
+        en: 'Project Balance',
+        uk: 'Баланс проекту',
       }),
       assets: t({
         en: 'Total Assets',

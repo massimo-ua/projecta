@@ -56,7 +56,8 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 		"price",
 		"currency",
 		"acquired_at",
-		"owner_id")
+		"owner_id",
+		"tags")
 
 	qb.Values(
 		asset.ID().String(),
@@ -67,7 +68,8 @@ func (r *PgAssetRepository) create(ctx context.Context, asset *asset.Asset) erro
 		asset.Price().Amount(),
 		asset.Price().Currency().Code,
 		asset.AcquiredAt(),
-		asset.Owner().PersonID.String())
+		asset.Owner().PersonID.String(),
+		asset.Tags())
 
 	sql, args := qb.Build()
 
@@ -89,6 +91,7 @@ func (r *PgAssetRepository) update(ctx context.Context, asset *asset.Asset) erro
 		qb.Assign("price", asset.Price().Amount()),
 		qb.Assign("currency", asset.Price().Currency().Code),
 		qb.Assign("acquired_at", asset.AcquiredAt()),
+		qb.Assign("tags", asset.Tags()),
 	)
 	qb.Where(qb.Equal("asset_id", asset.ID().String()))
 	qb.Where(qb.Equal("owner_id", asset.Owner().PersonID.String()))
@@ -266,6 +269,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		categoryID          string
 		categoryName        string
 		categoryDescription string
+		tags                []string
 	)
 
 	if err := r.db.QueryRow(
@@ -291,6 +295,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		&categoryID,
 		&categoryName,
 		&categoryDescription,
+		&tags,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrAssetNotFound
@@ -323,6 +328,8 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	if err != nil {
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
+
+	a.SetTags(tags)
 
 	children, _ := r.FindChildren(ctx, a.ID())
 	a.SetChildren(children)
@@ -405,6 +412,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			categoryID          string
 			categoryName        string
 			categoryDescription string
+			tags                []string
 		)
 
 		if err = rows.Scan(
@@ -426,6 +434,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			&categoryID,
 			&categoryName,
 			&categoryDescription,
+			&tags,
 		); err != nil {
 			return nil, err
 		}
@@ -455,6 +464,8 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			return nil, err
 		}
 
+		a.SetTags(tags)
+
 		collection.Add(a)
 	}
 
@@ -481,6 +492,7 @@ func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {
 		"projecta_cost_categories.category_id",
 		qb.As("projecta_cost_categories.name", "category_name"),
 		qb.As("projecta_cost_categories.description", "category_description"),
+		"projecta_assets.tags",
 	)
 
 	qb.Join("people", "people.person_id = projecta_assets.owner_id")

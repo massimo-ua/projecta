@@ -14,6 +14,7 @@ import {
   FileText,
   DollarSign,
   Package,
+  Tag,
   Settings,
   ArrowLeft,
   Share2,
@@ -68,13 +69,14 @@ export function ProjectDetails() {
     {
       title: String(content.taxonomy || 'Configuration'),
       items: [
+        { key: 'tags', label: String(content.tags || 'Tags'), icon: Tag },
         { key: 'settings', label: String(content.settings), icon: Settings },
       ],
     },
   ];
 
   // Determine active tab properly
-  const validKeys = ['assets', 'investments', 'payments', 'total', 'settings'];
+  const validKeys = ['assets', 'investments', 'payments', 'total', 'tags', 'settings'];
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const lastSegment = pathSegments[pathSegments.length - 1];
   let currentTab = validKeys.includes(lastSegment) ? lastSegment : 'assets';

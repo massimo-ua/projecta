@@ -54,7 +54,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
-	if command.AssetID == uuid.Nil {
+	if command.AssetID == uuid.Nil && len(command.AssetAllocations) == 0 {
 		return nil, exceptions.NewValidationException("asset id is required", nil)
 	}
 
@@ -72,9 +72,62 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
-	anAsset, err := s.assets.FindOne(ctx, asset.Filter{ID: command.AssetID, ProjectID: command.ProjectID})
-	if err != nil {
-		return nil, exceptions.NewValidationException("asset not found in project", err)
+	var allocations []InvestmentAssetLink
+	var primaryAsset *asset.Asset
+
+	if len(command.AssetAllocations) > 1 {
+		var totalShare float64
+		seenAssets := make(map[uuid.UUID]bool)
+		for _, aInput := range command.AssetAllocations {
+			if aInput.AssetID == uuid.Nil {
+				return nil, exceptions.NewValidationException("asset id is required for each allocation", nil)
+			}
+			if seenAssets[aInput.AssetID] {
+				return nil, exceptions.NewValidationException("duplicate asset in allocations", nil)
+			}
+			seenAssets[aInput.AssetID] = true
+			if aInput.SharePercentage <= 0 || aInput.SharePercentage > 100 {
+				return nil, exceptions.NewValidationException("share percentage must be between 0 and 100 for shared investments", nil)
+			}
+			totalShare += aInput.SharePercentage
+			ast, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: command.ProjectID})
+			if err != nil {
+				return nil, exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
+			}
+			if primaryAsset == nil {
+				primaryAsset = ast
+			}
+			allocations = append(allocations, InvestmentAssetLink{
+				AssetID:         ast.ID(),
+				AssetName:       ast.Name(),
+				SharePercentage: aInput.SharePercentage,
+			})
+		}
+		if totalShare < 99.99 || totalShare > 100.01 {
+			return nil, exceptions.NewValidationException(fmt.Sprintf("total share percentages must equal 100%%, got %.2f%%", totalShare), nil)
+		}
+	} else {
+		var targetAssetID uuid.UUID
+		if len(command.AssetAllocations) == 1 {
+			targetAssetID = command.AssetAllocations[0].AssetID
+		} else if command.AssetID != uuid.Nil {
+			targetAssetID = command.AssetID
+		} else {
+			return nil, exceptions.NewValidationException("asset id or asset allocations are required", nil)
+		}
+
+		ast, err := s.assets.FindOne(ctx, asset.Filter{ID: targetAssetID, ProjectID: command.ProjectID})
+		if err != nil {
+			return nil, exceptions.NewValidationException("asset not found in project", err)
+		}
+		primaryAsset = ast
+		allocations = []InvestmentAssetLink{
+			{
+				AssetID:         ast.ID(),
+				AssetName:       ast.Name(),
+				SharePercentage: 100.0,
+			},
+		}
 	}
 
 	amount := command.Amount
@@ -97,7 +150,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 	inv := NewInvestment(
 		uuid.New(),
 		project,
-		anAsset,
+		primaryAsset,
 		owner,
 		resType,
 		amount,
@@ -110,6 +163,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		core.DateOrNow(command.Date),
 		command.Tags,
 	)
+	inv.SetAssetAllocations(allocations)
 
 	if err = s.investments.Save(ctx, inv); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
@@ -217,12 +271,68 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		return exceptions.NewInternalException(failedToFindInvestment, err)
 	}
 
-	if command.AssetID != uuid.Nil && command.AssetID != inv.Asset.ID() {
+	if len(command.AssetAllocations) > 1 {
+		var totalShare float64
+		seenAssets := make(map[uuid.UUID]bool)
+		var allocations []InvestmentAssetLink
+		var primaryAsset *asset.Asset
+		for _, aInput := range command.AssetAllocations {
+			if aInput.AssetID == uuid.Nil {
+				return exceptions.NewValidationException("asset id is required for each allocation", nil)
+			}
+			if seenAssets[aInput.AssetID] {
+				return exceptions.NewValidationException("duplicate asset in allocations", nil)
+			}
+			seenAssets[aInput.AssetID] = true
+			if aInput.SharePercentage <= 0 || aInput.SharePercentage > 100 {
+				return exceptions.NewValidationException("share percentage must be between 0 and 100 for shared investments", nil)
+			}
+			totalShare += aInput.SharePercentage
+			ast, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: command.ProjectID})
+			if err != nil {
+				return exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
+			}
+			if primaryAsset == nil {
+				primaryAsset = ast
+			}
+			allocations = append(allocations, InvestmentAssetLink{
+				AssetID:         ast.ID(),
+				AssetName:       ast.Name(),
+				SharePercentage: aInput.SharePercentage,
+			})
+		}
+		if totalShare < 99.99 || totalShare > 100.01 {
+			return exceptions.NewValidationException(fmt.Sprintf("total share percentages must equal 100%%, got %.2f%%", totalShare), nil)
+		}
+		inv.Asset = primaryAsset
+		inv.SetAssetAllocations(allocations)
+	} else if len(command.AssetAllocations) == 1 {
+		aInput := command.AssetAllocations[0]
+		anAsset, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: command.ProjectID})
+		if err != nil {
+			return exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
+		}
+		inv.Asset = anAsset
+		inv.SetAssetAllocations([]InvestmentAssetLink{
+			{
+				AssetID:         anAsset.ID(),
+				AssetName:       anAsset.Name(),
+				SharePercentage: 100.0,
+			},
+		})
+	} else if command.AssetID != uuid.Nil && (inv.Asset == nil || command.AssetID != inv.Asset.ID()) {
 		anAsset, err := s.assets.FindOne(ctx, asset.Filter{ID: command.AssetID, ProjectID: command.ProjectID})
 		if err != nil {
 			return exceptions.NewValidationException("asset not found in project", err)
 		}
 		inv.Asset = anAsset
+		inv.SetAssetAllocations([]InvestmentAssetLink{
+			{
+				AssetID:         anAsset.ID(),
+				AssetName:       anAsset.Name(),
+				SharePercentage: 100.0,
+			},
+		})
 	}
 
 	if command.ResourceType != "" {

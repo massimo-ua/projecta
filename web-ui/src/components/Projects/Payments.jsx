@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
 import { getLocalizedUrl } from 'intlayer';
 import {
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -26,7 +27,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import useInvestments from '../../hooks/investments';
 import AddPaymentModal from './AddPaymentModal';
 import EditPaymentModal from './EditPaymentModal';
@@ -40,6 +40,7 @@ import { DetailItem } from './ListView/DetailItem';
 import './Payments.css';
 
 function InvestmentMainContent({ investment }) {
+  const content = useIntlayer('payments');
   const isTime = investment.resourceType === 'TIME';
   const isGoods = investment.resourceType === 'GOODS';
 
@@ -52,23 +53,30 @@ function InvestmentMainContent({ investment }) {
         </span>
 
         {/* Target Asset Badge */}
-        <Badge variant="outline" className="text-xs font-semibold gap-1 border-primary/30 bg-primary/5 text-primary rounded-md">
-          <Package className="h-3 w-3" />
-          <span>{investment.assetName || investment.type || 'General Operations'}</span>
-        </Badge>
+        {investment.isMultiAsset ? (
+          <Badge variant="outline" className="text-xs font-semibold gap-1 border-primary/30 bg-primary/5 text-primary rounded-md">
+            <Package className="h-3 w-3" />
+            <span>{String(content.multiAssetBadge || 'Кілька активів')} ({investment.assetAllocations.length})</span>
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-xs font-semibold gap-1 border-primary/30 bg-primary/5 text-primary rounded-md">
+            <Package className="h-3 w-3" />
+            <span>{investment.assetName || investment.type || String(content.defaultCostType || 'General Operations')}</span>
+          </Badge>
+        )}
 
         {/* Resource Type Badge */}
         {isTime && (
           <Badge variant="secondary" className="text-[11px] font-medium gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 rounded-md">
             <Clock className="h-3 w-3" />
-            <span>{investment.resourceSummary || 'Labor'}</span>
+            <span>{investment.resourceSummary || String(content.laborBadge || 'Праця')}</span>
           </Badge>
         )}
 
         {isGoods && (
           <Badge variant="secondary" className="text-[11px] font-medium gap-1 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 rounded-md">
             <Briefcase className="h-3 w-3" />
-            <span>{investment.resourceSummary || 'Goods'}</span>
+            <span>{investment.resourceSummary || String(content.goodsBadge || 'Матеріали')}</span>
           </Badge>
         )}
 
@@ -130,35 +138,58 @@ InvestmentAmount.propTypes = {
 };
 
 function InvestmentDetails({ investment }) {
+  const content = useIntlayer('payments');
+
+  const resourceTypeName = investment.isTime
+    ? String(content.timeResource || 'Праця (Час)')
+    : investment.isGoods
+      ? String(content.goodsResource || 'Товари та матеріали')
+      : String(content.moneyResource || 'Капітал (Гроші)');
+
   return (
     <div className="space-y-2">
-      <DetailItem label="ID">
+      <DetailItem label={String(content.detailId || 'ID')}>
         <CopyableText text={investment.id} truncate />
       </DetailItem>
-      <DetailItem label="Asset">
-        <span className="text-sm font-semibold text-foreground">
-          {investment.assetName || investment.type || 'General Operations'}
-        </span>
-      </DetailItem>
-      <DetailItem label="Resource Type">
-        <span className="text-sm text-foreground">{investment.resourceType || 'Capital'}</span>
+      {investment.isMultiAsset ? (
+        <DetailItem label={String(content.allocationsBreakdown || 'Розподіл за активами')}>
+          <div className="space-y-1.5 w-full">
+            {investment.assetAllocations.map((alloc) => (
+              <div key={alloc.assetId} className="flex justify-between items-center text-sm py-1 border-b border-border/30 last:border-b-0">
+                <span className="font-medium text-foreground">{alloc.assetName}</span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {alloc.sharePercentage}% {alloc.amount ? `(${alloc.amount} ${investment.currency})` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </DetailItem>
+      ) : (
+        <DetailItem label={String(content.assetTargetLabel || 'Цільовий актив')}>
+          <span className="text-sm font-semibold text-foreground">
+            {investment.assetName || investment.type || String(content.defaultCostType || 'General Operations')}
+          </span>
+        </DetailItem>
+      )}
+      <DetailItem label={String(content.resourceTypeLabel || 'Тип ресурсу')}>
+        <span className="text-sm text-foreground">{resourceTypeName}</span>
       </DetailItem>
       {investment.isTime && investment.timeHours && (
-        <DetailItem label="Time Breakdown">
+        <DetailItem label={String(content.timeBreakdown || 'Деталізація часу')}>
           <span className="text-sm text-foreground">
-            {investment.timeHours} hrs {investment.timeHourlyRate ? `@ ${investment.timeHourlyRate} ${investment.currency}/hr` : ''}
+            {investment.timeHours} {String(content.timeHoursLabel || 'год')} {investment.timeHourlyRate ? `@ ${investment.timeHourlyRate} ${investment.currency}` : ''}
           </span>
         </DetailItem>
       )}
       {investment.isGoods && (
-        <DetailItem label="Goods Breakdown">
+        <DetailItem label={String(content.goodsBreakdown || 'Деталізація товарів/матеріалів')}>
           <span className="text-sm text-foreground">
-            {investment.goodsItemName} {investment.goodsQuantity ? `(${investment.goodsQuantity} ${investment.goodsUnit || 'units'})` : ''}
+            {investment.goodsItemName} {investment.goodsQuantity ? `(${investment.goodsQuantity} ${investment.goodsUnit || ''})` : ''}
           </span>
         </DetailItem>
       )}
       {investment.tags && investment.tags.length > 0 && (
-        <DetailItem label="Tags">
+        <DetailItem label={String(content.tagsLabel || 'Теги')}>
           <span className="text-sm text-foreground font-mono">
             {investment.tags.map((t) => `#${t}`).join(', ')}
           </span>
@@ -207,6 +238,15 @@ export function Payments() {
     onEditSuccess,
     removeInvestment,
   } = useInvestments(projectId);
+
+  const [searchParams] = useSearchParams();
+  const urlTag = searchParams.get('tag');
+
+  useEffect(() => {
+    if (urlTag) {
+      setFilter('tag', urlTag);
+    }
+  }, [urlTag, setFilter]);
 
   const [importModalOpened, setImportModalOpened] = useState(false);
   const openImportModal = () => setImportModalOpened(true);
@@ -299,13 +339,13 @@ export function Payments() {
                         {String(content.filterAllResourceTypes || 'All Resources')}
                       </SelectItem>
                       <SelectItem value="MONEY" className="rounded-lg text-xs">
-                        Capital (Money)
+                        {String(content.moneyResource || 'Capital (Money)')}
                       </SelectItem>
                       <SelectItem value="TIME" className="rounded-lg text-xs">
-                        Labor (Time)
+                        {String(content.timeResource || 'Labor (Time)')}
                       </SelectItem>
                       <SelectItem value="GOODS" className="rounded-lg text-xs">
-                        Goods & Materials
+                        {String(content.goodsResource || 'Goods & Materials')}
                       </SelectItem>
                     </SelectContent>
                   </Select>

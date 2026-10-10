@@ -36,21 +36,28 @@ func ToResourceType(val string) (ResourceType, error) {
 	}
 }
 
+type InvestmentAssetLink struct {
+	AssetID         uuid.UUID `json:"asset_id"`
+	AssetName       string    `json:"asset_name,omitempty"`
+	SharePercentage float64   `json:"share_percentage"`
+}
+
 type Investment struct {
-	ID             uuid.UUID
-	Project        *projecta.Project
-	Asset          *asset.Asset
-	Contributor    *projecta.Owner
-	ResourceType   ResourceType
-	Amount         *money.Money
-	TimeHours      *float64
-	TimeHourlyRate *money.Money
-	GoodsQuantity  *float64
-	GoodsUnit      string
-	GoodsItemName  string
-	Description    string
-	Date           time.Time
-	Tags           []string
+	ID               uuid.UUID
+	Project          *projecta.Project
+	Asset            *asset.Asset
+	AssetAllocations []InvestmentAssetLink
+	Contributor      *projecta.Owner
+	ResourceType     ResourceType
+	Amount           *money.Money
+	TimeHours        *float64
+	TimeHourlyRate   *money.Money
+	GoodsQuantity    *float64
+	GoodsUnit        string
+	GoodsItemName    string
+	Description      string
+	Date             time.Time
+	Tags             []string
 }
 
 func NewInvestment(
@@ -78,21 +85,42 @@ func NewInvestment(
 	if date.IsZero() {
 		date = time.Now()
 	}
+	var defaultAllocations []InvestmentAssetLink
+	if anAsset != nil {
+		defaultAllocations = []InvestmentAssetLink{
+			{
+				AssetID:         anAsset.ID(),
+				AssetName:       anAsset.Name(),
+				SharePercentage: 100.0,
+			},
+		}
+	} else {
+		defaultAllocations = make([]InvestmentAssetLink, 0)
+	}
 	return &Investment{
-		ID:             id,
-		Project:        project,
-		Asset:          anAsset,
-		Contributor:    contributor,
-		ResourceType:   resourceType,
-		Amount:         amount,
-		TimeHours:      timeHours,
-		TimeHourlyRate: timeHourlyRate,
-		GoodsQuantity:  goodsQuantity,
-		GoodsUnit:      goodsUnit,
-		GoodsItemName:  goodsItemName,
-		Description:    description,
-		Date:           date,
-		Tags:           cleanTags,
+		ID:               id,
+		Project:          project,
+		Asset:            anAsset,
+		AssetAllocations: defaultAllocations,
+		Contributor:      contributor,
+		ResourceType:     resourceType,
+		Amount:           amount,
+		TimeHours:        timeHours,
+		TimeHourlyRate:   timeHourlyRate,
+		GoodsQuantity:    goodsQuantity,
+		GoodsUnit:        goodsUnit,
+		GoodsItemName:    goodsItemName,
+		Description:      description,
+		Date:             date,
+		Tags:             cleanTags,
+	}
+}
+
+func (i *Investment) SetAssetAllocations(allocations []InvestmentAssetLink) {
+	if allocations == nil {
+		i.AssetAllocations = make([]InvestmentAssetLink, 0)
+	} else {
+		i.AssetAllocations = allocations
 	}
 }
 

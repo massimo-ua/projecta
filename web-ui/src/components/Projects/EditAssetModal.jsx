@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { useIntlayer } from 'react-intlayer';
 import { assetRepository } from '../../api';
+import TagSelector from './TagSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,6 +42,7 @@ export default function EditAssetModal({
   const [completedDate, setCompletedDate] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
   const [currency, setCurrency] = useState('UAH');
+  const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export default function EditAssetModal({
         setStatus(asset.status || 'ACTIVE');
         setTargetPrice(asset.targetPrice || '');
         setCurrency(asset.targetCurrency || asset.currency || 'UAH');
+        setTags(Array.isArray(asset.tags) ? asset.tags : []);
 
         if (asset.startDate || asset.acquiredAt) {
           const dt = new Date(asset.startDate || asset.acquiredAt);
@@ -94,6 +97,7 @@ export default function EditAssetModal({
         targetPrice: targetPrice ? Number(targetPrice) : undefined,
         targetCurrency: currency,
         currency,
+        tags,
       });
       toast.success(String(content?.assetUpdatedSuccess || 'Asset updated successfully'));
       onSuccess();
@@ -231,6 +235,16 @@ export default function EditAssetModal({
               className="rounded-xl resize-none"
             />
           </div>
+
+          {/* Tags */}
+          <TagSelector
+            id="edit-asset-tags"
+            tags={tags}
+            onChange={setTags}
+            projectId={projectId}
+            label={String(content?.tagsLabel || 'Tags')}
+            placeholder={String(content?.tagsPlaceholder || 'Type tag and press Enter')}
+          />
 
           <DialogFooter className="pt-3 gap-2 sm:gap-0">
             <Button

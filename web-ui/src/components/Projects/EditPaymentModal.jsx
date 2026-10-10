@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useParams } from 'react-router-dom';
 import { useIntlayer } from 'react-intlayer';
 import { investmentRepository, assetRepository } from '../../api';
+import TagSelector from './TagSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,13 +25,9 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Loader2, X, Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const SUPPORTED_CURRENCIES = ['UAH', 'USD', 'EUR', 'PLN'];
-const RESOURCE_TYPES = [
-  { key: 'MONEY', label: 'Capital (Money)' },
-  { key: 'TIME', label: 'Labor (Time)' },
-  { key: 'GOODS', label: 'Goods & Materials' },
-];
 
 export default function EditPaymentModal({
   onSuccess,
@@ -41,15 +38,22 @@ export default function EditPaymentModal({
   const content = useIntlayer('payments');
   const { projectId } = useParams();
 
+  const resourceTypes = [
+    { key: 'MONEY', label: String(content?.moneyResource || 'Капітал (Гроші)') },
+    { key: 'TIME', label: String(content?.timeResource || 'Праця (Час)') },
+    { key: 'GOODS', label: String(content?.goodsResource || 'Товари та матеріали') },
+  ];
+
   const [loadedAssets, setLoadedAssets] = useState([]);
   const [assetId, setAssetId] = useState('');
+  const [isSplit, setIsSplit] = useState(false);
+  const [allocations, setAllocations] = useState([]);
   const [resourceType, setResourceType] = useState('MONEY');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('UAH');
   const [date, setDate] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState([]);
-  const [tagInput, setTagInput] = useState('');
 
   // Resource specifics
   const [timeHours, setTimeHours] = useState('');
@@ -77,6 +81,27 @@ export default function EditPaymentModal({
       .getInvestment(projectId, paymentId)
       .then((inv) => {
         setAssetId(inv.assetId || '');
+        if (Array.isArray(inv.assetAllocations) && inv.assetAllocations.length > 1) {
+          setIsSplit(true);
+          setAllocations(
+            inv.assetAllocations.map((a) => ({
+              assetId: a.assetId,
+              sharePercentage: String(a.sharePercentage),
+            }))
+          );
+        } else if (Array.isArray(inv.assetAllocations) && inv.assetAllocations.length === 1) {
+          setIsSplit(false);
+          setAllocations(
+            inv.assetAllocations.map((a) => ({
+              assetId: a.assetId,
+              sharePercentage: String(a.sharePercentage),
+            }))
+          );
+        } else {
+          setIsSplit(false);
+          setAllocations(inv.assetId ? [{ assetId: inv.assetId, sharePercentage: '100' }] : []);
+        }
+
         setResourceType(inv.resourceType || 'MONEY');
         setAmount(inv.amount || '');
         setCurrency(inv.currency || 'UAH');
@@ -111,28 +136,91 @@ export default function EditPaymentModal({
     }
   }, [resourceType, timeHours, timeHourlyRate]);
 
-  const handleAddTag = () => {
-    const trimmed = tagInput.trim().replace(/^#/, '');
-    if (trimmed && !tags.includes(trimmed)) {
-      setTags([...tags, trimmed]);
-      setTagInput('');
+  const toggleSharedInvestment = () => {
+    if (!isSplit) {
+      setIsSplit(true);
+      if (allocations.length < 2) {
+        const firstId = assetId || loadedAssets[0]?.id || '';
+        const second = loadedAssets.find((a) => a.id !== firstId);
+        const secondId = second ? second.id : '';
+        setAllocations([
+          { assetId: firstId, sharePercentage: '50' },
+          { assetId: secondId, sharePercentage: '50' },
+        ]);
+      }
+    } else {
+      setIsSplit(false);
+      if (allocations[0]?.assetId) {
+        setAssetId(allocations[0].assetId);
+      }
     }
   };
 
-  const handleRemoveTag = (tagToRemove) => {
-    setTags(tags.filter((t) => t !== tagToRemove));
+  const handleAddAllocation = () => {
+    const selectedIds = new Set(allocations.map((a) => a.assetId));
+    const available = loadedAssets.find((a) => !selectedIds.has(a.id));
+    const nextAssetId = available ? available.id : (loadedAssets[0]?.id || '');
+    setAllocations([...allocations, { assetId: nextAssetId, sharePercentage: '' }]);
   };
 
-  const handleTagKeyDown = (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      handleAddTag();
-    }
+  const handleRemoveAllocation = (index) => {
+    setAllocations(allocations.filter((_, idx) => idx !== index));
   };
+
+  const handleAllocationChange = (index, field, value) => {
+    setAllocations(allocations.map((a, idx) => (idx === index ? { ...a, [field]: value } : a)));
+  };
+
+  const handleEqualSplit = () => {
+    if (allocations.length === 0) return;
+    const count = allocations.length;
+    const share = +(100 / count).toFixed(2);
+    let remaining = 100;
+    const updated = allocations.map((a, idx) => {
+      if (idx === count - 1) {
+        return { ...a, sharePercentage: String(+(remaining).toFixed(2)) };
+      }
+      remaining -= share;
+      return { ...a, sharePercentage: String(share) };
+    });
+    setAllocations(updated);
+  };
+
+  const totalShare = isSplit ? allocations.reduce((sum, a) => sum + (Number(a.sharePercentage) || 0), 0) : 100;
+  const isShareValid = !isSplit || Math.abs(totalShare - 100) < 0.01;
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    if (!assetId || !amount || !date) {
+    if (!amount || !date) {
+      toast.error(String(content?.validationRequiredFields || 'Asset, Amount, and Date are required'));
+      return;
+    }
+
+    if (isSplit) {
+      if (allocations.length < 2) {
+        toast.error(String(content?.sharedInvestmentMinAssets || 'Shared investment must include at least 2 assets'));
+        return;
+      }
+      for (const a of allocations) {
+        if (!a.assetId) {
+          toast.error(String(content?.selectAssetPlaceholder || 'Select asset'));
+          return;
+        }
+        if (!a.sharePercentage || Number(a.sharePercentage) <= 0) {
+          toast.error(String(content?.sharesMustEqual100 || 'Total allocation shares must equal 100%'));
+          return;
+        }
+      }
+      const uniqueAssets = new Set(allocations.map((a) => a.assetId));
+      if (uniqueAssets.size !== allocations.length) {
+        toast.error(String(content?.duplicateAssetInAllocations || 'Duplicate asset selected in allocations'));
+        return;
+      }
+      if (!isShareValid) {
+        toast.error(String(content?.sharesMustEqual100 || 'Total allocation shares must equal 100%'));
+        return;
+      }
+    } else if (!assetId) {
       toast.error(String(content?.validationRequiredFields || 'Asset, Amount, and Date are required'));
       return;
     }
@@ -141,7 +229,13 @@ export default function EditPaymentModal({
     try {
       await investmentRepository.updateInvestment(projectId, {
         id: paymentId,
-        assetId,
+        assetId: isSplit ? allocations[0].assetId : assetId,
+        assetAllocations: isSplit
+          ? allocations.map((a) => ({
+              assetId: a.assetId,
+              sharePercentage: Number(a.sharePercentage),
+            }))
+          : undefined,
         resourceType,
         amount: Number(amount),
         currency,
@@ -179,21 +273,128 @@ export default function EditPaymentModal({
         <form onSubmit={handleUpdate} className="space-y-4 py-2">
           {/* Target Asset Selector */}
           <div className="space-y-2">
-            <Label htmlFor="edit-investment-asset" className="text-xs font-semibold">
-              {String(content?.assetTargetLabel || 'Target Asset')} *
-            </Label>
-            <Select value={assetId} onValueChange={setAssetId}>
-              <SelectTrigger id="edit-investment-asset" className="rounded-xl">
-                <SelectValue placeholder={String(content?.selectAssetPlaceholder || 'Select asset')} />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl max-h-56">
-                {loadedAssets.map((asset) => (
-                  <SelectItem key={asset.id} value={asset.id} className="rounded-lg">
-                    {asset.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="edit-investment-asset" className="text-xs font-semibold">
+                {isSplit
+                  ? String(content?.allocationsBreakdown || 'Розподіл за активами')
+                  : `${String(content?.assetTargetLabel || 'Цільовий актив')} *`}
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs text-primary px-1.5 hover:bg-primary/10"
+                onClick={toggleSharedInvestment}
+              >
+                {isSplit
+                  ? String(content?.singleAssetMode || 'Один актив (100%)')
+                  : String(content?.splitAcrossAssets || 'Спільна інвестиція (кілька активів)')}
+              </Button>
+            </div>
+
+            {!isSplit ? (
+              <Select value={assetId} onValueChange={setAssetId}>
+                <SelectTrigger id="edit-investment-asset" className="rounded-xl">
+                  <SelectValue placeholder={String(content?.selectAssetPlaceholder || 'Select asset')} />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl max-h-56">
+                  {loadedAssets.map((asset) => (
+                    <SelectItem key={asset.id} value={asset.id} className="rounded-lg">
+                      {asset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="space-y-2 p-3 rounded-xl bg-muted/30 border border-border/60">
+                {allocations.map((alloc, idx) => {
+                  const shareNum = Number(alloc.sharePercentage) || 0;
+                  const estimatedAllocAmount = amount ? ((Number(amount) * shareNum) / 100).toFixed(2) : null;
+                  return (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <Select
+                          value={alloc.assetId}
+                          onValueChange={(val) => handleAllocationChange(idx, 'assetId', val)}
+                        >
+                          <SelectTrigger className="rounded-lg h-9 text-xs">
+                            <SelectValue placeholder={String(content?.selectAssetPlaceholder || 'Select asset')} />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl max-h-56">
+                            {loadedAssets.map((asset) => (
+                              <SelectItem key={asset.id} value={asset.id} className="rounded-lg text-xs">
+                                {asset.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="w-24 relative flex items-center">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          placeholder="%"
+                          value={alloc.sharePercentage}
+                          onChange={(e) => handleAllocationChange(idx, 'sharePercentage', e.target.value)}
+                          className="rounded-lg h-9 text-xs pr-6"
+                        />
+                        <span className="absolute right-2 text-xs text-muted-foreground pointer-events-none">%</span>
+                      </div>
+                      {estimatedAllocAmount && (
+                        <span className="text-[11px] font-mono text-muted-foreground w-16 text-right truncate">
+                          {estimatedAllocAmount}
+                        </span>
+                      )}
+                      {allocations.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => handleRemoveAllocation(idx)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs rounded-lg gap-1"
+                      onClick={handleAddAllocation}
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>{String(content?.addAssetAllocation || 'Додати актив')}</span>
+                    </Button>
+                    {allocations.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={handleEqualSplit}
+                      >
+                        {String(content?.equalSplit || 'Порівну')}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <span className="text-muted-foreground">{String(content?.totalShareLabel || 'Загалом')}:</span>
+                    <span className={cn('font-semibold', isShareValid ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}>
+                      {totalShare.toFixed(1)}% / 100%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Resource Type & Date */}
@@ -207,7 +408,7 @@ export default function EditPaymentModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  {RESOURCE_TYPES.map((rt) => (
+                  {resourceTypes.map((rt) => (
                     <SelectItem key={rt.key} value={rt.key} className="rounded-lg">
                       {rt.label}
                     </SelectItem>
@@ -347,47 +548,13 @@ export default function EditPaymentModal({
             </div>
           </div>
 
-          {/* Tags Input */}
-          <div className="space-y-2">
-            <Label htmlFor="edit-investment-tags" className="text-xs font-semibold">
-              {String(content?.tagsLabel || 'Tags')}
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="edit-investment-tags"
-                placeholder={String(content?.tagsPlaceholder || 'e.g. labor, parts, down-payment')}
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={handleTagKeyDown}
-                className="rounded-xl"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddTag}
-                className="rounded-xl shrink-0 px-3"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            {tags.length > 0 && (
-              <div className="flex gap-1.5 flex-wrap pt-1">
-                {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1 rounded-md text-xs py-0.5">
-                    <span>#{tag}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Tags */}
+          <TagSelector
+            id="edit-investment-tags"
+            tags={tags}
+            onChange={setTags}
+            projectId={projectId}
+          />
 
           {/* Description */}
           <div className="space-y-2">
@@ -416,7 +583,7 @@ export default function EditPaymentModal({
             </Button>
             <Button
               type="submit"
-              disabled={loading || !assetId || !amount}
+              disabled={loading || (isSplit ? (!isShareValid || allocations.length < 2) : !assetId) || !amount}
               className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}

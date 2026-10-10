@@ -8,6 +8,7 @@ const toDomain = ({
   project_id,
   asset_id,
   asset_name,
+  asset_allocations,
   contributor,
   resource_type,
   amount,
@@ -26,12 +27,23 @@ const toDomain = ({
   const finalHomeAmount = home_amount !== undefined ? home_amount : amount;
   const finalHomeCurrency = home_currency || currency;
 
+  const allocations = Array.isArray(asset_allocations)
+    ? asset_allocations.map((a) => ({
+        assetId: a.asset_id,
+        assetName: a.asset_name,
+        sharePercentage: a.share_percentage,
+        amount: toPriceView(a.amount),
+        rawAmount: a.amount,
+      }))
+    : [];
+
   return new Investment({
     key: investment_id,
     id: investment_id,
     projectId: project_id,
     assetId: asset_id,
     assetName: asset_name,
+    assetAllocations: allocations,
     contributor,
     resourceType: resource_type || 'MONEY',
     amount: toPriceView(amount),
@@ -57,6 +69,7 @@ const toEditInvestmentView = ({
   investment_id,
   asset_id,
   asset_name,
+  asset_allocations,
   resource_type,
   amount,
   currency,
@@ -72,6 +85,13 @@ const toEditInvestmentView = ({
   id: investment_id,
   assetId: asset_id,
   assetName: asset_name,
+  assetAllocations: Array.isArray(asset_allocations)
+    ? asset_allocations.map((a) => ({
+        assetId: a.asset_id,
+        assetName: a.asset_name,
+        sharePercentage: a.share_percentage,
+      }))
+    : [],
   resourceType: resource_type || 'MONEY',
   amount: toPriceView(amount),
   currency: currency || 'UAH',
@@ -87,6 +107,7 @@ const toEditInvestmentView = ({
 
 const toAddInvestmentDTO = ({
   assetId,
+  assetAllocations,
   resourceType = 'MONEY',
   amount,
   currency = 'UAH',
@@ -99,8 +120,9 @@ const toAddInvestmentDTO = ({
   date,
   tags,
 }) => {
+  const primaryAssetId = assetId || (Array.isArray(assetAllocations) && assetAllocations[0] ? assetAllocations[0].assetId : undefined);
   const dto = {
-    asset_id: assetId,
+    asset_id: primaryAssetId,
     resource_type: resourceType,
     amount: toPrice(amount),
     currency,
@@ -108,6 +130,13 @@ const toAddInvestmentDTO = ({
     date: toISO(date || new Date()),
     tags: Array.isArray(tags) ? tags : [],
   };
+
+  if (Array.isArray(assetAllocations) && assetAllocations.length > 1) {
+    dto.asset_allocations = assetAllocations.map((a) => ({
+      asset_id: a.assetId,
+      share_percentage: Number(a.sharePercentage),
+    }));
+  }
 
   if (timeHours !== undefined && timeHours !== '') {
     dto.time_hours = Number(timeHours);
@@ -130,6 +159,7 @@ const toAddInvestmentDTO = ({
 
 const toUpdateInvestmentDTO = ({
   assetId,
+  assetAllocations,
   resourceType = 'MONEY',
   amount,
   currency = 'UAH',
@@ -142,8 +172,9 @@ const toUpdateInvestmentDTO = ({
   date,
   tags,
 }) => {
+  const primaryAssetId = assetId || (Array.isArray(assetAllocations) && assetAllocations[0] ? assetAllocations[0].assetId : undefined);
   const dto = {
-    asset_id: assetId,
+    asset_id: primaryAssetId,
     resource_type: resourceType,
     amount: toPrice(amount),
     currency,
@@ -151,6 +182,13 @@ const toUpdateInvestmentDTO = ({
     date: toISO(date || new Date()),
     tags: Array.isArray(tags) ? tags : [],
   };
+
+  if (Array.isArray(assetAllocations) && assetAllocations.length > 1) {
+    dto.asset_allocations = assetAllocations.map((a) => ({
+      asset_id: a.assetId,
+      share_percentage: Number(a.sharePercentage),
+    }));
+  }
 
   if (timeHours !== undefined && timeHours !== '') {
     dto.time_hours = Number(timeHours);
