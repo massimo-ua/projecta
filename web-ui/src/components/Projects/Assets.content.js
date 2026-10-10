@@ -15,6 +15,78 @@ const assetsContent = {
       en: 'Edit Asset',
       uk: 'Редагувати актив',
     }),
+    statusLabel: t({
+      en: 'Status',
+      uk: 'Статус',
+    }),
+    activeStatus: t({
+      en: 'Active',
+      uk: 'В процесі',
+    }),
+    completedStatus: t({
+      en: 'Completed',
+      uk: 'Завершено',
+    }),
+    startDateLabel: t({
+      en: 'Start Date',
+      uk: 'Дата початку',
+    }),
+    completedDateLabel: t({
+      en: 'Completed Date',
+      uk: 'Дата завершення',
+    }),
+    targetPriceLabel: t({
+      en: 'Target Price / Budget',
+      uk: 'Цільова вартість / Бюджет',
+    }),
+    directCostLabel: t({
+      en: 'Direct Cost',
+      uk: 'Прямі витрати',
+    }),
+    totalCostLabel: t({
+      en: 'Total Cost',
+      uk: 'Загальна вартість',
+    }),
+    progressLabel: t({
+      en: 'Progress',
+      uk: 'Прогрес',
+    }),
+    linkSubAsset: t({
+      en: 'Link Sub-Asset',
+      uk: 'Привʼязати під-актив',
+    }),
+    unlinkSubAsset: t({
+      en: 'Unlink',
+      uk: 'Відвʼязати',
+    }),
+    subAssetsLabel: t({
+      en: 'Sub-Assets',
+      uk: 'Складові активи',
+    }),
+    parentAssetsLabel: t({
+      en: 'Part of',
+      uk: 'Входить до',
+    }),
+    shareLabel: t({
+      en: 'Allocation Share',
+      uk: 'Частка',
+    }),
+    noSubAssets: t({
+      en: 'No sub-assets',
+      uk: 'Немає під-активів',
+    }),
+    linkModalTitle: t({
+      en: 'Link Component Asset',
+      uk: 'Привʼязати складовий актив',
+    }),
+    selectChildAsset: t({
+      en: 'Select Child Asset',
+      uk: 'Оберіть під-актив',
+    }),
+    sharePercentageLabel: t({
+      en: 'Share (%)',
+      uk: 'Частка (%)',
+    }),
     typeLabel: t({
       en: 'Type',
       uk: 'Тип',
@@ -28,16 +100,16 @@ const assetsContent = {
       uk: 'Категорія',
     }),
     createPaymentLabel: t({
-      en: 'Create Payment',
-      uk: 'Створити платіж',
+      en: 'Log Initial Investment',
+      uk: 'Зафіксувати початкову інвестицію',
     }),
     createPaymentDescription: t({
-      en: 'Automatically record an associated payment entry',
-      uk: 'Автоматично створити відповідний платіжний запис',
+      en: 'Automatically create an investment entry for this asset',
+      uk: 'Автоматично створити запис про інвестицію для цього активу',
     }),
     priceLabel: t({
-      en: 'Price',
-      uk: 'Ціна',
+      en: 'Initial Investment Amount',
+      uk: 'Сума початкової інвестиції',
     }),
     pricePlaceholder: t({
       en: '0.00',
@@ -48,8 +120,8 @@ const assetsContent = {
       uk: 'Валюта',
     }),
     acquiredAtLabel: t({
-      en: 'Acquired At',
-      uk: 'Дата придбання',
+      en: 'Start Date',
+      uk: 'Дата початку',
     }),
     nameLabel: t({
       en: 'Name',
@@ -72,12 +144,12 @@ const assetsContent = {
       uk: 'Скасувати',
     }),
     submitButton: t({
-      en: 'Submit',
+      en: 'Save',
       uk: 'Зберегти',
     }),
     validationRequiredFields: t({
-      en: 'Type, Price, Name and Acquired Date are required',
-      uk: 'Тип, Ціна, Назва та Дата придбання є обовʼязковими',
+      en: 'Name is required',
+      uk: 'Назва є обовʼязковою',
     }),
     assetAddedSuccess: t({
       en: 'Asset added successfully',

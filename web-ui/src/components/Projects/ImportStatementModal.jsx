@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { format, parseISO } from 'date-fns';
 import { useIntlayer } from 'react-intlayer';
@@ -11,7 +11,7 @@ import {
   CheckSquare,
   Square,
 } from 'lucide-react';
-import { paymentRepository } from '../../api';
+import { investmentRepository, assetRepository } from '../../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +35,7 @@ import { toast } from 'sonner';
 export default function ImportStatementModal({
   open,
   projectId,
-  types,
+  assets: propAssets = [],
   onCancel,
   onSuccess,
 }) {
@@ -46,14 +46,32 @@ export default function ImportStatementModal({
   const [importing, setImporting] = useState(false);
   const [statement, setStatement] = useState(null);
   const [items, setItems] = useState([]);
-  const [defaultTypeId, setDefaultTypeId] = useState('');
+  const [loadedAssets, setLoadedAssets] = useState(propAssets || []);
+  const [defaultAssetId, setDefaultAssetId] = useState('');
+
+  useEffect(() => {
+    if (propAssets && propAssets.length > 0) {
+      setLoadedAssets(propAssets);
+      if (!defaultAssetId) setDefaultAssetId(propAssets[0].id);
+    } else if (projectId && open) {
+      assetRepository
+        .getAssets(projectId, 100, 0)
+        .then(([assetsList]) => {
+          setLoadedAssets(assetsList);
+          if (assetsList.length > 0 && !defaultAssetId) {
+            setDefaultAssetId(assetsList[0].id);
+          }
+        })
+        .catch((err) => console.error('Failed to load assets for import modal', err));
+    }
+  }, [projectId, open, propAssets]);
 
   const resetState = () => {
     setParsing(false);
     setImporting(false);
     setStatement(null);
     setItems([]);
-    setDefaultTypeId('');
+    setDefaultAssetId('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -75,8 +93,10 @@ export default function ImportStatementModal({
 
     setParsing(true);
     try {
-      const result = await paymentRepository.parseStatement(projectId, file);
+      const result = await investmentRepository.parseStatement(projectId, file);
       setStatement(result);
+
+      const fallbackAssetId = defaultAssetId || (loadedAssets[0]?.id || '');
 
       const initialItems = (result.transactions || []).map((tx, index) => ({
         id: `tx-${index}`,
@@ -86,9 +106,10 @@ export default function ImportStatementModal({
         amount: tx.amount / 100,
         currency: tx.currency || result.currency || 'PLN',
         description: tx.description,
-        typeId: defaultTypeId || (types[0]?.id || ''),
+        assetId: fallbackAssetId,
         isDuplicate: Boolean(tx.is_duplicate),
-        kind: 'UPON_COMPLETION',
+        resourceType: 'MONEY',
+        tags: ['statement-import'],
       }));
 
       setItems(initialItems);
@@ -117,10 +138,10 @@ export default function ImportStatementModal({
     );
   };
 
-  const handleApplyDefaultType = () => {
-    if (!defaultTypeId) return;
+  const handleApplyDefaultAsset = () => {
+    if (!defaultAssetId) return;
     setItems(
-      items.map((item) => (item.selected ? { ...item, typeId: defaultTypeId } : item)),
+      items.map((item) => (item.selected ? { ...item, assetId: defaultAssetId } : item)),
     );
   };
 
@@ -128,33 +149,38 @@ export default function ImportStatementModal({
     const selectedItems = items.filter((item) => item.selected);
 
     if (selectedItems.length === 0) {
-      toast.error('Please select at least one payment to import');
+      toast.error('Please select at least one item to import');
       return;
     }
 
-    const missingType = selectedItems.some((item) => !item.typeId);
-    if (missingType) {
-      toast.error(String(content?.selectTypeForSelectedWarning || 'Please select a Cost Type for all checked payments'));
+    const missingAsset = selectedItems.some((item) => !item.assetId);
+    if (missingAsset) {
+      toast.error(String(content?.selectTypeForSelectedWarning || 'Please select a Target Asset for all checked items'));
       return;
     }
 
     setImporting(true);
     try {
-      const payload = selectedItems.map((item) => ({
-        typeId: item.typeId,
+      const payloadItems = selectedItems.map((item) => ({
+        assetId: item.assetId,
         amount: item.amount,
         currency: item.currency,
-        paymentDate: new Date(item.date),
+        date: new Date(item.date),
         description: item.description,
-        paymentKind: item.kind,
+        resourceType: 'MONEY',
+        tags: item.tags || ['statement-import'],
       }));
 
-      await paymentRepository.addPaymentsBatch(projectId, payload);
-      toast.success(String(content?.paymentsImportedSuccess || 'Payments imported successfully'));
+      await investmentRepository.addInvestmentsBatch(projectId, {
+        defaultAsset: defaultAssetId,
+        items: payloadItems,
+      });
+
+      toast.success(String(content?.paymentsImportedSuccess || 'Investments imported successfully'));
       resetState();
       onSuccess();
     } catch (err) {
-      toast.error(`${String(content?.failedToImportPayments || 'Failed to import payments')}: ${err.message}`);
+      toast.error(`${String(content?.failedToImportPayments || 'Failed to import investments')}: ${err.message}`);
     } finally {
       setImporting(false);
     }
@@ -174,7 +200,7 @@ export default function ImportStatementModal({
             <span>{String(content?.importStatementTitle || 'Import Statement (Kredobank)')}</span>
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            {String(content?.importStatementDesc || 'Upload a Kredobank PDF account statement to extract and import payments.')}
+            {String(content?.importStatementDesc || 'Upload a Kredobank PDF account statement to extract and import payments as investments.')}
           </DialogDescription>
         </DialogHeader>
 
@@ -278,15 +304,15 @@ export default function ImportStatementModal({
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="w-48">
-                  <Select value={defaultTypeId} onValueChange={setDefaultTypeId}>
+                <div className="w-56">
+                  <Select value={defaultAssetId} onValueChange={setDefaultAssetId}>
                     <SelectTrigger className="h-8 text-xs rounded-lg">
-                      <SelectValue placeholder={String(content?.defaultCostType || 'Default Cost Type')} />
+                      <SelectValue placeholder={String(content?.defaultCostType || 'Default Target Asset')} />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      {types.map((type) => (
-                        <SelectItem key={type.id} value={type.id} className="text-xs">
-                          {`${type.name} [${type.category}]`}
+                    <SelectContent className="rounded-xl max-h-56">
+                      {loadedAssets.map((asset) => (
+                        <SelectItem key={asset.id} value={asset.id} className="text-xs">
+                          {asset.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -295,8 +321,8 @@ export default function ImportStatementModal({
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={handleApplyDefaultType}
-                  disabled={!defaultTypeId}
+                  onClick={handleApplyDefaultAsset}
+                  disabled={!defaultAssetId}
                   className="h-8 text-xs"
                 >
                   <span>{String(content?.applyToAll || 'Apply to all')}</span>
@@ -313,7 +339,7 @@ export default function ImportStatementModal({
                     <th className="p-2.5 w-24">{String(content?.dateLabel || 'Date')}</th>
                     <th className="p-2.5 w-28 text-right">{String(content?.amountLabel || 'Amount')}</th>
                     <th className="p-2.5 min-w-[200px]">{String(content?.descriptionLabel || 'Description')}</th>
-                    <th className="p-2.5 w-48">{String(content?.typeLabel || 'Type')}</th>
+                    <th className="p-2.5 w-48">{String(content?.assetTargetLabel || 'Target Asset')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -357,16 +383,16 @@ export default function ImportStatementModal({
                       </td>
                       <td className="p-2.5 align-middle">
                         <Select
-                          value={item.typeId}
-                          onValueChange={(val) => handleRowChange(item.id, 'typeId', val)}
+                          value={item.assetId}
+                          onValueChange={(val) => handleRowChange(item.id, 'assetId', val)}
                         >
                           <SelectTrigger className="h-7 text-xs rounded-md">
-                            <SelectValue placeholder="Type..." />
+                            <SelectValue placeholder="Asset..." />
                           </SelectTrigger>
-                          <SelectContent className="rounded-xl">
-                            {types.map((type) => (
-                              <SelectItem key={type.id} value={type.id} className="text-xs">
-                                {`${type.name} [${type.category}]`}
+                          <SelectContent className="rounded-xl max-h-56">
+                            {loadedAssets.map((asset) => (
+                              <SelectItem key={asset.id} value={asset.id} className="text-xs">
+                                {asset.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -401,7 +427,7 @@ export default function ImportStatementModal({
               className="gap-2"
             >
               {importing && <Loader2 className="h-4 w-4 animate-spin" />}
-              <span>{`${String(content?.importPaymentsCount || 'Import Payments')} (${selectedCount})`}</span>
+              <span>{`${String(content?.importPaymentsCount || 'Import Investments')} (${selectedCount})`}</span>
             </Button>
           )}
         </DialogFooter>
@@ -413,17 +439,7 @@ export default function ImportStatementModal({
 ImportStatementModal.propTypes = {
   open: PropTypes.bool.isRequired,
   projectId: PropTypes.string.isRequired,
-  types: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string,
-      name: PropTypes.string,
-      category: PropTypes.string,
-    }),
-  ),
+  assets: PropTypes.array,
   onCancel: PropTypes.func.isRequired,
   onSuccess: PropTypes.func.isRequired,
-};
-
-ImportStatementModal.defaultProps = {
-  types: [],
 };

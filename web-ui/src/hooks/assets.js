@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { assetRepository } from '../api';
-import useTypes from './types';
 import { PAGE_SIZE } from '../constants';
 
 export default function useAssets(projectId) {
@@ -11,7 +10,7 @@ export default function useAssets(projectId) {
   const [currentPage, setCurrentPage] = useState(1);
   const [addModalOpened, setAddModalOpen] = useState(false);
   const [assetIdToEdit, setAssetIdToEdit] = useState('');
-  const [, types, , setTypesFilter] = useTypes();
+  const [linkModalAsset, setLinkModalAsset] = useState(null);
 
   const fetchAssets = useCallback((page = currentPage) => {
     if (!projectId) return;
@@ -32,16 +31,6 @@ export default function useAssets(projectId) {
   useEffect(() => {
     fetchAssets(currentPage);
   }, [fetchAssets, currentPage]);
-
-  useEffect(() => {
-    if (projectId) {
-      setTypesFilter({
-        projectId,
-        limit: 100,
-        offset: 0,
-      });
-    }
-  }, [projectId, setTypesFilter]);
 
   const onPaginationChange = useCallback((nextPage) => {
     setCurrentPage(nextPage);
@@ -79,6 +68,37 @@ export default function useAssets(projectId) {
     fetchAssets(currentPage);
   }, [currentPage, fetchAssets]);
 
+  const openLinkModal = useCallback((asset) => {
+    setLinkModalAsset(asset);
+  }, []);
+
+  const closeLinkModal = useCallback(() => {
+    setLinkModalAsset(null);
+  }, []);
+
+  const linkChild = useCallback(async (parentId, childId, sharePercentage = 100) => {
+    try {
+      await assetRepository.linkChild(projectId, parentId, childId, sharePercentage);
+      toast.success('Child asset linked successfully');
+      setLinkModalAsset(null);
+      fetchAssets(currentPage);
+    } catch (error) {
+      toast.error(`Failed to link asset: ${error.message}`);
+      throw error;
+    }
+  }, [projectId, currentPage, fetchAssets]);
+
+  const unlinkChild = useCallback(async (parentId, childId) => {
+    try {
+      await assetRepository.unlinkChild(projectId, parentId, childId);
+      toast.success('Child asset unlinked successfully');
+      fetchAssets(currentPage);
+    } catch (error) {
+      toast.error(`Failed to unlink asset: ${error.message}`);
+      throw error;
+    }
+  }, [projectId, currentPage, fetchAssets]);
+
   const removeAsset = useCallback(async (assetId, { successMessage, errorMessage } = {}) => {
     try {
       await assetRepository.removeAsset(projectId, assetId);
@@ -99,9 +119,10 @@ export default function useAssets(projectId) {
     total,
     currentPage,
     pageSize: PAGE_SIZE,
-    types,
+    types: [],
     addModalOpened,
     assetIdToEdit,
+    linkModalAsset,
     onPaginationChange,
     openAddModal,
     closeAddModal,
@@ -109,6 +130,10 @@ export default function useAssets(projectId) {
     openEditModal,
     closeEditModal,
     onEditSuccess,
+    openLinkModal,
+    closeLinkModal,
+    linkChild,
+    unlinkChild,
     removeAsset,
     refresh: () => fetchAssets(currentPage),
   };

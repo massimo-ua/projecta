@@ -123,6 +123,112 @@ func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) erro
 	return nil
 }
 
+func (r *PgAssetRepository) AddChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID, sharePercentage float64) error {
+	sql := `
+		INSERT INTO projecta_asset_compositions (parent_asset_id, child_asset_id, share_percentage)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (parent_asset_id, child_asset_id) DO UPDATE SET share_percentage = EXCLUDED.share_percentage
+	`
+	_, err := r.db.Exec(ctx, sql, parentID.String(), childID.String(), sharePercentage)
+	return err
+}
+
+func (r *PgAssetRepository) RemoveChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID) error {
+	sql := `DELETE FROM projecta_asset_compositions WHERE parent_asset_id = $1 AND child_asset_id = $2`
+	_, err := r.db.Exec(ctx, sql, parentID.String(), childID.String())
+	return err
+}
+
+func (r *PgAssetRepository) FindChildren(ctx context.Context, parentID uuid.UUID) ([]asset.ChildAssetLink, error) {
+	sql := `
+		SELECT c.child_asset_id, a.name, c.share_percentage
+		FROM projecta_asset_compositions c
+		JOIN projecta_assets a ON a.asset_id = c.child_asset_id
+		WHERE c.parent_asset_id = $1
+	`
+	rows, err := r.db.Query(ctx, sql, parentID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var links []asset.ChildAssetLink
+	for rows.Next() {
+		var (
+			cid   string
+			cname string
+			share float64
+		)
+		if err := rows.Scan(&cid, &cname, &share); err != nil {
+			return nil, err
+		}
+		links = append(links, asset.ChildAssetLink{
+			ChildID:         uuid.MustParse(cid),
+			ChildName:       cname,
+			SharePercentage: share,
+		})
+	}
+	return links, nil
+}
+
+func (r *PgAssetRepository) FindParents(ctx context.Context, childID uuid.UUID) ([]asset.ParentAssetLink, error) {
+	sql := `
+		SELECT c.parent_asset_id, a.name, c.share_percentage
+		FROM projecta_asset_compositions c
+		JOIN projecta_assets a ON a.asset_id = c.parent_asset_id
+		WHERE c.child_asset_id = $1
+	`
+	rows, err := r.db.Query(ctx, sql, childID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var links []asset.ParentAssetLink
+	for rows.Next() {
+		var (
+			pid   string
+			pname string
+			share float64
+		)
+		if err := rows.Scan(&pid, &pname, &share); err != nil {
+			return nil, err
+		}
+		links = append(links, asset.ParentAssetLink{
+			ParentID:        uuid.MustParse(pid),
+			ParentName:      pname,
+			SharePercentage: share,
+		})
+	}
+	return links, nil
+}
+
+func (r *PgAssetRepository) FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
+	sql := `
+		WITH RECURSIVE ancestors AS (
+			SELECT parent_asset_id FROM projecta_asset_compositions WHERE child_asset_id = $1
+			UNION
+			SELECT c.parent_asset_id FROM projecta_asset_compositions c
+			INNER JOIN ancestors a ON c.child_asset_id = a.parent_asset_id
+		)
+		SELECT parent_asset_id FROM ancestors
+	`
+	rows, err := r.db.Query(ctx, sql, assetID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ancestors []uuid.UUID
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err == nil {
+			ancestors = append(ancestors, uuid.MustParse(pid))
+		}
+	}
+	return ancestors, nil
+}
+
 func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_assets")
@@ -217,6 +323,11 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	if err != nil {
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
+
+	children, _ := r.FindChildren(ctx, a.ID())
+	a.SetChildren(children)
+	parents, _ := r.FindParents(ctx, a.ID())
+	a.SetParents(parents)
 
 	return a, nil
 }

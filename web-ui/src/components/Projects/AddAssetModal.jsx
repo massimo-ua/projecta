@@ -31,36 +31,40 @@ export default function AddAssetModal({
   open,
   onSuccess,
   onCancel,
-  types = [],
 }) {
   const content = useIntlayer('assets');
   const { projectId } = useParams();
 
-  const [typeId, setTypeId] = useState('');
-  const [withPayment, setWithPayment] = useState(false);
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState('UAH');
-  const [acquiredAt, setAcquiredAt] = useState(new Date().toISOString().split('T')[0]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [status, setStatus] = useState('ACTIVE');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [completedDate, setCompletedDate] = useState('');
+  const [targetPrice, setTargetPrice] = useState('');
+  const [currency, setCurrency] = useState('UAH');
+  const [withPayment, setWithPayment] = useState(false);
+  const [initialInvestmentPrice, setInitialInvestmentPrice] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (!typeId || !price || !name || !acquiredAt) {
-      toast.error(String(content?.validationRequiredFields || 'Type, Price, Name and Acquired Date are required'));
+    if (!name.trim()) {
+      toast.error(String(content?.validationRequiredFields || 'Name is required'));
       return;
     }
 
     setLoading(true);
     try {
       await assetRepository.addAsset(projectId, {
-        typeId,
-        price: Number(price),
+        name: name.trim(),
+        description: description.trim(),
+        status,
+        startDate: new Date(startDate),
+        completedDate: completedDate ? new Date(completedDate) : undefined,
+        targetPrice: targetPrice ? Number(targetPrice) : undefined,
+        targetCurrency: currency,
+        price: withPayment && initialInvestmentPrice ? Number(initialInvestmentPrice) : (targetPrice ? Number(targetPrice) : 0),
         currency,
-        acquiredAt: new Date(acquiredAt),
-        name,
-        description,
         withPayment,
       });
       toast.success(String(content?.assetAddedSuccess || 'Asset added successfully'));
@@ -75,13 +79,15 @@ export default function AddAssetModal({
   };
 
   const resetForm = () => {
-    setTypeId('');
-    setWithPayment(false);
-    setPrice('');
-    setCurrency('UAH');
-    setAcquiredAt(new Date().toISOString().split('T')[0]);
     setName('');
     setDescription('');
+    setStatus('ACTIVE');
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setCompletedDate('');
+    setTargetPrice('');
+    setCurrency('UAH');
+    setWithPayment(false);
+    setInitialInvestmentPrice('');
   };
 
   const handleCancel = () => {
@@ -91,63 +97,49 @@ export default function AddAssetModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
-      <DialogContent className="sm:max-w-[480px] rounded-2xl p-6">
+      <DialogContent className="sm:max-w-[480px] rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold tracking-tight">
             {String(content?.addAssetTitle || 'Add Asset')}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleAdd} className="space-y-4 py-2">
+          {/* Asset Name */}
           <div className="space-y-2">
-            <Label htmlFor="asset-type" className="text-xs font-semibold">
-              {String(content?.typeLabel || 'Type')}
+            <Label htmlFor="asset-name" className="text-xs font-semibold">
+              {String(content?.nameLabel || 'Name')} *
             </Label>
-            <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger id="asset-type" className="rounded-xl">
-                <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {types.map((type) => (
-                  <SelectItem key={type.id} value={type.id} className="rounded-lg">
-                    {type.name} [{type.category}]
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl border border-border/70 p-3 bg-muted/20">
-            <div className="space-y-0.5">
-              <Label htmlFor="with-payment" className="text-xs font-semibold">
-                {String(content?.createPaymentLabel || 'Create Payment')}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {String(content?.createPaymentDescription || 'Automatically record an associated payment entry')}
-              </p>
-            </div>
-            <Switch
-              id="with-payment"
-              checked={withPayment}
-              onCheckedChange={setWithPayment}
+            <Input
+              id="asset-name"
+              placeholder={String(content?.namePlaceholder || 'e.g. Mercedes Sprinter, Office Relocation')}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded-xl"
+              required
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="asset-price" className="text-xs font-semibold">
-                {String(content?.priceLabel || 'Price')}
+          {/* Status & Currency */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="asset-status" className="text-xs font-semibold">
+                {String(content?.statusLabel || 'Status')}
               </Label>
-              <Input
-                id="asset-price"
-                type="number"
-                step="0.01"
-                placeholder={String(content?.pricePlaceholder || '0.00')}
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                className="rounded-xl"
-                required
-              />
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger id="asset-status" className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="ACTIVE" className="rounded-lg">
+                    {String(content?.activeStatus || 'Active')}
+                  </SelectItem>
+                  <SelectItem value="COMPLETED" className="rounded-lg">
+                    {String(content?.completedStatus || 'Completed')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="asset-currency" className="text-xs font-semibold">
                 {String(content?.currencyLabel || 'Currency')}
@@ -167,46 +159,101 @@ export default function AddAssetModal({
             </div>
           </div>
 
+          {/* Lifecycle Dates */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="asset-start-date" className="text-xs font-semibold">
+                {String(content?.startDateLabel || 'Start Date')} *
+              </Label>
+              <Input
+                id="asset-start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-xl"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="asset-completed-date" className="text-xs font-semibold">
+                {String(content?.completedDateLabel || 'Completed Date')}
+              </Label>
+              <Input
+                id="asset-completed-date"
+                type="date"
+                value={completedDate}
+                onChange={(e) => setCompletedDate(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+          </div>
+
+          {/* Target Valuation / Budget */}
           <div className="space-y-2">
-            <Label htmlFor="asset-acquired" className="text-xs font-semibold">
-              {String(content?.acquiredAtLabel || 'Acquired At')}
+            <Label htmlFor="asset-target-price" className="text-xs font-semibold">
+              {String(content?.targetPriceLabel || 'Target Budget / Target Price (Optional)')}
             </Label>
             <Input
-              id="asset-acquired"
-              type="date"
-              value={acquiredAt}
-              onChange={(e) => setAcquiredAt(e.target.value)}
+              id="asset-target-price"
+              type="number"
+              step="0.01"
+              placeholder={String(content?.pricePlaceholder || '0.00')}
+              value={targetPrice}
+              onChange={(e) => setTargetPrice(e.target.value)}
               className="rounded-xl"
-              required
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="asset-name" className="text-xs font-semibold">
-              {String(content?.nameLabel || 'Name')}
-            </Label>
-            <Input
-              id="asset-name"
-              placeholder={String(content?.namePlaceholder || 'Asset name')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-xl"
-              required
-            />
-          </div>
-
+          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="asset-desc" className="text-xs font-semibold">
               {String(content?.descriptionLabel || 'Description')}
             </Label>
             <Textarea
               id="asset-desc"
-              rows={3}
-              placeholder={String(content?.descriptionPlaceholder || 'Asset description...')}
+              rows={2}
+              placeholder={String(content?.descriptionPlaceholder || 'Asset description, purpose, scope...')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="rounded-xl resize-none"
             />
+          </div>
+
+          {/* Initial Investment Switch */}
+          <div className="space-y-3 rounded-xl border border-border/70 p-3 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="with-payment" className="text-xs font-semibold">
+                  {String(content?.createPaymentLabel || 'Log Initial Investment')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {String(content?.createPaymentDescription || 'Automatically record an initial capital investment')}
+                </p>
+              </div>
+              <Switch
+                id="with-payment"
+                checked={withPayment}
+                onCheckedChange={setWithPayment}
+              />
+            </div>
+            {withPayment && (
+              <div className="pt-2">
+                <Label htmlFor="initial-investment-amount" className="text-xs font-semibold">
+                  {String(content?.priceLabel || 'Initial Investment Amount')}
+                </Label>
+                <Input
+                  id="initial-investment-amount"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={initialInvestmentPrice}
+                  onChange={(e) => setInitialInvestmentPrice(e.target.value)}
+                  className="rounded-xl mt-1.5"
+                  required={withPayment}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter className="pt-3 gap-2 sm:gap-0">
@@ -225,7 +272,7 @@ export default function AddAssetModal({
               className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              <span>{String(content?.submitButton || 'Submit')}</span>
+              <span>{String(content?.submitButton || 'Save')}</span>
             </Button>
           </DialogFooter>
         </form>
@@ -238,11 +285,4 @@ AddAssetModal.propTypes = {
   open: PropTypes.bool.isRequired,
   onSuccess: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
-  types: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string.isRequired,
-      name: PropTypes.string.isRequired,
-      category: PropTypes.string,
-    }),
-  ),
 };

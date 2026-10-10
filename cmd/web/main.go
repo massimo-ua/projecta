@@ -6,6 +6,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
@@ -87,6 +88,15 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		rateProvider,
 	)
 
+	investmentRepository := dal.NewPgInvestmentRepository(db)
+	investmentService := investment.NewService(
+		db,
+		investmentRepository,
+		assetRepository,
+		projectRepository,
+		peopleService,
+	)
+
 	return web.MakeHTTPHandler(
 		customerService,
 		tokenProvider,
@@ -98,6 +108,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		paymentService,
 		assetService,
 		rateProvider,
+		investmentService,
 	)
 }
 

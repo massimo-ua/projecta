@@ -4,8 +4,6 @@ import { localeMap } from 'intlayer';
 import {
   Projects,
   ProjectDetails,
-  Types,
-  Categories,
   Total,
   Settings,
   Login,
@@ -73,22 +71,17 @@ const createRoutesForPrefix = (prefix) => [
     children: [
       {
         index: true,
+        Component: AuthenticatedOnly(Assets),
+        errorElement,
+      },
+      {
+        path: 'assets',
+        Component: AuthenticatedOnly(Assets),
+        errorElement,
+      },
+      {
+        path: 'investments',
         Component: AuthenticatedOnly(Payments),
-        errorElement,
-      },
-      {
-        path: 'types',
-        Component: AuthenticatedOnly(Types),
-        errorElement,
-      },
-      {
-        path: 'categories',
-        Component: AuthenticatedOnly(Categories),
-        errorElement,
-      },
-      {
-        path: 'settings',
-        Component: AuthenticatedOnly(Settings),
         errorElement,
       },
       {
@@ -103,8 +96,18 @@ const createRoutesForPrefix = (prefix) => [
         errorElement,
       },
       {
-        path: 'assets',
-        Component: AuthenticatedOnly(Assets),
+        path: 'settings',
+        Component: AuthenticatedOnly(Settings),
+        errorElement,
+      },
+      {
+        path: 'types',
+        Component: () => React.createElement(Navigate, { to: '../assets', replace: true }),
+        errorElement,
+      },
+      {
+        path: 'categories',
+        Component: () => React.createElement(Navigate, { to: '../assets', replace: true }),
         errorElement,
       },
     ],

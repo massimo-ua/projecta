@@ -4,8 +4,8 @@ const projectDetailsContent = {
   key: 'project-details',
   content: {
     taxonomy: t({
-      en: 'Taxonomy',
-      uk: 'Таксономія',
+      en: 'Configuration',
+      uk: 'Конфігурація',
     }),
     operations: t({
       en: 'Operations',
@@ -32,12 +32,16 @@ const projectDetailsContent = {
       uk: 'Налаштування',
     }),
     total: t({
-      en: 'Total',
-      uk: 'Підсумок',
+      en: 'Total / Analytics',
+      uk: 'Підсумок / Аналітика',
+    }),
+    investments: t({
+      en: 'Investments',
+      uk: 'Інвестиції',
     }),
     payments: t({
-      en: 'Payments',
-      uk: 'Платежі',
+      en: 'Investments',
+      uk: 'Інвестиції',
     }),
     assets: t({
       en: 'Assets',

@@ -10,6 +10,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
@@ -59,6 +60,7 @@ func MakeHTTPHandler(
 	expenseService projecta.PaymentService,
 	assetService asset.Service,
 	rateProvider currency.CurrencyRateProvider,
+	investmentService ...investment.Service,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
@@ -71,6 +73,7 @@ func MakeHTTPHandler(
 		expenseService,
 		assetService,
 		rateProvider,
+		investmentService...,
 	)
 
 	if err != nil {
@@ -329,6 +332,73 @@ func MakeHTTPHandler(
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
+
+	if projectEndpoints.LinkChildAsset != nil {
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/{asset_id}/children").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.LinkChildAsset),
+			decodeLinkChildAssetRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodDelete).Path("/projects/{project_id}/assets/{asset_id}/children/{child_asset_id}").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.UnlinkChildAsset),
+			decodeUnlinkChildAssetRequest,
+			encodeJSON(http.StatusNoContent),
+			withAuth...,
+		))
+	}
+
+	if projectEndpoints.CreateInvestment != nil {
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.CreateInvestment),
+			decodeCreateInvestmentRequest,
+			encodeJSON(http.StatusCreated),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodGet).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.ListInvestments),
+			decodeListInvestmentsRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodGet).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.GetInvestment),
+			decodeGetInvestmentRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodPut).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.UpdateInvestment),
+			decodeUpdateInvestmentRequest,
+			encodeJSON(http.StatusNoContent),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodDelete).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.RemoveInvestment),
+			decodeProjectResourceRemoveCommand("project_id", "investment_id"),
+			encodeJSON(http.StatusNoContent),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments/batch").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.CreateBatchInvestments),
+			decodeCreateBatchInvestmentsRequest,
+			encodeJSON(http.StatusCreated),
+			withAuth...,
+		))
+
+		r.Methods(http.MethodGet).Path("/projects/{project_id}/tags").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.ListTags),
+			decodeListTagsRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
 
 	return r, nil
 }

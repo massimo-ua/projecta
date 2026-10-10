@@ -30,17 +30,17 @@ export default function EditAssetModal({
   onSuccess,
   onCancel,
   assetId = null,
-  types = [],
 }) {
   const content = useIntlayer('assets');
   const { projectId } = useParams();
 
-  const [typeId, setTypeId] = useState('');
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState('UAH');
-  const [acquiredAt, setAcquiredAt] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [status, setStatus] = useState('ACTIVE');
+  const [startDate, setStartDate] = useState('');
+  const [completedDate, setCompletedDate] = useState('');
+  const [targetPrice, setTargetPrice] = useState('');
+  const [currency, setCurrency] = useState('UAH');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -49,15 +49,25 @@ export default function EditAssetModal({
     assetRepository
       .getAsset(projectId, assetId)
       .then((asset) => {
-        setTypeId(asset.typeId || '');
-        setPrice(asset.price || '');
-        setCurrency(asset.currency || 'UAH');
         setName(asset.name || '');
         setDescription(asset.description || '');
+        setStatus(asset.status || 'ACTIVE');
+        setTargetPrice(asset.targetPrice || '');
+        setCurrency(asset.targetCurrency || asset.currency || 'UAH');
 
-        if (asset.acquiredAt) {
-          const formattedDate = new Date(asset.acquiredAt).toISOString().split('T')[0];
-          setAcquiredAt(formattedDate);
+        if (asset.startDate || asset.acquiredAt) {
+          const dt = new Date(asset.startDate || asset.acquiredAt);
+          if (!isNaN(dt.getTime())) {
+            setStartDate(dt.toISOString().split('T')[0]);
+          }
+        }
+        if (asset.completedDate) {
+          const dt = new Date(asset.completedDate);
+          if (!isNaN(dt.getTime())) {
+            setCompletedDate(dt.toISOString().split('T')[0]);
+          }
+        } else {
+          setCompletedDate('');
         }
       })
       .catch((err) => {
@@ -67,8 +77,8 @@ export default function EditAssetModal({
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    if (!typeId || !price || !name || !acquiredAt) {
-      toast.error(String(content?.validationRequiredFields || 'Type, Price, Name and Acquired Date are required'));
+    if (!name.trim()) {
+      toast.error(String(content?.validationRequiredFields || 'Name is required'));
       return;
     }
 
@@ -76,12 +86,14 @@ export default function EditAssetModal({
     try {
       await assetRepository.updateAsset(projectId, {
         id: assetId,
-        typeId,
-        price: Number(price),
+        name: name.trim(),
+        description: description.trim(),
+        status,
+        startDate: startDate ? new Date(startDate) : new Date(),
+        completedDate: completedDate ? new Date(completedDate) : undefined,
+        targetPrice: targetPrice ? Number(targetPrice) : undefined,
+        targetCurrency: currency,
         currency,
-        acquiredAt: new Date(acquiredAt),
-        name,
-        description,
       });
       toast.success(String(content?.assetUpdatedSuccess || 'Asset updated successfully'));
       onSuccess();
@@ -97,47 +109,49 @@ export default function EditAssetModal({
 
   return (
     <Dialog open={Boolean(assetId)} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
-      <DialogContent className="sm:max-w-[480px] rounded-2xl p-6">
+      <DialogContent className="sm:max-w-[480px] rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold tracking-tight">
             {String(content?.editAssetTitle || 'Edit Asset')}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleUpdate} className="space-y-4 py-2">
+          {/* Asset Name */}
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-type" className="text-xs font-semibold">
-              {String(content?.typeLabel || 'Type')}
+            <Label htmlFor="edit-asset-name" className="text-xs font-semibold">
+              {String(content?.nameLabel || 'Name')} *
             </Label>
-            <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger id="edit-asset-type" className="rounded-xl">
-                <SelectValue placeholder={String(content?.selectTypePlaceholder || 'Select type')} />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {types.map((type) => (
-                  <SelectItem key={type.id} value={type.id} className="rounded-lg">
-                    {type.name} [{type.category}]
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              id="edit-asset-name"
+              placeholder={String(content?.namePlaceholder || 'Asset name')}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded-xl"
+              required
+            />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="edit-asset-price" className="text-xs font-semibold">
-                {String(content?.priceLabel || 'Price')}
+          {/* Status & Currency */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-asset-status" className="text-xs font-semibold">
+                {String(content?.statusLabel || 'Status')}
               </Label>
-              <Input
-                id="edit-asset-price"
-                type="number"
-                step="0.01"
-                placeholder={String(content?.pricePlaceholder || '0.00')}
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                className="rounded-xl"
-                required
-              />
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger id="edit-asset-status" className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="ACTIVE" className="rounded-lg">
+                    {String(content?.activeStatus || 'Active')}
+                  </SelectItem>
+                  <SelectItem value="COMPLETED" className="rounded-lg">
+                    {String(content?.completedStatus || 'Completed')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-asset-currency" className="text-xs font-semibold">
                 {String(content?.currencyLabel || 'Currency')}
@@ -157,34 +171,53 @@ export default function EditAssetModal({
             </div>
           </div>
 
+          {/* Lifecycle Dates */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-asset-start-date" className="text-xs font-semibold">
+                {String(content?.startDateLabel || 'Start Date')} *
+              </Label>
+              <Input
+                id="edit-asset-start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-xl"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-asset-completed-date" className="text-xs font-semibold">
+                {String(content?.completedDateLabel || 'Completed Date')}
+              </Label>
+              <Input
+                id="edit-asset-completed-date"
+                type="date"
+                value={completedDate}
+                onChange={(e) => setCompletedDate(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+          </div>
+
+          {/* Target Valuation / Budget */}
           <div className="space-y-2">
-            <Label htmlFor="edit-asset-acquired" className="text-xs font-semibold">
-              {String(content?.acquiredAtLabel || 'Acquired At')}
+            <Label htmlFor="edit-asset-target-price" className="text-xs font-semibold">
+              {String(content?.targetPriceLabel || 'Target Budget / Target Price (Optional)')}
             </Label>
             <Input
-              id="edit-asset-acquired"
-              type="date"
-              value={acquiredAt}
-              onChange={(e) => setAcquiredAt(e.target.value)}
+              id="edit-asset-target-price"
+              type="number"
+              step="0.01"
+              placeholder={String(content?.pricePlaceholder || '0.00')}
+              value={targetPrice}
+              onChange={(e) => setTargetPrice(e.target.value)}
               className="rounded-xl"
-              required
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-asset-name" className="text-xs font-semibold">
-              {String(content?.nameLabel || 'Name')}
-            </Label>
-            <Input
-              id="edit-asset-name"
-              placeholder={String(content?.namePlaceholder || 'Asset name')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-xl"
-              required
-            />
-          </div>
-
+          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="edit-asset-desc" className="text-xs font-semibold">
               {String(content?.descriptionLabel || 'Description')}
@@ -215,7 +248,7 @@ export default function EditAssetModal({
               className="rounded-xl font-semibold shadow-sm shadow-primary/20 gap-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              <span>{String(content?.submitButton || 'Submit')}</span>
+              <span>{String(content?.submitButton || 'Save')}</span>
             </Button>
           </DialogFooter>
         </form>
@@ -228,11 +261,4 @@ EditAssetModal.propTypes = {
   assetId: PropTypes.string,
   onSuccess: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
-  types: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string.isRequired,
-      name: PropTypes.string.isRequired,
-      category: PropTypes.string,
-    }),
-  ),
 };

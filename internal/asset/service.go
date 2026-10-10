@@ -56,7 +56,6 @@ func NewService(
 
 func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Collection, error) {
 	personID, err := core.AuthGuard(ctx)
-
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToFindAsset, err)
 	}
@@ -64,7 +63,6 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 	filter.OwnerID = personID
 
 	collection, err := s.assets.Find(ctx, filter)
-
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToFindAsset, err)
 	}
@@ -74,75 +72,89 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 
 func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Asset, error) {
 	personID, err := core.AuthGuard(ctx)
-
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToFindAsset, err)
 	}
 
 	filter.OwnerID = personID
 
-	asset, err := s.assets.FindOne(ctx, filter)
-
+	anAsset, err := s.assets.FindOne(ctx, filter)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToFindAsset, err)
 	}
 
-	return asset, nil
+	return anAsset, nil
 }
 
 func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*Asset, error) {
 	personID, err := core.AuthGuard(ctx)
-
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToCreateAsset, err)
 	}
 
 	owner, err := s.people.FindOwner(ctx, personID)
-
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
 	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
-
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	costType, err := s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
-
-	if err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+	var costType *projecta.CostType
+	if s.types != nil {
+		var err error
+		costType, err = s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
+		if err != nil {
+			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		}
 	}
 
-	acquiredAt := core.DateOrNow(command.AcquiredAt)
+	price := command.TargetPrice
+	if price == nil {
+		price = command.Price
+	}
 
-	asset := NewAsset(
+	startDate := command.StartDate
+	if startDate.IsZero() {
+		startDate = core.DateOrNow(command.AcquiredAt)
+	}
+
+	status := command.Status
+	if status == "" {
+		status = AssetStatusActive
+	}
+
+	anAsset := NewAsset(
 		uuid.New(),
 		command.Name,
 		command.Description,
 		project,
 		costType,
-		command.Price,
-		acquiredAt,
+		price,
+		startDate,
 		owner,
 	)
+	anAsset.SetStatus(status)
+	anAsset.SetStartDate(startDate)
+	anAsset.SetCompletedDate(command.CompletedDate)
+	anAsset.SetTargetPrice(price)
 
 	paymentDescription := command.Description
-
 	if paymentDescription == "" {
 		paymentDescription = command.Name
 	}
 
-	if command.WithPayment {
+	if command.WithPayment && s.payments != nil {
 		payment := projecta.NewPayment(
 			uuid.New(),
 			project,
 			owner,
 			costType,
 			paymentDescription,
-			command.Price,
-			acquiredAt,
+			price,
+			startDate,
 			projecta.UponCompletionPayment,
 		)
 
@@ -151,7 +163,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 			}
 
-			if err = s.assets.Save(ctx, asset); err != nil {
+			if err = s.assets.Save(ctx, anAsset); err != nil {
 				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 			}
 
@@ -162,16 +174,15 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 			return nil, err
 		}
 
-		return asset, nil
+		return anAsset, nil
 	}
 
-	err = s.assets.Save(ctx, asset)
-
+	err = s.assets.Save(ctx, anAsset)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	return asset, nil
+	return anAsset, nil
 }
 
 func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAssetFromPaymentsCommand) (*Asset, error) {
@@ -293,7 +304,7 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 
 	price := money.New(totalAmount, targetCurrency)
 
-	asset := NewAsset(
+	anAsset := NewAsset(
 		uuid.New(),
 		command.Name,
 		command.Description,
@@ -303,60 +314,121 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		acquiredAt,
 		owner,
 	)
+	anAsset.SetTargetPrice(price)
 
-	if err = s.assets.Save(ctx, asset); err != nil {
+	if err = s.assets.Save(ctx, anAsset); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	return asset, nil
+	return anAsset, nil
 }
 
 func (s *ServiceImpl) Remove(ctx context.Context, command RemoveAssetCommand) error {
 	personID, err := core.AuthGuard(ctx)
-
 	if err != nil {
 		return exceptions.NewUnauthorizedException(failedToFindAsset, err)
 	}
 
-	asset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
-
+	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
 	if err != nil {
 		return exceptions.NewInternalException(failedToFindAsset, err)
 	}
 
-	return s.assets.Remove(ctx, asset)
+	return s.assets.Remove(ctx, anAsset)
 }
 
 func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) error {
 	personID, err := core.AuthGuard(ctx)
-
 	if err != nil {
 		return exceptions.NewUnauthorizedException(failedToUpdateAsset, err)
 	}
 
 	_, err = s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
-
 	if err != nil {
 		return exceptions.NewInternalException(failedToUpdateAsset, err)
 	}
 
-	asset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
-
+	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
 	if err != nil {
 		return exceptions.NewInternalException(failedToUpdateAsset, err)
 	}
 
-	costType, err := s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
-
-	if err != nil {
-		return exceptions.NewInternalException(failedToUpdateAsset, err)
+	if command.TypeID != uuid.Nil && s.types != nil {
+		costType, err := s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
+		if err != nil {
+			return exceptions.NewInternalException(failedToUpdateAsset, err)
+		}
+		anAsset.SetType(costType)
 	}
 
-	asset.SetName(command.Name)
-	asset.SetDescription(command.Description)
-	asset.SetType(costType)
-	asset.SetPrice(command.Price)
-	asset.SetAcquiredAt(command.AcquiredAt)
+	anAsset.SetName(command.Name)
+	anAsset.SetDescription(command.Description)
 
-	return s.assets.Save(ctx, asset)
+	if command.TargetPrice != nil {
+		anAsset.SetTargetPrice(command.TargetPrice)
+	} else if command.Price != nil {
+		anAsset.SetTargetPrice(command.Price)
+	}
+
+	if command.Status != "" {
+		anAsset.SetStatus(command.Status)
+	}
+
+	if !command.StartDate.IsZero() {
+		anAsset.SetStartDate(command.StartDate)
+	} else if !command.AcquiredAt.IsZero() {
+		anAsset.SetStartDate(command.AcquiredAt)
+	}
+
+	if command.CompletedDate != nil {
+		anAsset.SetCompletedDate(command.CompletedDate)
+	}
+
+	return s.assets.Save(ctx, anAsset)
+}
+
+func (s *ServiceImpl) LinkChild(ctx context.Context, command LinkChildCommand) error {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return exceptions.NewUnauthorizedException("failed to link child asset", err)
+	}
+
+	if command.ParentID == command.ChildID {
+		return exceptions.NewValidationException("an asset cannot be a child of itself", nil)
+	}
+
+	if command.SharePercentage <= 0 || command.SharePercentage > 100 {
+		return exceptions.NewValidationException("share percentage must be between 0 and 100", nil)
+	}
+
+	_, err = s.assets.FindOne(ctx, Filter{ID: command.ParentID, OwnerID: personID})
+	if err != nil {
+		return exceptions.NewValidationException("parent asset not found", err)
+	}
+
+	_, err = s.assets.FindOne(ctx, Filter{ID: command.ChildID, OwnerID: personID})
+	if err != nil {
+		return exceptions.NewValidationException("child asset not found", err)
+	}
+
+	ancestors, err := s.assets.FindAncestors(ctx, command.ParentID)
+	if err != nil {
+		return exceptions.NewInternalException("failed to check hierarchy cycles", err)
+	}
+	for _, aID := range ancestors {
+		if aID == command.ChildID {
+			return exceptions.NewValidationException("cannot link child asset: circular dependency detected", nil)
+		}
+	}
+
+	return s.assets.AddChild(ctx, command.ParentID, command.ChildID, command.SharePercentage)
+}
+
+func (s *ServiceImpl) UnlinkChild(ctx context.Context, command UnlinkChildCommand) error {
+	_, err := core.AuthGuard(ctx)
+	if err != nil {
+		return exceptions.NewUnauthorizedException("failed to unlink child asset", err)
+	}
+
+	return s.assets.RemoveChild(ctx, command.ParentID, command.ChildID)
 }

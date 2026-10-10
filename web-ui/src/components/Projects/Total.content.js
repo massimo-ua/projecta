@@ -36,52 +36,52 @@ const totalContent = {
     charts: {
       monthlyTrend: {
         title: t({
-          en: 'Monthly Spending Trend',
-          uk: 'Динаміка витрат за місяцями',
+          en: 'Monthly Investment Trend',
+          uk: 'Динаміка інвестицій за місяцями',
         }),
         description: t({
-          en: 'Spending timeline in project currency',
-          uk: 'Хронологія витрат у валюті проєкту',
+          en: 'Investment timeline in project currency',
+          uk: 'Хронологія інвестицій у валюті проєкту',
         }),
       },
       byCategory: {
         title: t({
-          en: 'Expenses by Category',
-          uk: 'Витрати за категоріями',
+          en: 'Investments by Tag',
+          uk: 'Інвестиції за тегами',
         }),
         description: t({
-          en: 'Payment breakdown across categories',
-          uk: 'Розподіл платежів за категоріями',
+          en: 'Breakdown across resource tags',
+          uk: 'Розподіл за тегами ресурсів',
         }),
       },
       paymentKinds: {
         title: t({
-          en: 'Payment Kinds',
-          uk: 'Види платежів',
+          en: 'Resource Breakdown',
+          uk: 'Розподіл за видами ресурсів',
         }),
         description: t({
-          en: 'Down payments vs upon completion vs credit',
-          uk: 'Аванси та оплати по завершенню робіт',
+          en: 'Capital, labor hours, and goods investments',
+          uk: 'Капітал, праця (години) та товари й матеріали',
         }),
       },
       topTypes: {
         title: t({
-          en: 'Top Cost Types',
-          uk: 'Основні типи витрат',
+          en: 'Top Assets by Investment',
+          uk: 'Основні активи за інвестиціями',
         }),
         description: t({
-          en: 'Top spending subcategories',
-          uk: 'Найбільші статті витрат',
+          en: 'Assets with highest resource allocation',
+          uk: 'Активи з найбільшим обсягом інвестицій',
         }),
       },
       paymentsVsAssets: {
         title: t({
-          en: 'Payments vs. Assets',
-          uk: 'Платежі проти активів',
+          en: 'Investments vs. Assets',
+          uk: 'Інвестиції та активи',
         }),
         description: t({
-          en: 'Comparison of cash spent and asset values',
-          uk: 'Порівняння витрачених коштів та вартості активів',
+          en: 'Direct resource allocations versus asset valuations',
+          uk: 'Прямі інвестиції проти оцінки активів',
         }),
       },
     },
@@ -91,8 +91,8 @@ const totalContent = {
         uk: 'Авансовий платіж',
       }),
       uponCompletion: t({
-        en: 'Upon Completion',
-        uk: 'По завершенню',
+        en: 'Direct Investment',
+        uk: 'Пряма інвестиція',
       }),
       credit: t({
         en: 'Credit',
@@ -105,8 +105,8 @@ const totalContent = {
     },
     labels: {
       payments: t({
-        en: 'Total Payments',
-        uk: 'Всього платежів',
+        en: 'Total Investments',
+        uk: 'Всього інвестицій',
       }),
       assets: t({
         en: 'Total Assets',
@@ -117,8 +117,8 @@ const totalContent = {
         uk: 'Інше',
       }),
       uncategorized: t({
-        en: 'Uncategorized',
-        uk: 'Без категорії',
+        en: 'General',
+        uk: 'Загальні',
       }),
       amount: t({
         en: 'Amount',
@@ -133,8 +133,8 @@ const totalContent = {
         uk: 'Немає даних для діаграм за обраний період',
       }),
       noDataDesc: t({
-        en: 'Record payments or select another timeframe to see analytics.',
-        uk: 'Додайте платежі або оберіть інший період для відображення графіків.',
+        en: 'Record investments or select another timeframe to see analytics.',
+        uk: 'Додайте інвестиції або оберіть інший період для відображення графіків.',
       }),
     },
   },

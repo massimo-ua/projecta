@@ -60,26 +60,27 @@ export function ProjectDetails() {
     {
       title: String(content.operations),
       items: [
-        { key: 'payments', label: String(content.payments), icon: DollarSign },
-        { key: 'total', label: String(content.total), icon: FileText },
         { key: 'assets', label: String(content.assets), icon: Package },
+        { key: 'investments', label: String(content.investments || content.payments), icon: DollarSign },
+        { key: 'total', label: String(content.total), icon: FileText },
       ],
     },
     {
-      title: String(content.taxonomy),
+      title: String(content.taxonomy || 'Configuration'),
       items: [
-        { key: 'categories', label: String(content.categories), icon: PieChart },
-        { key: 'types', label: String(content.types), icon: Boxes },
         { key: 'settings', label: String(content.settings), icon: Settings },
       ],
     },
   ];
 
-  // Fix UX issue: determine active tab properly
-  const validKeys = ['payments', 'assets', 'categories', 'types', 'settings', 'total'];
+  // Determine active tab properly
+  const validKeys = ['assets', 'investments', 'payments', 'total', 'settings'];
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const lastSegment = pathSegments[pathSegments.length - 1];
-  const currentTab = validKeys.includes(lastSegment) ? lastSegment : 'payments';
+  let currentTab = validKeys.includes(lastSegment) ? lastSegment : 'assets';
+  if (currentTab === 'payments') {
+    currentTab = 'investments';
+  }
 
   const handleSelect = (key) => {
     const targetUrl = getLocalizedUrl(`/projects/${projectId}/${key}`, locale);
