@@ -61,7 +61,7 @@ func TestCalculateProjectTotals(t *testing.T) {
 
 	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "User"}
 	proj, _ := projecta.NewProject(uuid.New(), "P", "", owner, time.Now(), time.Now())
-	rootA := asset.NewAsset(uuid.New(), "RootA", "", proj, nil, money.New(0, "UAH"), time.Now(), owner)
+	rootA := asset.NewAsset(uuid.New(), "RootA", "", proj, money.New(0, "UAH"), time.Now(), owner)
 	rootA.AssignValuation(money.New(5000, "UAH"), money.New(5000, "UAH"), nil, nil)
 
 	totals, err := asset.CalculateProjectTotals(

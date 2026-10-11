@@ -116,7 +116,7 @@ func TestInvestmentService(t *testing.T) {
 
 	owner := &projecta.Owner{PersonID: personID, DisplayName: "Alex"}
 	project, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Description", owner, time.Now(), time.Now())
-	existingAsset := asset.NewAsset(uuid.New(), "Vehicle", "Car", project, nil, money.New(10000, "USD"), time.Now(), owner)
+	existingAsset := asset.NewAsset(uuid.New(), "Vehicle", "Car", project, money.New(10000, "USD"), time.Now(), owner)
 
 	t.Run("Create success (Money, Time, Goods)", func(t *testing.T) {
 		repo := &mockInvestmentRepo{}
@@ -130,7 +130,7 @@ func TestInvestmentService(t *testing.T) {
 
 		// Money investment
 		inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-			ProjectID:    project.ProjectID,
+			ProjectID:    project.ID(),
 			AssetID:      existingAsset.ID(),
 			ResourceType: investment.ResourceTypeMoney,
 			Amount:       money.New(500, "USD"),
@@ -148,7 +148,7 @@ func TestInvestmentService(t *testing.T) {
 		hours := 4.5
 		rate := money.New(4000, "USD") // $40/hr
 		invTime, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-			ProjectID:      project.ProjectID,
+			ProjectID:      project.ID(),
 			AssetID:        existingAsset.ID(),
 			ResourceType:   investment.ResourceTypeTime,
 			TimeHours:      &hours,
@@ -166,7 +166,7 @@ func TestInvestmentService(t *testing.T) {
 		// Goods investment
 		qty := 4.0
 		invGoods, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-			ProjectID:     project.ProjectID,
+			ProjectID:     project.ID(),
 			AssetID:       existingAsset.ID(),
 			ResourceType:  investment.ResourceTypeGoods,
 			Amount:        money.New(30000, "USD"),
@@ -211,7 +211,7 @@ func TestInvestmentService(t *testing.T) {
 
 		// Missing AssetID
 		_, err = svc.Create(authedCtx, investment.CreateInvestmentCommand{
-			ProjectID:   project.ProjectID,
+			ProjectID:   project.ID(),
 			Amount:      money.New(100, "USD"),
 			Description: "Test",
 		})
@@ -221,7 +221,7 @@ func TestInvestmentService(t *testing.T) {
 
 		// Missing Description
 		_, err = svc.Create(authedCtx, investment.CreateInvestmentCommand{
-			ProjectID: project.ProjectID,
+			ProjectID: project.ID(),
 			AssetID:   existingAsset.ID(),
 			Amount:    money.New(100, "USD"),
 		})
@@ -231,7 +231,7 @@ func TestInvestmentService(t *testing.T) {
 
 		// Amount <= 0
 		_, err = svc.Create(authedCtx, investment.CreateInvestmentCommand{
-			ProjectID:   project.ProjectID,
+			ProjectID:   project.ID(),
 			AssetID:     existingAsset.ID(),
 			Amount:      money.New(0, "USD"),
 			Description: "Test",
@@ -265,7 +265,7 @@ func TestInvestmentService(t *testing.T) {
 		}
 
 		created, err := svc.CreateBatch(authedCtx, investment.CreateBatchInvestmentsCommand{
-			ProjectID:    project.ProjectID,
+			ProjectID:    project.ID(),
 			DefaultAsset: existingAsset.ID(),
 			Items:        items,
 		})
@@ -306,7 +306,7 @@ func TestInvestmentService(t *testing.T) {
 
 		err = svc.Update(authedCtx, investment.UpdateInvestmentCommand{
 			ID:          inv.ID(),
-			ProjectID:   project.ProjectID,
+			ProjectID:   project.ID(),
 			Amount:      money.New(250, "USD"),
 			Description: "Updated desc",
 			Tags:        []string{"tag2"},
@@ -320,7 +320,7 @@ func TestInvestmentService(t *testing.T) {
 
 		err = svc.Remove(authedCtx, investment.RemoveInvestmentCommand{
 			ID:        inv.ID(),
-			ProjectID: project.ProjectID,
+			ProjectID: project.ID(),
 		})
 		if err != nil {
 			t.Errorf("unexpected remove error: %v", err)
@@ -337,7 +337,7 @@ func TestInvestmentService(t *testing.T) {
 			&mockPeopleService{owner: owner},
 		)
 
-		tags, err := svc.FindTags(authedCtx, project.ProjectID)
+		tags, err := svc.FindTags(authedCtx, project.ID())
 		if err != nil {
 			t.Fatalf("unexpected error finding tags: %v", err)
 		}
@@ -347,7 +347,7 @@ func TestInvestmentService(t *testing.T) {
 	})
 
 	t.Run("MultiAssetInvestment", func(t *testing.T) {
-		asset2 := asset.NewAsset(uuid.New(), "Second Asset", "Car", project, nil, money.New(0, "USD"), time.Now(), owner)
+		asset2 := asset.NewAsset(uuid.New(), "Second Asset", "Car", project, money.New(0, "USD"), time.Now(), owner)
 		assetsMap := map[uuid.UUID]*asset.Asset{
 			existingAsset.ID(): existingAsset,
 			asset2.ID():        asset2,
@@ -363,7 +363,7 @@ func TestInvestmentService(t *testing.T) {
 
 		t.Run("creates successfully when shares equal 100", func(t *testing.T) {
 			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-				ProjectID: project.ProjectID,
+				ProjectID: project.ID(),
 				AssetAllocations: []investment.InvestmentAssetInput{
 					{AssetID: existingAsset.ID(), SharePercentage: 60},
 					{AssetID: asset2.ID(), SharePercentage: 40},
@@ -389,7 +389,7 @@ func TestInvestmentService(t *testing.T) {
 
 		t.Run("fails when shares do not equal 100", func(t *testing.T) {
 			_, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-				ProjectID: project.ProjectID,
+				ProjectID: project.ID(),
 				AssetAllocations: []investment.InvestmentAssetInput{
 					{AssetID: existingAsset.ID(), SharePercentage: 60},
 					{AssetID: asset2.ID(), SharePercentage: 30},
@@ -406,7 +406,7 @@ func TestInvestmentService(t *testing.T) {
 
 		t.Run("fails on duplicate asset allocations", func(t *testing.T) {
 			_, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-				ProjectID: project.ProjectID,
+				ProjectID: project.ID(),
 				AssetAllocations: []investment.InvestmentAssetInput{
 					{AssetID: existingAsset.ID(), SharePercentage: 50},
 					{AssetID: existingAsset.ID(), SharePercentage: 50},
@@ -423,7 +423,7 @@ func TestInvestmentService(t *testing.T) {
 
 		t.Run("fails on negative or zero share", func(t *testing.T) {
 			_, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-				ProjectID: project.ProjectID,
+				ProjectID: project.ID(),
 				AssetAllocations: []investment.InvestmentAssetInput{
 					{AssetID: existingAsset.ID(), SharePercentage: 100},
 					{AssetID: asset2.ID(), SharePercentage: 0},
@@ -439,7 +439,7 @@ func TestInvestmentService(t *testing.T) {
 		})
 		t.Run("defaults to 100% share for single asset investment without user defining share", func(t *testing.T) {
 			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-				ProjectID:    project.ProjectID,
+				ProjectID:    project.ID(),
 				AssetID:      existingAsset.ID(),
 				ResourceType: investment.ResourceTypeMoney,
 				Amount:       money.New(500, "USD"),
@@ -459,7 +459,7 @@ func TestInvestmentService(t *testing.T) {
 
 		t.Run("defaults to 100% share when single allocation passed with zero or undefined share", func(t *testing.T) {
 			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
-				ProjectID: project.ProjectID,
+				ProjectID: project.ID(),
 				AssetAllocations: []investment.InvestmentAssetInput{
 					{AssetID: existingAsset.ID(), SharePercentage: 0},
 				},

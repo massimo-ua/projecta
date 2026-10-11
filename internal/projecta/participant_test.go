@@ -113,11 +113,11 @@ func TestProjectParticipants(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if len(proj.Participants) != 1 {
-			t.Fatalf("expected 1 participant, got %d", len(proj.Participants))
+		if len(proj.Participants()) != 1 {
+			t.Fatalf("expected 1 participant, got %d", len(proj.Participants()))
 		}
-		if proj.Participants[0].DisplayName() != "Owner User" {
-			t.Errorf("expected 'Owner User', got '%s'", proj.Participants[0].DisplayName())
+		if proj.Participants()[0].DisplayName() != "Owner User" {
+			t.Errorf("expected 'Owner User', got '%s'", proj.Participants()[0].DisplayName())
 		}
 	})
 
@@ -126,8 +126,8 @@ func TestProjectParticipants(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(proj.Participants) != 0 {
-			t.Errorf("expected 0 participants, got %d", len(proj.Participants))
+		if len(proj.Participants()) != 0 {
+			t.Errorf("expected 0 participants, got %d", len(proj.Participants()))
 		}
 
 		emptyOwner := &projecta.Owner{PersonID: ownerID, DisplayName: ""}
@@ -135,8 +135,8 @@ func TestProjectParticipants(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(proj2.Participants) != 0 {
-			t.Errorf("expected 0 participants, got %d", len(proj2.Participants))
+		if len(proj2.Participants()) != 0 {
+			t.Errorf("expected 0 participants, got %d", len(proj2.Participants()))
 		}
 	})
 
@@ -152,16 +152,16 @@ func TestProjectParticipants(t *testing.T) {
 		proj.AddParticipant(p1)
 		proj.AddParticipant(p2)
 
-		if len(proj.Participants) != 3 {
-			t.Fatalf("expected 3 participants, got %d", len(proj.Participants))
+		if len(proj.Participants()) != 3 {
+			t.Fatalf("expected 3 participants, got %d", len(proj.Participants()))
 		}
 
 		// Try to add duplicate
 		duplicateP1, _ := projecta.NewParticipant("Team Member 1")
 		proj.AddParticipant(duplicateP1)
 
-		if len(proj.Participants) != 3 {
-			t.Errorf("expected 3 participants after duplicate add, got %d", len(proj.Participants))
+		if len(proj.Participants()) != 3 {
+			t.Errorf("expected 3 participants after duplicate add, got %d", len(proj.Participants()))
 		}
 	})
 }

@@ -55,9 +55,7 @@ func MakeHTTPHandler(
 	authService people.AuthService,
 	invitationService people.InvitationService,
 	projectService projecta.ProjectService,
-	categoryService projecta.CategoryService,
-	typeService projecta.TypeService,
-	expenseService projecta.PaymentService,
+	statementService projecta.StatementService,
 	assetService asset.Service,
 	rateProvider currency.CurrencyRateProvider,
 	investmentService ...investment.Service,
@@ -68,9 +66,7 @@ func MakeHTTPHandler(
 	invitationEndpoints := MakeInvitationEndpoints(invitationService)
 	projectEndpoints, err := MakeProjectEndpoints(
 		projectService,
-		categoryService,
-		typeService,
-		expenseService,
+		statementService,
 		assetService,
 		rateProvider,
 		investmentService...,
@@ -200,52 +196,10 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/categories").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.CreateCategory),
-		DecodeCreateCategoryRequest,
-		encodeJSON(http.StatusCreated),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodGet).Path("/projects/{project_id}/categories").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.ListCategories),
-		decodeListCategoriesRequest,
-		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/types").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.CreateType),
-		DecodeCreateTypeRequest,
-		encodeJSON(http.StatusCreated),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodGet).Path("/projects/{project_id}/types").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.ListTypes),
-		decodeListTypesRequest,
-		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodDelete).Path("/projects/{project_id}/types/{type_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.RemoveType),
-		decodeProjectResourceRemoveCommand("project_id", "type_id"),
-		encodeJSON(http.StatusNoContent),
-		withAuth...,
-	))
-
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/totals").Handler(ht.NewServer(
 		requireRole(string(people.RoleUser), projectEndpoints.ShowProjectTotals),
 		decodeProjectTotalsRequest,
 		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.CreatePayment),
-		DecodeCreatePaymentRequest,
-		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
@@ -256,38 +210,10 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments/batch").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.CreateBatchPayments),
-		decodeCreateBatchPaymentRequest,
-		encodeJSON(http.StatusCreated),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.ListPayments),
-		decodeListPaymentsRequest,
+	r.Methods(http.MethodPost).Path("/projects/{project_id}/statements/parse").Handler(ht.NewServer(
+		requireRole(string(people.RoleUser), projectEndpoints.ParseStatement),
+		decodeParseStatementRequest,
 		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodPut).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.UpdatePayment),
-		decodeUpdatePaymentRequest,
-		encodeJSON(http.StatusNoContent),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodGet).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.GetPayment),
-		decodeGetPaymentRequest,
-		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
-
-	r.Methods(http.MethodDelete).Path("/projects/{project_id}/payments/{payment_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.RemovePayment),
-		decodeProjectResourceRemoveCommand("project_id", "payment_id"),
-		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 

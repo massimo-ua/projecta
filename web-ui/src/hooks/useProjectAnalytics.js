@@ -10,7 +10,7 @@ import {
   subMonths,
   startOfYear,
 } from 'date-fns';
-import { paymentRepository, assetRepository, projectsRepository } from '../api';
+import { investmentRepository, assetRepository, projectsRepository } from '../api';
 
 export function useProjectAnalytics(projectId) {
   const [loading, setLoading] = useState(true);
@@ -23,21 +23,21 @@ export function useProjectAnalytics(projectId) {
     if (!projectId) return;
     setLoading(true);
     try {
-      const [paymentsRes, assetsRes, projectRes] = await Promise.all([
-        paymentRepository.getPayments(projectId, 1000, 0).catch(() => [[], 0]),
+      const [investmentsRes, assetsRes, projectRes] = await Promise.all([
+        investmentRepository.getInvestments(projectId, 1000, 0).catch(() => [[], 0]),
         assetRepository.getAssets(projectId, 1000, 0).catch(() => [[], 0]),
         projectsRepository.getProject(projectId).catch(() => null),
       ]);
 
-      const [loadedPayments] = paymentsRes;
+      const [loadedInvestments] = investmentsRes;
       const [loadedAssets] = assetsRes;
 
-      setPayments(Array.isArray(loadedPayments) ? loadedPayments : []);
+      setPayments(Array.isArray(loadedInvestments) ? loadedInvestments : []);
       setAssets(Array.isArray(loadedAssets) ? loadedAssets : []);
       if (projectRes?.mainCurrency) {
         setCurrency(projectRes.mainCurrency);
-      } else if (loadedPayments?.[0]?.homeCurrency) {
-        setCurrency(loadedPayments[0].homeCurrency);
+      } else if (loadedInvestments?.[0]?.homeCurrency) {
+        setCurrency(loadedInvestments[0].homeCurrency);
       }
     } catch {
       // Ignore load error, empty fallback

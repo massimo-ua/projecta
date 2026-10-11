@@ -31,7 +31,7 @@ func NewPgInvestmentRepository(conn *PgDbConnection) *PgInvestmentRepository {
 func (r *PgInvestmentRepository) Save(ctx context.Context, inv *investment.Investment) error {
 	_, err := r.FindOne(ctx, investment.Filter{
 		ID:        inv.ID(),
-		ProjectID: inv.Project().ProjectID,
+		ProjectID: inv.Project().ID(),
 	})
 
 	if err != nil {
@@ -81,7 +81,7 @@ func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Inv
 
 	qb.Values(
 		inv.ID().String(),
-		inv.Project().ProjectID.String(),
+		inv.Project().ID().String(),
 		inv.PrimaryAssetID().String(),
 		inv.Contributor().PersonID.String(),
 		inv.ResourceType().String(),
@@ -142,7 +142,7 @@ func (r *PgInvestmentRepository) update(ctx context.Context, inv *investment.Inv
 		qb.Assign("tags", inv.Tags()),
 	)
 	qb.Where(qb.Equal("investment_id", inv.ID().String()))
-	qb.Where(qb.Equal("project_id", inv.Project().ProjectID.String()))
+	qb.Where(qb.Equal("project_id", inv.Project().ID().String()))
 
 	sql, args := qb.Build()
 	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
@@ -223,7 +223,7 @@ func (r *PgInvestmentRepository) Remove(ctx context.Context, inv *investment.Inv
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_investments")
 	qb.Where(qb.Equal("investment_id", inv.ID().String()))
-	qb.Where(qb.Equal("project_id", inv.Project().ProjectID.String()))
+	qb.Where(qb.Equal("project_id", inv.Project().ID().String()))
 
 	sql, args := qb.Build()
 	res, err := r.db.Exec(ctx, sql, args...)
@@ -530,11 +530,18 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 		return nil, err
 	}
 
-	proj := &projecta.Project{
-		ProjectID:   uuid.MustParse(projID),
-		Name:        projName,
-		Description: projDesc,
-	}
+	proj := projecta.ReconstituteProject(
+		uuid.MustParse(projID),
+		projName,
+		projDesc,
+		nil,
+		time.Time{},
+		time.Time{},
+		uuid.Nil,
+		false,
+		currencyCode,
+		nil,
+	)
 
 	contrib := &projecta.Owner{
 		PersonID:    uuid.MustParse(contribID),

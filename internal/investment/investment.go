@@ -84,7 +84,7 @@ func NewInvestment(
 	if id == uuid.Nil {
 		return nil, exceptions.NewValidationException("investment id is required", nil)
 	}
-	if project == nil || project.ProjectID == uuid.Nil {
+	if project == nil || project.ID() == uuid.Nil {
 		return nil, exceptions.NewValidationException("project is required", nil)
 	}
 	if strings.TrimSpace(description) == "" {

@@ -53,8 +53,8 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 	}
 
 	homeCurrency := "UAH"
-	if inv.Project() != nil && inv.Project().MainCurrency != "" {
-		homeCurrency = inv.Project().MainCurrency
+	if inv.Project() != nil && inv.Project().MainCurrency() != "" {
+		homeCurrency = inv.Project().MainCurrency()
 	}
 
 	homeAmount := int64(0)
@@ -88,7 +88,7 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 
 	var projectID string
 	if inv.Project() != nil {
-		projectID = inv.Project().ProjectID.String()
+		projectID = inv.Project().ID().String()
 	}
 
 	var hourlyRateVal *int64

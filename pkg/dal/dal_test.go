@@ -442,7 +442,7 @@ func TestPgProjectRepository(t *testing.T) {
 		sharedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, sharedPersonID)
 		ctxShared := withMockDb(sharedCtx, mockDb)
 		pShared, err := repo.FindOne(ctxShared, projecta.ProjectFilter{ProjectID: pID})
-		if err != nil || !pShared.IsShared {
+		if err != nil || !pShared.IsShared() {
 			t.Errorf("expected shared project")
 		}
 
@@ -472,14 +472,14 @@ func TestPgProjectRepository(t *testing.T) {
 		if err != nil || p == nil {
 			t.Fatalf("FindOne error: %v", err)
 		}
-		if len(p.Participants) != 2 {
-			t.Fatalf("expected 2 participants, got %d", len(p.Participants))
+		if len(p.Participants()) != 2 {
+			t.Fatalf("expected 2 participants, got %d", len(p.Participants()))
 		}
-		if p.Participants[0].DisplayName() != "Owner Display" {
-			t.Errorf("expected owner 'Owner Display', got '%s'", p.Participants[0].DisplayName())
+		if p.Participants()[0].DisplayName() != "Owner Display" {
+			t.Errorf("expected owner 'Owner Display', got '%s'", p.Participants()[0].DisplayName())
 		}
-		if p.Participants[1].DisplayName() != "Jane Member" {
-			t.Errorf("expected shared participant 'Jane Member', got '%s'", p.Participants[1].DisplayName())
+		if p.Participants()[1].DisplayName() != "Jane Member" {
+			t.Errorf("expected shared participant 'Jane Member', got '%s'", p.Participants()[1].DisplayName())
 		}
 	})
 
@@ -492,15 +492,14 @@ func TestPgProjectRepository(t *testing.T) {
 			t.Errorf("Create error: %v", err)
 		}
 
-		projWithToken, _ := projecta.NewProject(pID, "Project A", "Desc", owner, now, now)
-		projWithToken.ShareToken = uuid.New()
+		token := uuid.New()
+		projWithToken := projecta.ReconstituteProject(pID, "Project A", "Desc", owner, now, now, token, false, "UAH", nil)
 		err = repo.Create(ctx, projWithToken)
 		if err != nil {
 			t.Errorf("Create error with existing share token: %v", err)
 		}
 
-		projEmptyCurr, _ := projecta.NewProject(pID, "Project A", "Desc", owner, now, now)
-		projEmptyCurr.MainCurrency = ""
+		projEmptyCurr := projecta.ReconstituteProject(pID, "Project A", "Desc", owner, now, now, token, false, "", nil)
 		err = repo.Create(ctx, projEmptyCurr)
 		if err != nil {
 			t.Errorf("Create error with empty currency: %v", err)
@@ -593,248 +592,57 @@ func TestPgProjectRepository(t *testing.T) {
 
 	t.Run("toProject test", func(t *testing.T) {
 		token := uuid.New()
-		p, err := toProject(pID.String(), "Name", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH", token.String())
-		if err != nil || p == nil || p.ShareToken != token {
+		rec := projectRecord{
+			projectID:     pID.String(),
+			name:          "Name",
+			description:   "Desc",
+			ownerID:       ownerID.String(),
+			firstName:     "John",
+			lastName:      "Doe",
+			displayName:   types.NullString{String: "J.D.", Valid: true},
+			startedAt:     now,
+			endedAt:       now,
+			shareTokenStr: token.String(),
+			mainCurrency:  types.NullString{String: "UAH", Valid: true},
+		}
+		p, err := rec.toProject(false, nil)
+		if err != nil || p == nil || p.ShareToken() != token {
 			t.Errorf("toProject error: %v", err)
 		}
 
-		// Invalid first name for people.NewPerson
-		_, err = toProject(pID.String(), "Name", "Desc", ownerID.String(), "", "Doe", "J.D.", now, now, "UAH")
+		// Invalid project id
+		recInvalidPID := rec
+		recInvalidPID.projectID = "invalid"
+		_, err = recInvalidPID.toProject(false, nil)
 		if err == nil {
-			t.Errorf("expected error for invalid first name")
+			t.Errorf("expected error for invalid project id")
 		}
 
-		// Invalid project name for projecta.NewProject
-		_, err = toProject(pID.String(), "", "Desc", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH")
+		// Invalid owner id
+		recInvalidOID := rec
+		recInvalidOID.ownerID = "invalid"
+		_, err = recInvalidOID.toProject(false, nil)
 		if err == nil {
-			t.Errorf("expected error for invalid project name")
+			t.Errorf("expected error for invalid owner id")
 		}
 	})
 }
 
-func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
+func TestPgAssetRepository(t *testing.T) {
 	dbConn := &PgDbConnection{}
 	projRepo := NewPgProjectRepository(dbConn)
-	catRepo := NewPgCategoryRepository(dbConn)
-	typeRepo := NewPgCostTypeRepository(dbConn)
-	payRepo := NewPgPaymentRepository(dbConn)
 	astRepo := NewPgAssetRepository(dbConn)
 
 	pID := uuid.New()
-	catID := uuid.New()
-	typeID := uuid.New()
-	payID := uuid.New()
 	astID := uuid.New()
 	ownerID := uuid.New()
 	now := time.Now()
 
 	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John"}
 	proj, _ := projecta.NewProject(pID, "Project", "Desc", owner, now, now)
-	cat, _ := projecta.NewCostCategory(catID, pID, "Category", "Desc")
-	costType, _ := projecta.NewCostType(pID, cat, "Type", "Desc")
-	pay := projecta.NewPayment(payID, proj, owner, costType, "Payment", money.New(100, money.USD), now, projecta.DownPayment)
-	ast := asset.NewAsset(astID, "Laptop", "Desc", proj, costType, money.New(1000, money.USD), now, owner)
+	ast := asset.NewAsset(astID, "Laptop", "Desc", proj, money.New(1000, money.USD), now, owner)
 
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
-
-	t.Run("PgCostCategoryRepository methods and create branch", func(t *testing.T) {
-		mockDb := &mockPgDb{
-			rowVal:   []any{catID.String(), pID.String(), "Category", "Desc"},
-			rowsData: [][]any{{catID.String(), pID.String(), "Category", "Desc"}},
-		}
-		ctx := withMockDb(authedCtx, mockDb)
-
-		err := catRepo.Save(ctx, cat)
-		if err != nil {
-			t.Errorf("Save category error: %v", err)
-		}
-
-		// Save calling create when not found
-		mockDbCreate := &mockPgDb{isNotFound: true}
-		ctxCreate := withMockDb(authedCtx, mockDbCreate)
-		err = catRepo.Save(ctxCreate, cat)
-		if err != nil {
-			t.Errorf("Save category create branch error: %v", err)
-		}
-
-		// Save update error
-		mockDbUpdErr := &mockPgDb{execTag: pgconn.NewCommandTag("UPDATE 0")}
-		ctxUpdErr := withMockDb(authedCtx, mockDbUpdErr)
-		err = catRepo.Save(ctxUpdErr, cat)
-		if err == nil {
-			t.Errorf("expected error on category update failure")
-		}
-
-		c, err := catRepo.FindOne(ctx, projecta.CategoryFilter{CategoryID: catID, ProjectID: pID, Name: "Category"})
-		if err != nil || c == nil {
-			t.Errorf("FindOne category error: %v", err)
-		}
-
-		// FindOne other db error
-		mockDbOtherErr := &mockPgDb{rowErr: errors.New("db error")}
-		ctxOtherErr := withMockDb(authedCtx, mockDbOtherErr)
-		_, err = catRepo.FindOne(ctxOtherErr, projecta.CategoryFilter{CategoryID: catID, ProjectID: pID})
-		if err == nil {
-			t.Errorf("expected internal error on category FindOne db error")
-		}
-
-		cols, err := catRepo.Find(ctx, projecta.CategoryCollectionFilter{ProjectID: pID, Name: "Cat", Pagination: core.Pagination{Limit: 10}})
-		if err != nil || cols == nil {
-			t.Errorf("Find category collection error: %v", err)
-		}
-
-		err = catRepo.Remove(ctx, cat)
-		if err != nil {
-			t.Errorf("Remove category error: %v", err)
-		}
-
-		// Remove zero rows affected error
-		mockDbZero := &mockPgDb{execTag: pgconn.NewCommandTag("DELETE 0")}
-		ctxZero := withMockDb(authedCtx, mockDbZero)
-		err = catRepo.Remove(ctxZero, cat)
-		if err == nil {
-			t.Errorf("expected remove error on 0 rows affected")
-		}
-	})
-
-	t.Run("toCostCategory test", func(t *testing.T) {
-		c, err := toCostCategory(catID.String(), pID.String(), "Cat", "Desc")
-		if err != nil || c == nil {
-			t.Errorf("toCostCategory error: %v", err)
-		}
-	})
-
-	t.Run("PgCostTypeRepository methods and zero total branch", func(t *testing.T) {
-		mockDb := &mockPgDb{
-			rowVal:   []any{typeID.String(), pID.String(), catID.String(), "Category", "Cat Desc", "Type", "Type Desc"},
-			rowsData: [][]any{{typeID.String(), pID.String(), catID.String(), "Category", "Cat Desc", "Type", "Type Desc"}},
-		}
-		ctx := withMockDb(authedCtx, mockDb)
-
-		err := typeRepo.Save(ctx, costType)
-		if err != nil {
-			t.Errorf("Save cost type error: %v", err)
-		}
-
-		tp, err := typeRepo.FindOne(ctx, projecta.TypeFilter{TypeID: typeID, ProjectID: pID, Name: "Type"})
-		if err != nil || tp == nil {
-			t.Errorf("FindOne cost type error: %v", err)
-		}
-
-		// FindOne other db error
-		mockDbOtherErr := &mockPgDb{rowErr: errors.New("db error")}
-		ctxOtherErr := withMockDb(authedCtx, mockDbOtherErr)
-		_, err = typeRepo.FindOne(ctxOtherErr, projecta.TypeFilter{TypeID: typeID, ProjectID: pID})
-		if err == nil {
-			t.Errorf("expected internal error on cost type FindOne db error")
-		}
-
-		cols, err := typeRepo.Find(ctx, projecta.TypeCollectionFilter{ProjectID: pID, Name: "Type", Pagination: core.Pagination{Limit: 10}})
-		if err != nil || cols == nil {
-			t.Errorf("Find cost type collection error: %v", err)
-		}
-
-		// Find with 0 total
-		mockDbZero := &mockPgDb{zeroTotal: true}
-		ctxZero := withMockDb(authedCtx, mockDbZero)
-		zeroCols, err := typeRepo.Find(ctxZero, projecta.TypeCollectionFilter{ProjectID: pID})
-		if err != nil || zeroCols.Total() != 0 {
-			t.Errorf("expected 0 total cost types")
-		}
-
-		err = typeRepo.Remove(ctx, costType)
-		if err != nil {
-			t.Errorf("Remove cost type error: %v", err)
-		}
-	})
-
-	t.Run("toCostType test", func(t *testing.T) {
-		tp, err := toCostType(typeID.String(), pID.String(), "Type", "Desc", catID.String(), "Cat")
-		if err != nil || tp == nil {
-			t.Errorf("toCostType error: %v", err)
-		}
-	})
-
-	t.Run("PgPaymentRepository methods and zero total branch", func(t *testing.T) {
-		mockDb := &mockPgDb{
-			rowVal: []any{
-				payID.String(), pID.String(), "Project", catID.String(), "Cat",
-				typeID.String(), "Type", int64(100), "USD", "Payment",
-				ownerID.String(), "John", "J.D.", now, "DOWN_PAYMENT",
-			},
-			rowsData: [][]any{{
-				payID.String(), pID.String(), "Project", catID.String(), "Cat",
-				typeID.String(), "Type", int64(100), "USD", "Payment",
-				ownerID.String(), "John", "J.D.", now, "DOWN_PAYMENT",
-			}},
-		}
-		ctx := withMockDb(authedCtx, mockDb)
-
-		err := payRepo.Save(ctx, pay)
-		if err != nil {
-			t.Errorf("Save payment error: %v", err)
-		}
-
-		// Save calling create when not found (0 rows affected on select/update)
-		mockDbCreate := &mockPgDb{execTag: pgconn.NewCommandTag("UPDATE 0")}
-		ctxCreate := withMockDb(authedCtx, mockDbCreate)
-		err = payRepo.Save(ctxCreate, pay)
-		if err != nil {
-			t.Errorf("Save payment create branch error: %v", err)
-		}
-
-		p, err := payRepo.FindOne(ctx, projecta.PaymentFilter{PaymentID: payID, ProjectID: pID})
-		if err != nil || p == nil {
-			t.Errorf("FindOne payment error: %v", err)
-		}
-
-		// FindOne other db error
-		mockDbOtherErr := &mockPgDb{rowErr: errors.New("db error")}
-		ctxOtherErr := withMockDb(authedCtx, mockDbOtherErr)
-		_, err = payRepo.FindOne(ctxOtherErr, projecta.PaymentFilter{PaymentID: payID, ProjectID: pID})
-		if err == nil {
-			t.Errorf("expected internal error on payment FindOne db error")
-		}
-
-		cols, err := payRepo.Find(ctx, projecta.PaymentCollectionFilter{
-			ProjectID:  pID,
-			CategoryID: catID,
-			TypeID:     typeID,
-			Sorting:    core.Sorting{OrderBy: "date", Order: core.DESC},
-			Pagination: core.Pagination{Limit: 10, Offset: 0},
-		})
-		if err != nil || cols == nil {
-			t.Errorf("Find payment collection error: %v", err)
-		}
-
-		// Find zero total
-		mockDbZero := &mockPgDb{zeroTotal: true}
-		ctxZero := withMockDb(authedCtx, mockDbZero)
-		zeroCols, err := payRepo.Find(ctxZero, projecta.PaymentCollectionFilter{ProjectID: pID})
-		if err != nil || zeroCols.Total() != 0 {
-			t.Errorf("expected 0 total payments")
-		}
-
-		err = payRepo.Remove(ctx, pay)
-		if err != nil {
-			t.Errorf("Remove payment error: %v", err)
-		}
-
-		// Remove exec error
-		mockDbRemErr := &mockPgDb{execErr: errors.New("exec error")}
-		ctxRemErr := withMockDb(authedCtx, mockDbRemErr)
-		err = payRepo.Remove(ctxRemErr, pay)
-		if err == nil {
-			t.Errorf("expected exec error on payment Remove")
-		}
-	})
-
-	t.Run("toExpense test", func(t *testing.T) {
-		p := toExpense(payID.String(), pID.String(), "Project", catID.String(), "Cat", typeID.String(), "Type", 100, "USD", "Desc", ownerID.String(), "John", "J.D.", now, "DOWN_PAYMENT")
-		if p == nil {
-			t.Errorf("expected non-nil payment")
-		}
-	})
 
 	t.Run("PgAssetRepository methods and zero total branch", func(t *testing.T) {
 		targetPrice := int64(1000)
@@ -896,7 +704,6 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 
 		cols, err := astRepo.Find(ctx, asset.CollectionFilter{
 			ProjectID:  pID,
-			TypeID:     typeID,
 			Name:       "Laptop",
 			Sorting:    core.Sorting{OrderBy: "price", Order: core.ASC},
 			Pagination: core.Pagination{Limit: 10, Offset: 0},
@@ -944,15 +751,21 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		}
 
 		// toProject with valid fields
-		p1, err := toProject(pID.String(), "Project 1", "Description", ownerID.String(), "John", "Doe", "J.D.", now, now, "UAH")
+		rec := projectRecord{
+			projectID:    pID.String(),
+			name:         "Project 1",
+			description:  "Description",
+			ownerID:      ownerID.String(),
+			firstName:    "John",
+			lastName:     "Doe",
+			displayName:  types.NullString{String: "J.D.", Valid: true},
+			startedAt:    now,
+			endedAt:      now,
+			mainCurrency: types.NullString{String: "UAH", Valid: true},
+		}
+		p1, err := rec.toProject(false, nil)
 		if err != nil || p1 == nil {
 			t.Errorf("toProject error: %v", err)
-		}
-
-		// toCostCategory with valid fields
-		c1, err := toCostCategory(catID.String(), pID.String(), "Category 1", "Description")
-		if err != nil || c1 == nil {
-			t.Errorf("toCostCategory error: %v", err)
 		}
 
 		mockDbProj := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D."}}
@@ -960,31 +773,6 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		p, err := projRepo.FindOne(ctxProj, projecta.ProjectFilter{ProjectID: pID, Name: "Project A"})
 		if err != nil || p == nil {
 			t.Errorf("FindOne project error: %v", err)
-		}
-
-		mockDbCat := &mockPgDb{rowVal: []any{catID.String(), pID.String(), "Category", "Desc"}}
-		ctxCat := withMockDb(authedCtx, mockDbCat)
-		c, err := catRepo.FindOne(ctxCat, projecta.CategoryFilter{ProjectID: pID})
-		if err != nil || c == nil {
-			t.Errorf("FindOne category by ProjectID error: %v", err)
-		}
-
-		mockDbType := &mockPgDb{rowVal: []any{typeID.String(), pID.String(), catID.String(), "Category", "Cat Desc", "Type", "Type Desc"}}
-		ctxType := withMockDb(authedCtx, mockDbType)
-		tp, err := typeRepo.FindOne(ctxType, projecta.TypeFilter{ProjectID: pID})
-		if err != nil || tp == nil {
-			t.Errorf("FindOne cost type by ProjectID error: %v", err)
-		}
-
-		mockDbPay := &mockPgDb{rowVal: []any{
-			payID.String(), pID.String(), "Project", catID.String(), "Cat",
-			typeID.String(), "Type", int64(100), "USD", "Payment",
-			ownerID.String(), "John", "J.D.", now, "DOWN_PAYMENT",
-		}}
-		ctxPay := withMockDb(authedCtx, mockDbPay)
-		payOne, err := payRepo.FindOne(ctxPay, projecta.PaymentFilter{ProjectID: pID})
-		if err != nil || payOne == nil {
-			t.Errorf("FindOne payment by ProjectID error: %v", err)
 		}
 
 		targetPriceVal := int64(1000)
@@ -1005,9 +793,9 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		mockDbRowErr := &mockPgDb{rowErr: errors.New("query row error")}
 		ctxRowErr := withMockDb(authedCtx, mockDbRowErr)
 
-		err := catRepo.Save(ctxRowErr, cat)
+		err := astRepo.Save(ctxRowErr, ast)
 		if err == nil {
-			t.Errorf("expected Save category row error")
+			t.Errorf("expected Save asset row error")
 		}
 	})
 
@@ -1015,22 +803,7 @@ func TestPgCategoryTypePaymentAssetRepositories(t *testing.T) {
 		mockDbCountErr := &mockPgDb{countErr: errors.New("count query error")}
 		ctxCountErr := withMockDb(authedCtx, mockDbCountErr)
 
-		_, err := catRepo.Find(ctxCountErr, projecta.CategoryCollectionFilter{ProjectID: pID})
-		if err == nil {
-			t.Errorf("expected Find category count error")
-		}
-
-		_, err = typeRepo.Find(ctxCountErr, projecta.TypeCollectionFilter{ProjectID: pID})
-		if err == nil {
-			t.Errorf("expected Find type count error")
-		}
-
-		_, err = payRepo.Find(ctxCountErr, projecta.PaymentCollectionFilter{ProjectID: pID})
-		if err == nil {
-			t.Errorf("expected Find payment count error")
-		}
-
-		_, err = astRepo.Find(ctxCountErr, asset.CollectionFilter{ProjectID: pID})
+		_, err := astRepo.Find(ctxCountErr, asset.CollectionFilter{ProjectID: pID})
 		if err == nil {
 			t.Errorf("expected Find asset count error")
 		}

@@ -80,7 +80,7 @@ func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) er
 		anAsset.ID().String(),
 		anAsset.Name(),
 		anAsset.Description(),
-		anAsset.Project().ProjectID.String(),
+		anAsset.Project().ID().String(),
 		anAsset.Owner().PersonID.String(),
 		anAsset.Status().String(),
 		anAsset.StartDate(),
@@ -360,7 +360,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
 
-	r.loadCompositionsAndRollup(ctx, []*asset.Asset{a}, a.Project().ProjectID)
+	r.loadCompositionsAndRollup(ctx, []*asset.Asset{a}, a.Project().ID())
 	return a, nil
 }
 
@@ -506,8 +506,8 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 
 	directCosts := make(map[uuid.UUID]*money.Money)
 	var defaultCurr string = "UAH"
-	if len(assets) > 0 && assets[0].Project() != nil && assets[0].Project().MainCurrency != "" {
-		defaultCurr = assets[0].Project().MainCurrency
+	if len(assets) > 0 && assets[0].Project() != nil && assets[0].Project().MainCurrency() != "" {
+		defaultCurr = assets[0].Project().MainCurrency()
 	}
 
 	// 1. Direct costs
@@ -645,12 +645,18 @@ func toAssetFromPg(
 		DisplayName: ownerDisplayName,
 	}
 
-	project := &projecta.Project{
-		ProjectID:    uuid.MustParse(projectID),
-		Name:         projectName,
-		Description:  projectDescription,
-		MainCurrency: projectMainCurrency,
-	}
+	project := projecta.ReconstituteProject(
+		uuid.MustParse(projectID),
+		projectName,
+		projectDescription,
+		owner,
+		time.Time{},
+		time.Time{},
+		uuid.Nil,
+		false,
+		projectMainCurrency,
+		nil,
+	)
 
 	var targetPriceMoney *money.Money
 	if targetPrice != nil && targetCurrency != nil && *targetCurrency != "" {

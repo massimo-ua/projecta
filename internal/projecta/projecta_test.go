@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
-	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
@@ -38,71 +36,6 @@ func TestDomainEntities(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error for short project name")
 	}
-
-	// CostCategory
-	catID := uuid.New()
-	cat, err := projecta.NewCostCategory(catID, projID, "Category 1", "Desc")
-	if err != nil {
-		t.Fatalf("unexpected category error: %v", err)
-	}
-	if cat.ID != catID || cat.ProjectID != projID || cat.Name != "Category 1" {
-		t.Errorf("category fields mismatch")
-	}
-
-	_, err = projecta.NewCostCategory(catID, projID, "AB", "Desc")
-	if err == nil {
-		t.Errorf("expected error for short category name")
-	}
-
-	catCol := projecta.NewCategoryCollection(10)
-	if catCol.Total() != 10 {
-		t.Errorf("category collection total mismatch")
-	}
-
-	// CostType
-	costType, err := projecta.NewCostType(projID, cat, "Type 1", "Desc")
-	if err != nil {
-		t.Fatalf("unexpected cost type error: %v", err)
-	}
-	if costType.ProjectID != projID || costType.Category != cat {
-		t.Errorf("cost type fields mismatch")
-	}
-
-	typeCol := projecta.NewCostTypeCollection(5)
-	if typeCol.Total() != 5 {
-		t.Errorf("cost type collection total mismatch")
-	}
-
-	// PaymentKind & Payment
-	pk, err := projecta.ToPaymentKind("DOWN_PAYMENT")
-	if err != nil || pk != projecta.DownPayment || pk.String() != "DOWN_PAYMENT" {
-		t.Errorf("payment kind DOWN_PAYMENT mismatch")
-	}
-	pkUp, _ := projecta.ToPaymentKind("UPON_COMPLETION")
-	if pkUp != projecta.UponCompletionPayment {
-		t.Errorf("payment kind UPON_COMPLETION mismatch")
-	}
-	pkCred, _ := projecta.ToPaymentKind("CREDIT_PAYMENT")
-	if pkCred != projecta.CreditPayment {
-		t.Errorf("payment kind CREDIT_PAYMENT mismatch")
-	}
-
-	_, err = projecta.ToPaymentKind("INVALID")
-	if err == nil {
-		t.Errorf("expected error for invalid payment kind")
-	}
-
-	payID := uuid.New()
-	amt := money.New(100, money.USD)
-	pay := projecta.NewPayment(payID, proj, owner, costType, "Pay desc", amt, now, projecta.DownPayment)
-	if pay.ID != payID || pay.Amount != amt || pay.Kind != projecta.DownPayment {
-		t.Errorf("payment fields mismatch")
-	}
-
-	payCol := projecta.NewPaymentCollection(3)
-	if payCol.Total() != 3 {
-		t.Errorf("payment collection total mismatch")
-	}
 }
 
 // Mock Repositories for projecta services
@@ -120,116 +53,61 @@ func (m *mockPeopleService) FindOwner(ctx context.Context, personID uuid.UUID) (
 
 type mockProjectRepo struct {
 	project   *projecta.Project
+	projects  []*projecta.Project
 	findErr   error
 	createErr error
 	updateErr error
+	removeErr error
+	shareErr  error
 }
 
 func (m *mockProjectRepo) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
 	if m.findErr != nil {
 		return nil, m.findErr
 	}
-	return []*projecta.Project{m.project}, nil
+	if m.projects != nil {
+		return m.projects, nil
+	}
+	if m.project != nil {
+		return []*projecta.Project{m.project}, nil
+	}
+	return []*projecta.Project{}, nil
 }
+
 func (m *mockProjectRepo) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
 	if m.findErr != nil {
 		return nil, m.findErr
 	}
-	return m.project, nil
+	if m.project != nil {
+		return m.project, nil
+	}
+	return nil, exceptions.NotFoundError
 }
-func (m *mockProjectRepo) Create(ctx context.Context, p *projecta.Project) error {
-	return m.createErr
-}
-func (m *mockProjectRepo) Update(ctx context.Context, p *projecta.Project) error { return m.updateErr }
-func (m *mockProjectRepo) Remove(ctx context.Context, p *projecta.Project) error { return nil }
+
 func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
 	if m.findErr != nil {
 		return nil, m.findErr
 	}
-	return m.project, nil
+	if m.project != nil {
+		return m.project, nil
+	}
+	return nil, exceptions.NotFoundError
 }
-func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+
+func (m *mockProjectRepo) Create(ctx context.Context, project *projecta.Project) error {
 	return m.createErr
 }
 
-type mockCategoryRepo struct {
-	cat        *projecta.CostCategory
-	findErr    error
-	findOneErr error
-	saveErr    error
-	removeErr  error
+func (m *mockProjectRepo) Update(ctx context.Context, project *projecta.Project) error {
+	return m.updateErr
 }
 
-func (m *mockCategoryRepo) Find(ctx context.Context, filter projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
-	if m.findErr != nil {
-		return nil, m.findErr
-	}
-	return projecta.NewCategoryCollection(1), nil
-}
-func (m *mockCategoryRepo) FindOne(ctx context.Context, filter projecta.CategoryFilter) (*projecta.CostCategory, error) {
-	if m.findOneErr != nil {
-		return nil, m.findOneErr
-	}
-	return m.cat, nil
-}
-func (m *mockCategoryRepo) Save(ctx context.Context, c *projecta.CostCategory) error {
-	return m.saveErr
-}
-func (m *mockCategoryRepo) Remove(ctx context.Context, c *projecta.CostCategory) error {
+func (m *mockProjectRepo) Remove(ctx context.Context, project *projecta.Project) error {
 	return m.removeErr
 }
 
-type mockTypeRepo struct {
-	costType   *projecta.CostType
-	findErr    error
-	findOneErr error
-	saveErr    error
-	removeErr  error
-}
-
-func (m *mockTypeRepo) Find(ctx context.Context, filter projecta.TypeCollectionFilter) (*projecta.CostTypeCollection, error) {
-	if m.findErr != nil {
-		return nil, m.findErr
-	}
-	return projecta.NewCostTypeCollection(1), nil
-}
-func (m *mockTypeRepo) FindOne(ctx context.Context, filter projecta.TypeFilter) (*projecta.CostType, error) {
-	if m.findOneErr != nil {
-		return nil, m.findOneErr
-	}
-	return m.costType, nil
-}
-func (m *mockTypeRepo) Save(ctx context.Context, t *projecta.CostType) error { return m.saveErr }
-func (m *mockTypeRepo) Remove(ctx context.Context, t *projecta.CostType) error {
-	return m.removeErr
-}
-
-type mockPaymentRepo struct {
-	pay        *projecta.Payment
-	findErr    error
-	findOneErr error
-	saveErr    error
-	removeErr  error
-}
-
-func (m *mockPaymentRepo) Find(ctx context.Context, filter projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
-	if m.findErr != nil {
-		return nil, m.findErr
-	}
-	return projecta.NewPaymentCollection(1), nil
-}
-func (m *mockPaymentRepo) FindOne(ctx context.Context, filter projecta.PaymentFilter) (*projecta.Payment, error) {
-	if m.findOneErr != nil {
-		return nil, m.findOneErr
-	}
-	return m.pay, nil
-}
-func (m *mockPaymentRepo) Save(ctx context.Context, p *projecta.Payment) error { return m.saveErr }
-func (m *mockPaymentRepo) SaveBatch(ctx context.Context, payments []*projecta.Payment) error {
-	return m.saveErr
-}
-func (m *mockPaymentRepo) Remove(ctx context.Context, p *projecta.Payment) error {
-	return m.removeErr
+func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+	return m.shareErr
 }
 
 type mockPeopleRepo struct {
@@ -243,60 +121,36 @@ func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Pe
 	}
 	return m.person, nil
 }
-func (m *mockPeopleRepo) FindAll(ctx context.Context, pagination core.Pagination) ([]*people.Person, int, error) {
-	return nil, 0, nil
-}
-func (m *mockPeopleRepo) Register(ctx context.Context, p *people.Person) error { return nil }
-func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.IdentityProvider, regID string) (uuid.UUID, string, error) {
-	return uuid.Nil, "", nil
-}
-func (m *mockPeopleRepo) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
-	return nil
-}
-func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID uuid.UUID) error {
-	return nil
-}
-func (m *mockPeopleRepo) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName, lastName, displayName string) error {
-	return nil
-}
-func (m *mockPeopleRepo) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
-	return nil
-}
 
 func TestProjectService(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John", CanHaveProjects: true}
-	proj, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
-
+	ownerID := uuid.New()
+	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John", CanHaveProjects: true}
 	peopleSvc := &mockPeopleService{owner: owner}
+
+	proj, _ := projecta.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
 	projRepo := &mockProjectRepo{project: proj}
 
 	svc := projecta.NewProjectService(projRepo, peopleSvc)
 
-	// Owner cannot have projects
-	svcNoProjects := projecta.NewProjectService(projRepo, &mockPeopleService{owner: &projecta.Owner{PersonID: uuid.New(), CanHaveProjects: false}})
-	_, err := svcNoProjects.Create(context.Background(), projecta.CreateProjectCommand{Name: "Forbidden Project"})
-	if err == nil {
-		t.Errorf("expected error when owner cannot have projects")
+	// FindOne
+	p, err := svc.FindOne(context.Background(), projecta.ProjectFilter{})
+	if err != nil || p == nil {
+		t.Fatalf("FindOne error: %v", err)
 	}
 
-	// Find & FindOne
-	pList, err := svc.Find(context.Background(), projecta.ProjectCollectionFilter{})
-	if err != nil || len(pList) != 1 {
-		t.Errorf("Find error: %v", err)
+	// Find
+	list, err := svc.Find(context.Background(), projecta.ProjectCollectionFilter{})
+	if err != nil || len(list) != 1 {
+		t.Fatalf("Find error: %v", err)
 	}
 
-	pOne, err := svc.FindOne(context.Background(), projecta.ProjectFilter{})
-	if err != nil || pOne != proj {
-		t.Errorf("FindOne error: %v", err)
+	// Create existing project (returns existing)
+	pExisting, err := svc.Create(context.Background(), projecta.CreateProjectCommand{PersonID: owner.PersonID, Name: "Project 1"})
+	if err != nil || pExisting == nil {
+		t.Fatalf("Create existing project error: %v", err)
 	}
 
-	// Create when project already exists
-	pExist, err := svc.Create(context.Background(), projecta.CreateProjectCommand{PersonID: owner.PersonID, Name: "Project Alpha"})
-	if err != nil || pExist != proj {
-		t.Errorf("Create existing project mismatch")
-	}
-
-	// Create new project (FindOne returns NotFoundError)
+	// Create new project
 	projRepoNotFound := &mockProjectRepo{findErr: exceptions.NotFoundError}
 	svcNew := projecta.NewProjectService(projRepoNotFound, peopleSvc)
 	pNew, err := svcNew.Create(context.Background(), projecta.CreateProjectCommand{PersonID: owner.PersonID, Name: "New Project", Description: "Desc"})
@@ -306,7 +160,7 @@ func TestProjectService(t *testing.T) {
 
 	// Create error branches
 	svcPeopleErr := projecta.NewProjectService(projRepo, &mockPeopleService{err: errors.New("err")})
-	_, err = svcPeopleErr.Create(context.Background(), projecta.CreateProjectCommand{})
+	_, err = svcPeopleErr.Create(context.Background(), projecta.CreateProjectCommand{Name: "New Project"})
 	if err == nil {
 		t.Errorf("expected error when FindOwner fails")
 	}
@@ -325,35 +179,31 @@ func TestProjectService(t *testing.T) {
 
 	// Update project
 	pUpdated, err := svc.Update(context.Background(), projecta.UpdateProjectCommand{
-		ProjectID:    proj.ProjectID,
+		PersonID:     owner.PersonID,
+		ProjectID:    proj.ID(),
 		Name:         "Updated Project",
 		Description:  "Updated Desc",
 		MainCurrency: "USD",
 	})
-	if err != nil || pUpdated.MainCurrency != "USD" || pUpdated.Name != "Updated Project" {
+	if err != nil || pUpdated.MainCurrency() != "USD" || pUpdated.Name() != "Updated Project" {
 		t.Errorf("Update error or unexpected fields: %v", err)
 	}
 
 	// Update error branches
-	_, err = svcNew.Update(context.Background(), projecta.UpdateProjectCommand{ProjectID: uuid.New()})
+	_, err = svcNew.Update(context.Background(), projecta.UpdateProjectCommand{PersonID: owner.PersonID, ProjectID: uuid.New()})
 	if err == nil {
 		t.Errorf("expected error when FindOne returns error")
 	}
 
 	svcSaveErr := projecta.NewProjectService(&mockProjectRepo{project: proj, updateErr: errors.New("err")}, peopleSvc)
-	_, err = svcSaveErr.Update(context.Background(), projecta.UpdateProjectCommand{ProjectID: proj.ProjectID})
+	_, err = svcSaveErr.Update(context.Background(), projecta.UpdateProjectCommand{PersonID: owner.PersonID, ProjectID: proj.ID()})
 	if err == nil {
 		t.Errorf("expected error when repo Update fails")
 	}
-
-	// Test unimplemented method panics
-	defer func() { _ = recover() }()
-	_ = svc.Save(context.Background(), nil)
 }
 
 func TestUnimplementedPanics(t *testing.T) {
 	svc := projecta.NewProjectService(&mockProjectRepo{}, &mockPeopleService{})
-	typeSvc := projecta.NewTypeService(&mockTypeRepo{}, &mockCategoryRepo{}, &mockProjectRepo{})
 
 	t.Run("ProjectService Remove panic", func(t *testing.T) {
 		defer func() {
@@ -362,15 +212,6 @@ func TestUnimplementedPanics(t *testing.T) {
 			}
 		}()
 		_ = svc.Remove(context.Background(), projecta.RemoveProjectCommand{})
-	})
-
-	t.Run("TypeService Update panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic")
-			}
-		}()
-		_ = typeSvc.Update(context.Background(), projecta.UpdateTypeCommand{})
 	})
 }
 
@@ -382,18 +223,18 @@ func TestProjectSharing(t *testing.T) {
 	svc := projecta.NewProjectService(projRepo, &mockPeopleService{owner: owner})
 
 	// AcceptShare by owner
-	p, err := svc.AcceptShare(context.Background(), proj.ShareToken, ownerID)
+	p, err := svc.AcceptShare(context.Background(), proj.ShareToken(), ownerID)
 	if err != nil || p == nil {
 		t.Fatalf("AcceptShare owner error: %v", err)
 	}
 
 	// AcceptShare by non-owner user
 	recipientID := uuid.New()
-	pShared, err := svc.AcceptShare(context.Background(), proj.ShareToken, recipientID)
+	pShared, err := svc.AcceptShare(context.Background(), proj.ShareToken(), recipientID)
 	if err != nil || pShared == nil {
 		t.Fatalf("AcceptShare recipient error: %v", err)
 	}
-	if !pShared.IsShared {
+	if !pShared.IsShared() {
 		t.Errorf("expected IsShared to be true for recipient")
 	}
 
@@ -403,336 +244,6 @@ func TestProjectSharing(t *testing.T) {
 	_, err = svcErr.AcceptShare(context.Background(), uuid.New(), recipientID)
 	if err == nil {
 		t.Errorf("expected error when share token not found")
-	}
-}
-
-func TestCategoryService(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New()}
-	proj, _ := projecta.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-	cat, _ := projecta.NewCostCategory(uuid.New(), proj.ProjectID, "Category", "Desc")
-
-	catRepo := &mockCategoryRepo{cat: cat}
-	projSvc := projecta.NewProjectService(&mockProjectRepo{project: proj}, &mockPeopleService{owner: owner})
-	svc := projecta.NewCategoryService(catRepo, projSvc)
-
-	// Find
-	cols, err := svc.Find(context.Background(), projecta.CategoryCollectionFilter{})
-	if err != nil || cols == nil {
-		t.Errorf("Find error: %v", err)
-	}
-
-	svcFindErr := projecta.NewCategoryService(&mockCategoryRepo{findErr: errors.New("err")}, projSvc)
-	_, err = svcFindErr.Find(context.Background(), projecta.CategoryCollectionFilter{})
-	if err == nil {
-		t.Errorf("expected Find error")
-	}
-
-	// Create
-	newCat, err := svc.Create(context.Background(), projecta.CreateCategoryCommand{ProjectID: proj.ProjectID, Name: "New Cat", Description: "Desc"})
-	if err != nil || newCat == nil {
-		t.Fatalf("Create error: %v", err)
-	}
-
-	svcSaveErr := projecta.NewCategoryService(&mockCategoryRepo{saveErr: errors.New("err")}, projSvc)
-	_, err = svcSaveErr.Create(context.Background(), projecta.CreateCategoryCommand{ProjectID: proj.ProjectID, Name: "New Cat"})
-	if err == nil {
-		t.Errorf("expected Save error")
-	}
-
-	// Create error branches
-	projSvcErr := projecta.NewCategoryService(catRepo, projecta.NewProjectService(&mockProjectRepo{findErr: errors.New("err")}, &mockPeopleService{}))
-	_, err = projSvcErr.Create(context.Background(), projecta.CreateCategoryCommand{ProjectID: proj.ProjectID})
-	if err == nil {
-		t.Errorf("expected error when project FindOne fails")
-	}
-
-	projSvcNil := projecta.NewCategoryService(catRepo, projecta.NewProjectService(&mockProjectRepo{project: nil}, &mockPeopleService{}))
-	_, err = projSvcNil.Create(context.Background(), projecta.CreateCategoryCommand{ProjectID: proj.ProjectID})
-	if err == nil {
-		t.Errorf("expected error when project is nil")
-	}
-
-	// Update & Remove
-	err = svc.Update(context.Background(), projecta.UpdateCategoryCommand{ID: cat.ID, ProjectID: proj.ProjectID, Name: "Updated", Description: "Updated"})
-	if err != nil {
-		t.Errorf("Update error: %v", err)
-	}
-
-	svcUpdFindErr := projecta.NewCategoryService(&mockCategoryRepo{findOneErr: errors.New("err")}, projSvc)
-	err = svcUpdFindErr.Update(context.Background(), projecta.UpdateCategoryCommand{})
-	if err == nil {
-		t.Errorf("expected error on Update FindOne")
-	}
-
-	svcUpdSaveErr := projecta.NewCategoryService(&mockCategoryRepo{cat: cat, saveErr: errors.New("err")}, projSvc)
-	err = svcUpdSaveErr.Update(context.Background(), projecta.UpdateCategoryCommand{})
-	if err == nil {
-		t.Errorf("expected error on Update Save")
-	}
-
-	err = svc.Remove(context.Background(), projecta.RemoveCategoryCommand{ID: cat.ID, ProjectID: proj.ProjectID})
-	if err != nil {
-		t.Errorf("Remove error: %v", err)
-	}
-
-	svcRemFindErr := projecta.NewCategoryService(&mockCategoryRepo{findOneErr: errors.New("err")}, projSvc)
-	err = svcRemFindErr.Remove(context.Background(), projecta.RemoveCategoryCommand{})
-	if err == nil {
-		t.Errorf("expected error on Remove FindOne")
-	}
-
-	svcRemErr := projecta.NewCategoryService(&mockCategoryRepo{cat: cat, removeErr: errors.New("err")}, projSvc)
-	err = svcRemErr.Remove(context.Background(), projecta.RemoveCategoryCommand{})
-	if err == nil {
-		t.Errorf("expected error on Remove")
-	}
-}
-
-func TestTypeService(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New()}
-	proj, _ := projecta.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-	cat, _ := projecta.NewCostCategory(uuid.New(), proj.ProjectID, "Cat", "Desc")
-	costType, _ := projecta.NewCostType(proj.ProjectID, cat, "Type", "Desc")
-
-	typeRepo := &mockTypeRepo{costType: costType}
-	catRepo := &mockCategoryRepo{cat: cat}
-	projRepo := &mockProjectRepo{project: proj}
-
-	svc := projecta.NewTypeService(typeRepo, catRepo, projRepo)
-
-	// Find & FindOne
-	_, err := svc.FindOne(context.Background(), projecta.TypeFilter{})
-	if err != nil {
-		t.Errorf("FindOne error: %v", err)
-	}
-
-	_, err = svc.Find(context.Background(), projecta.TypeCollectionFilter{})
-	if err != nil {
-		t.Errorf("Find error: %v", err)
-	}
-
-	// Create
-	createdType, err := svc.Create(context.Background(), projecta.CreateTypeCommand{ProjectID: proj.ProjectID, CategoryID: cat.ID, Name: "New Type", Description: "Desc"})
-	if err != nil || createdType == nil {
-		t.Fatalf("Create error: %v", err)
-	}
-
-	// Create error branches
-	svcProjErr := projecta.NewTypeService(typeRepo, catRepo, &mockProjectRepo{findErr: errors.New("err")})
-	_, err = svcProjErr.Create(context.Background(), projecta.CreateTypeCommand{})
-	if err == nil {
-		t.Errorf("expected error on project FindOne")
-	}
-
-	svcCatErr := projecta.NewTypeService(typeRepo, &mockCategoryRepo{findOneErr: errors.New("err")}, projRepo)
-	_, err = svcCatErr.Create(context.Background(), projecta.CreateTypeCommand{})
-	if err == nil {
-		t.Errorf("expected error on category FindOne")
-	}
-
-	svcSaveErr := projecta.NewTypeService(&mockTypeRepo{saveErr: errors.New("err")}, catRepo, projRepo)
-	_, err = svcSaveErr.Create(context.Background(), projecta.CreateTypeCommand{Name: "New Type"})
-	if err == nil {
-		t.Errorf("expected error on type Save")
-	}
-
-	// Remove success, not found, and error
-	err = svc.Remove(context.Background(), projecta.RemoveProjectResourceCommand{ResourceID: costType.ID, ProjectID: proj.ProjectID})
-	if err != nil {
-		t.Errorf("Remove error: %v", err)
-	}
-
-	svcNotFound := projecta.NewTypeService(&mockTypeRepo{findOneErr: exceptions.NotFoundError}, catRepo, projRepo)
-	err = svcNotFound.Remove(context.Background(), projecta.RemoveProjectResourceCommand{})
-	if err == nil {
-		t.Errorf("expected not found error")
-	}
-
-	svcErr := projecta.NewTypeService(&mockTypeRepo{findOneErr: errors.New("err")}, catRepo, projRepo)
-	err = svcErr.Remove(context.Background(), projecta.RemoveProjectResourceCommand{})
-	if err == nil {
-		t.Errorf("expected internal error")
-	}
-
-	svcRemErr := projecta.NewTypeService(&mockTypeRepo{costType: costType, removeErr: errors.New("err")}, catRepo, projRepo)
-	err = svcRemErr.Remove(context.Background(), projecta.RemoveProjectResourceCommand{})
-	if err == nil {
-		t.Errorf("expected remove error")
-	}
-}
-
-func TestPaymentService(t *testing.T) {
-	requesterID := uuid.New()
-	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, requesterID)
-
-	owner := &projecta.Owner{PersonID: requesterID, DisplayName: "John"}
-	proj, _ := projecta.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-	cat, _ := projecta.NewCostCategory(uuid.New(), proj.ProjectID, "Cat", "Desc")
-	costType, _ := projecta.NewCostType(proj.ProjectID, cat, "Type", "Desc")
-	pay := projecta.NewPayment(uuid.New(), proj, owner, costType, "Payment", money.New(100, money.USD), time.Now(), projecta.DownPayment)
-
-	payRepo := &mockPaymentRepo{pay: pay}
-	typeRepo := &mockTypeRepo{costType: costType}
-	projRepo := &mockProjectRepo{project: proj}
-	peopleSvc := &mockPeopleService{owner: owner}
-
-	svc := projecta.NewPaymentService(payRepo, typeRepo, projRepo, peopleSvc)
-
-	// Create
-	createdPay, err := svc.Create(authedCtx, projecta.CreatePaymentCommand{
-		ProjectID:   proj.ProjectID,
-		TypeID:      costType.ID,
-		Description: "New Pay",
-		Amount:      money.New(500, money.USD),
-		Kind:        projecta.DownPayment,
-	})
-	if err != nil || createdPay == nil {
-		t.Fatalf("Create error: %v", err)
-	}
-
-	// Create error branches
-	svcTypeErr := projecta.NewPaymentService(payRepo, &mockTypeRepo{findOneErr: errors.New("err")}, projRepo, peopleSvc)
-	_, err = svcTypeErr.Create(authedCtx, projecta.CreatePaymentCommand{})
-	if err == nil {
-		t.Errorf("expected error on type FindOne")
-	}
-
-	svcProjErr := projecta.NewPaymentService(payRepo, typeRepo, &mockProjectRepo{findErr: errors.New("err")}, peopleSvc)
-	_, err = svcProjErr.Create(authedCtx, projecta.CreatePaymentCommand{})
-	if err == nil {
-		t.Errorf("expected error on project FindOne")
-	}
-
-	svcSaveErr := projecta.NewPaymentService(&mockPaymentRepo{saveErr: errors.New("err")}, typeRepo, projRepo, peopleSvc)
-	_, err = svcSaveErr.Create(authedCtx, projecta.CreatePaymentCommand{})
-	if err == nil {
-		t.Errorf("expected error on payment Save")
-	}
-
-	// Create unauthorized (nil requesterID)
-	_, err = svc.Create(context.WithValue(context.Background(), core.RequesterIDContextKey, uuid.Nil), projecta.CreatePaymentCommand{})
-	if err == nil {
-		t.Errorf("expected unauthorized error")
-	}
-
-	// Find & FindOne
-	_, err = svc.Find(authedCtx, projecta.PaymentCollectionFilter{})
-	if err != nil {
-		t.Errorf("Find error: %v", err)
-	}
-
-	svcFindErr := projecta.NewPaymentService(&mockPaymentRepo{findErr: errors.New("err")}, typeRepo, projRepo, peopleSvc)
-	_, err = svcFindErr.Find(authedCtx, projecta.PaymentCollectionFilter{})
-	if err == nil {
-		t.Errorf("expected Find error")
-	}
-
-	_, err = svc.FindOne(authedCtx, projecta.PaymentFilter{})
-	if err != nil {
-		t.Errorf("FindOne error: %v", err)
-	}
-
-	svcPayNotFound := projecta.NewPaymentService(&mockPaymentRepo{findOneErr: exceptions.NotFoundError}, typeRepo, projRepo, peopleSvc)
-	_, err = svcPayNotFound.FindOne(authedCtx, projecta.PaymentFilter{})
-	if err == nil {
-		t.Errorf("expected not found error")
-	}
-
-	svcPayFindErr := projecta.NewPaymentService(&mockPaymentRepo{findOneErr: errors.New("err")}, typeRepo, projRepo, peopleSvc)
-	_, err = svcPayFindErr.FindOne(authedCtx, projecta.PaymentFilter{})
-	if err == nil {
-		t.Errorf("expected internal error")
-	}
-
-	// Update
-	updCmd := projecta.UpdatePaymentCommand{
-		ID:          pay.ID,
-		ProjectID:   proj.ProjectID,
-		TypeID:      costType.ID,
-		Description: "Updated Pay",
-		Amount:      money.New(600, money.USD),
-		Kind:        projecta.CreditPayment,
-	}
-	err = svc.Update(authedCtx, updCmd)
-	if err != nil {
-		t.Errorf("Update error: %v", err)
-	}
-
-	err = svcPayNotFound.Update(authedCtx, updCmd)
-	if err == nil {
-		t.Errorf("expected not found error on Update")
-	}
-
-	err = svcPayFindErr.Update(authedCtx, updCmd)
-	if err == nil {
-		t.Errorf("expected internal error on Update FindOne")
-	}
-
-	svcUpdTypeErr := projecta.NewPaymentService(payRepo, &mockTypeRepo{findOneErr: errors.New("err")}, projRepo, peopleSvc)
-	err = svcUpdTypeErr.Update(authedCtx, updCmd)
-	if err == nil {
-		t.Errorf("expected type FindOne error on Update")
-	}
-
-	// Remove
-	err = svc.Remove(authedCtx, projecta.RemovePaymentCommand{ID: pay.ID, ProjectID: proj.ProjectID})
-	if err != nil {
-		t.Errorf("Remove error: %v", err)
-	}
-
-	err = svcPayNotFound.Remove(authedCtx, projecta.RemovePaymentCommand{})
-	if err == nil {
-		t.Errorf("expected not found error on Remove")
-	}
-
-	err = svcPayFindErr.Remove(authedCtx, projecta.RemovePaymentCommand{})
-	if err == nil {
-		t.Errorf("expected internal error on Remove")
-	}
-
-	// CreateBatch empty
-	batchRes, err := svc.CreateBatch(authedCtx, []projecta.CreatePaymentCommand{})
-	if err != nil || len(batchRes) != 0 {
-		t.Errorf("expected empty slice for empty batch, got %v, err %v", batchRes, err)
-	}
-
-	// CreateBatch with items
-	batchRes, err = svc.CreateBatch(authedCtx, []projecta.CreatePaymentCommand{
-		{
-			ProjectID:   proj.ProjectID,
-			TypeID:      costType.ID,
-			Description: "Batch Pay 1",
-			Amount:      money.New(100, money.USD),
-			Kind:        projecta.UponCompletionPayment,
-		},
-		{
-			ProjectID:   proj.ProjectID,
-			TypeID:      costType.ID,
-			Description: "Batch Pay 2",
-			Amount:      money.New(200, money.USD),
-			Kind:        projecta.DownPayment,
-		},
-	})
-	if err != nil || len(batchRes) != 2 {
-		t.Fatalf("CreateBatch error: %v", err)
-	}
-
-	// CreateBatch unauthorized
-	_, err = svc.CreateBatch(context.Background(), []projecta.CreatePaymentCommand{{}})
-	if err == nil {
-		t.Errorf("expected unauthorized error for CreateBatch")
-	}
-
-	// ParseStatement unauthorized
-	_, err = svc.ParseStatement(context.Background(), proj.ProjectID, []byte("data"))
-	if err == nil {
-		t.Errorf("expected unauthorized error for ParseStatement")
-	}
-
-	// ParseStatement project not found
-	_, err = svcProjErr.ParseStatement(authedCtx, proj.ProjectID, []byte("data"))
-	if err == nil {
-		t.Errorf("expected project not found error for ParseStatement")
 	}
 }
 
@@ -755,4 +266,36 @@ func TestPeopleService(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error when FindByID fails")
 	}
+}
+
+func TestStatementService(t *testing.T) {
+	projID := uuid.New()
+	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
+	proj, _ := projecta.NewProject(projID, "Test Project", "Desc", owner, time.Now(), time.Now())
+	projRepo := &mockProjectRepo{project: proj}
+	projSvc := projecta.NewProjectService(projRepo, &mockPeopleService{owner: owner})
+
+	svc := projecta.NewStatementService(projSvc)
+
+	t.Run("nil project id", func(t *testing.T) {
+		_, err := svc.ParseStatement(context.Background(), uuid.Nil, []byte("data"))
+		if err == nil {
+			t.Errorf("expected error for nil project id")
+		}
+	})
+
+	t.Run("project not found", func(t *testing.T) {
+		notFoundSvc := projecta.NewStatementService(projecta.NewProjectService(&mockProjectRepo{findErr: exceptions.NotFoundError}, &mockPeopleService{owner: owner}))
+		_, err := notFoundSvc.ParseStatement(context.Background(), projID, []byte("data"))
+		if err == nil {
+			t.Errorf("expected error for project not found")
+		}
+	})
+
+	t.Run("invalid PDF data", func(t *testing.T) {
+		_, err := svc.ParseStatement(context.Background(), projID, []byte("not a pdf"))
+		if err == nil {
+			t.Errorf("expected error for invalid PDF data")
+		}
+	})
 }

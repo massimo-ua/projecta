@@ -19,6 +19,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func createErrorHandler(logger core.Logger) func(err error) {
@@ -59,20 +61,9 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 
 	customerService := people.NewCustomerService(db, peopleRepository, hasher)
 	projectRepository := dal.NewPgProjectRepository(db)
-	categoryRepository := dal.NewPgCategoryRepository(db)
-	typeRepository := dal.NewPgCostTypeRepository(db)
-	paymentRepository := dal.NewPgPaymentRepository(db)
 	assetRepository := dal.NewPgAssetRepository(db)
 	peopleService := projecta.NewPeopleService(peopleRepository)
 	projectService := projecta.NewProjectService(projectRepository, peopleService)
-	categoryService := projecta.NewCategoryService(categoryRepository, projectService)
-	typeService := projecta.NewTypeService(typeRepository, categoryRepository, projectRepository)
-	paymentService := projecta.NewPaymentService(
-		paymentRepository,
-		typeRepository,
-		projectRepository,
-		peopleService,
-	)
 	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
 		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
 		CacheTTL:            30 * time.Minute,
@@ -96,19 +87,45 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		peopleService,
 	)
 
+	statementService := projecta.NewStatementService(
+		projectService,
+		&investmentTransactionFinder{svc: investmentService},
+	)
+
 	return web.MakeHTTPHandler(
 		customerService,
 		tokenProvider,
 		authService,
 		invitationService,
 		projectService,
-		categoryService,
-		typeService,
-		paymentService,
+		statementService,
 		assetService,
 		rateProvider,
 		investmentService,
 	)
+}
+
+type investmentTransactionFinder struct {
+	svc investment.Service
+}
+
+func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID uuid.UUID) ([]projecta.ExistingTransaction, error) {
+	col, err := f.svc.Find(ctx, investment.CollectionFilter{
+		ProjectID: projectID,
+		Pagination: core.Pagination{Limit: 1000},
+	})
+	if err != nil {
+		return nil, err
+	}
+	res := make([]projecta.ExistingTransaction, 0, len(col.Elements()))
+	for _, inv := range col.Elements() {
+		res = append(res, projecta.ExistingTransaction{
+			Date:        inv.Date(),
+			Amount:      inv.Amount().Amount(),
+			Description: inv.Description(),
+		})
+	}
+	return res, nil
 }
 
 func main() {
