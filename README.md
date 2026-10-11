@@ -1,30 +1,40 @@
 # Projecta 🚀
 
-**Projecta** is a modern project budgeting and financial management web application. It helps individuals and teams track project expenses, organize payments, manage assets, and calculate financial standings across multiple currencies.
+**Projecta** is a modern project budgeting, asset composition, and financial resource management web application. It helps individuals and teams track investments, organize composite assets, manage budgets, and calculate real-time financial standing across multiple currencies.
 
 ---
 
 ## 🌟 Main Features
 
 - **Project & Budget Management**:
-  - Create and manage projects easily.
-  - Set primary project currencies and view live budget summaries.
+  - Create and manage projects easily with customizable base currencies.
+  - View real-time project summaries, budget status, and total invested amounts.
+  - "Total Invested" accurately aggregates all project investments without double-counting hierarchical assets.
+
+- **Hierarchical Asset Composition (DAG)**:
+  - Organize project deliverables, milestones, and expenses as structured **Assets**.
+  - Compose assets into parent-child hierarchies (Directed Acyclic Graph) with customizable share percentages (e.g. 100%, 50%).
+  - Group existing assets into overarching parent assets directly from the UI.
+  - Dynamic valuation rollups: **Direct Cost** (direct investments) + **Rolled-Up Total Cost** (direct + sub-asset share contributions).
+  - Built-in cycle detection preventing circular dependencies.
+
+- **Target Budgets, Multi-Currency Progress & Overbudget Alerts**:
+  - Set target budgets or expected purchase prices (`target_price`) in any currency.
+  - Real-time exchange rate conversion to the project's base currency via the National Bank of Ukraine (NBU) provider.
+  - Uncapped budget progress percentage (e.g., `125%`, `1000%`).
+  - Dedicated visual overbudget indicators: progress bars and labels switch to **Orange** (`Overbudget` / `Перевитрата`) when exceeding 100%.
+
+- **Investments & Resource Tracking**:
+  - Log resource contributions directly or shared across assets.
+  - Support for multiple resource types: `MONEY`, `TIME` (labor/sweat equity), and `GOODS` (materials/parts).
+  - Flexible **Tagging Taxonomy** (`#rent`, `#hardware`, `#labor`) replacing rigid categories.
 
 - **Project Sharing & Collaboration**:
   - Share projects with team members via unique shareable links.
-  - Seamlessly join shared projects to collaborate on budgets, payments, and assets.
-
-- **Payments & Expense Tracking**:
-  - Log income and expenses with detailed descriptions.
-  - Group payments into customizable **Categories** and **Cost Types**.
-  - Distinguish between standard expenses, compensatory payments, and incomes.
-
-- **Asset Management**:
-  - Track physical and financial assets attached to projects.
-  - Monitor asset values and historical records.
+  - Seamlessly collaborate on budgets, assets, and investments.
 
 - **Multi-Currency Support**:
-  - Support for international currencies (USD, EUR, UAH, etc.).
+  - Comprehensive international currency support (USD, EUR, UAH, etc.).
   - Automatic exchange rate updates integrated with the National Bank of Ukraine (NBU) provider.
 
 - **Multi-Language Support (i18n)**:
@@ -48,9 +58,17 @@
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Frontend** | React 18, Vite, React Router v7, Intlayer (i18n), Tailwind CSS, Lucide Icons, Shadcn UI |
+| **Frontend** | React 19, Vite, React Router v7, Intlayer (i18n), Tailwind CSS, Lucide Icons, Shadcn UI |
 | **Backend** | Go 1.26, Go-Kit, Gorilla Mux, PostgreSQL (`pgx`), RabbitMQ, JWT, Google OAuth |
 | **Infrastructure** | Docker, Docker Compose, Nginx, GitLab CI/CD |
+
+---
+
+## 📚 Documentation
+
+- [Asset-Centric Resource Model & Composition](docs/assets-and-investments.md): Comprehensive guide to asset composition, DAG rules, cost rollup formulas, multi-currency progress, and investment tracking.
+- [Frontend Design Principles & Architecture Guide](docs/frontend-design-principals.md): Architectural guide to layered frontend design, humble views, state machines, and domain models.
+- [Web UI Development Guide](web-ui/README.md): Frontend project structure, npm scripts, and development setup.
 
 ---
 
