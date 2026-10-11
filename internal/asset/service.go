@@ -24,9 +24,7 @@ type ServiceImpl struct {
 	db           core.DbConnection
 	assets       Repository
 	people       projecta.PeopleService
-	types        projecta.TypeRepository
 	projects     projecta.ProjectRepository
-	payments     projecta.PaymentRepository
 	rateProvider currency.CurrencyRateProvider
 	investments  InvestmentSource
 }
@@ -39,9 +37,8 @@ func NewService(
 	db core.DbConnection,
 	assets Repository,
 	people projecta.PeopleService,
-	types projecta.TypeRepository,
 	projects projecta.ProjectRepository,
-	payments projecta.PaymentRepository,
+	investmentSource InvestmentSource,
 	rateProvider ...currency.CurrencyRateProvider,
 ) *ServiceImpl {
 	var rp currency.CurrencyRateProvider
@@ -52,9 +49,8 @@ func NewService(
 		db:           db,
 		assets:       assets,
 		people:       people,
-		types:        types,
 		projects:     projects,
-		payments:     payments,
+		investments:  investmentSource,
 		rateProvider: rp,
 	}
 }
@@ -107,15 +103,6 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	var costType *projecta.CostType
-	if s.types != nil && command.TypeID != uuid.Nil {
-		var err error
-		costType, err = s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
-		if err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
-	}
-
 	price := command.TargetPrice
 	if price == nil {
 		price = command.Price
@@ -131,21 +118,20 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		status = AssetStatusActive
 	}
 
-	anAsset := NewAsset(
+	anAsset := ReconstituteAsset(
 		uuid.New(),
 		command.Name,
 		command.Description,
 		project,
-		costType,
 		price,
 		startDate,
 		owner,
+		status,
+		startDate,
+		command.CompletedDate,
+		price,
+		command.Tags,
 	)
-	anAsset.SetStatus(status)
-	anAsset.SetStartDate(startDate)
-	anAsset.SetCompletedDate(command.CompletedDate)
-	anAsset.SetTargetPrice(price)
-	anAsset.SetTags(command.Tags)
 
 	paymentDescription := command.Description
 	if paymentDescription == "" {
@@ -169,20 +155,6 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 					Description:   paymentDescription,
 					Tags:          command.Tags,
 				}); err != nil {
-					return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-				}
-			} else if s.payments != nil {
-				payment := projecta.NewPayment(
-					uuid.New(),
-					project,
-					owner,
-					costType,
-					paymentDescription,
-					price,
-					startDate,
-					projecta.UponCompletionPayment,
-				)
-				if err = s.payments.Save(ctx, payment); err != nil {
 					return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 				}
 			}
@@ -233,171 +205,80 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	var (
-		totalAmount    int64
-		targetCurrency string
-		acquiredAt     time.Time
-		tags           []string
-		usedInvestment bool
-	)
+	if s.investments == nil {
+		return nil, exceptions.NewInternalException("investment source not configured", nil)
+	}
 
-	if s.investments != nil {
-		invItems, err := s.investments.FindInvestments(ctx, command.ProjectID, command.PaymentIDs)
-		if err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
-		if len(invItems) != len(command.PaymentIDs) {
-			return nil, exceptions.NewValidationException("one or more investments not found in project", nil)
-		}
-		usedInvestment = true
+	invItems, err := s.investments.FindInvestments(ctx, command.ProjectID, command.PaymentIDs)
+	if err != nil {
+		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+	}
+	if len(invItems) != len(command.PaymentIDs) {
+		return nil, exceptions.NewValidationException("one or more investments not found in project", nil)
+	}
 
-			acquiredAt = command.AcquiredAt
-			if acquiredAt.IsZero() {
-				for _, inv := range invItems {
-					if inv.Date.After(acquiredAt) {
-						acquiredAt = inv.Date
-					}
-				}
-				if acquiredAt.IsZero() {
-					acquiredAt = time.Now()
-				}
-			}
-
-			targetCurrency = strings.ToUpper(strings.TrimSpace(command.TargetCurrency))
-			if targetCurrency == "" {
-				firstCurr := invItems[0].Amount.Currency().Code
-				allSameCurr := true
-				for _, inv := range invItems[1:] {
-					if inv.Amount.Currency().Code != firstCurr {
-						allSameCurr = false
-						break
-					}
-				}
-				if allSameCurr {
-					targetCurrency = firstCurr
-				} else {
-					targetCurrency = project.MainCurrency
-					if targetCurrency == "" {
-						targetCurrency = "UAH"
-					}
-				}
-			}
-
-			tagSet := make(map[string]struct{})
-			for _, inv := range invItems {
-				currCode := inv.Amount.Currency().Code
-				if currCode == targetCurrency {
-					totalAmount += inv.Amount.Amount()
-				} else {
-					if s.rateProvider == nil {
-						return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
-					}
-					converted, err := s.rateProvider.Convert(
-						currency.NewCurrency(inv.Amount.Amount(), currCode),
-						currency.NewCurrency(0, targetCurrency),
-					)
-					if err != nil {
-						return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
-					}
-					totalAmount += converted.Amount
-				}
-
-				for _, t := range inv.Tags {
-					if t != "" {
-						tagSet[t] = struct{}{}
-					}
-				}
-			}
-
-			for t := range tagSet {
-				tags = append(tags, t)
+	acquiredAt := command.AcquiredAt
+	if acquiredAt.IsZero() {
+		for _, inv := range invItems {
+			if inv.Date.After(acquiredAt) {
+				acquiredAt = inv.Date
 			}
 		}
-
-	var costType *projecta.CostType
-	if !usedInvestment {
-		var payments []*projecta.Payment
-		for _, pid := range command.PaymentIDs {
-			payment, err := s.payments.FindOne(ctx, projecta.PaymentFilter{
-				PaymentID: pid,
-				ProjectID: command.ProjectID,
-			})
-			if err != nil {
-				return nil, exceptions.NewValidationException(fmt.Sprintf("payment %s not found in project", pid), err)
-			}
-			payments = append(payments, payment)
-		}
-
-		if command.TypeID != uuid.Nil {
-			costType, err = s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
-			if err != nil {
-				return nil, exceptions.NewValidationException("invalid cost type", err)
-			}
-		} else {
-			firstTypeID := payments[0].Type.ID
-			allSame := true
-			for _, p := range payments[1:] {
-				if p.Type == nil || p.Type.ID != firstTypeID {
-					allSame = false
-					break
-				}
-			}
-			if !allSame {
-				return nil, exceptions.NewValidationException("cost type is required when selected payments have different types", nil)
-			}
-			costType = payments[0].Type
-		}
-
-		acquiredAt = command.AcquiredAt
 		if acquiredAt.IsZero() {
-			for _, p := range payments {
-				if p.Date.After(acquiredAt) {
-					acquiredAt = p.Date
-				}
+			acquiredAt = time.Now()
+		}
+	}
+
+	targetCurrency := strings.ToUpper(strings.TrimSpace(command.TargetCurrency))
+	if targetCurrency == "" {
+		firstCurr := invItems[0].Amount.Currency().Code
+		allSameCurr := true
+		for _, inv := range invItems[1:] {
+			if inv.Amount.Currency().Code != firstCurr {
+				allSameCurr = false
+				break
 			}
-			if acquiredAt.IsZero() {
-				acquiredAt = time.Now()
+		}
+		if allSameCurr {
+			targetCurrency = firstCurr
+		} else {
+			targetCurrency = project.MainCurrency
+			if targetCurrency == "" {
+				targetCurrency = "UAH"
 			}
+		}
+	}
+
+	var totalAmount int64
+	tagSet := make(map[string]struct{})
+	for _, inv := range invItems {
+		currCode := inv.Amount.Currency().Code
+		if currCode == targetCurrency {
+			totalAmount += inv.Amount.Amount()
+		} else {
+			if s.rateProvider == nil {
+				return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
+			}
+			converted, err := s.rateProvider.Convert(
+				currency.NewCurrency(inv.Amount.Amount(), currCode),
+				currency.NewCurrency(0, targetCurrency),
+			)
+			if err != nil {
+				return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
+			}
+			totalAmount += converted.Amount
 		}
 
-		targetCurrency = strings.ToUpper(strings.TrimSpace(command.TargetCurrency))
-		if targetCurrency == "" {
-			firstCurr := payments[0].Amount.Currency().Code
-			allSameCurr := true
-			for _, p := range payments[1:] {
-				if p.Amount.Currency().Code != firstCurr {
-					allSameCurr = false
-					break
-				}
-			}
-			if allSameCurr {
-				targetCurrency = firstCurr
-			} else {
-				targetCurrency = project.MainCurrency
-				if targetCurrency == "" {
-					targetCurrency = "UAH"
-				}
+		for _, t := range inv.Tags {
+			if t != "" {
+				tagSet[t] = struct{}{}
 			}
 		}
+	}
 
-		for _, p := range payments {
-			currCode := p.Amount.Currency().Code
-			if currCode == targetCurrency {
-				totalAmount += p.Amount.Amount()
-			} else {
-				if s.rateProvider == nil {
-					return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
-				}
-				converted, err := s.rateProvider.Convert(
-					currency.NewCurrency(p.Amount.Amount(), currCode),
-					currency.NewCurrency(0, targetCurrency),
-				)
-				if err != nil {
-					return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
-				}
-				totalAmount += converted.Amount
-			}
-		}
+	var tags []string
+	for t := range tagSet {
+		tags = append(tags, t)
 	}
 
 	if totalAmount <= 0 {
@@ -405,32 +286,28 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 	}
 
 	price := money.New(totalAmount, targetCurrency)
-
-	anAsset := NewAsset(
+	anAsset := ReconstituteAsset(
 		uuid.New(),
 		command.Name,
 		command.Description,
 		project,
-		costType,
 		price,
 		acquiredAt,
 		owner,
+		AssetStatusActive,
+		acquiredAt,
+		nil,
+		price,
+		tags,
 	)
-	anAsset.SetTargetPrice(price)
-	if len(tags) > 0 {
-		anAsset.SetTags(tags)
-	}
-	anAsset.SetDirectCost(price)
-	anAsset.SetTotalCost(price)
+	anAsset.AssignValuation(price, price, nil, nil)
 
 	if err = s.assets.Save(ctx, anAsset); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	if usedInvestment && s.investments != nil {
-		if err = s.investments.AssignToAsset(ctx, anAsset.ID(), command.PaymentIDs); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-		}
+	if err = s.investments.AssignToAsset(ctx, anAsset.ID(), command.PaymentIDs); err != nil {
+		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
 	return anAsset, nil
@@ -466,24 +343,17 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		return exceptions.NewInternalException(failedToUpdateAsset, err)
 	}
 
-	if command.TypeID != uuid.Nil && s.types != nil {
-		costType, err := s.types.FindOne(ctx, projecta.TypeFilter{TypeID: command.TypeID, ProjectID: command.ProjectID})
-		if err != nil {
-			return exceptions.NewInternalException(failedToUpdateAsset, err)
-		}
-		anAsset.SetType(costType)
+	price := command.TargetPrice
+	if price == nil {
+		price = command.Price
 	}
 
-	anAsset.SetName(command.Name)
-	anAsset.SetDescription(command.Description)
-
-	if command.TargetPrice != nil {
-		anAsset.SetTargetPrice(command.TargetPrice)
-	} else if command.Price != nil {
-		anAsset.SetTargetPrice(command.Price)
-	}
-
-	if command.Status != "" {
+	anAsset.UpdateDetails(command.Name, command.Description, price, command.Tags)
+	if command.CompletedDate != nil {
+		anAsset.Complete(*command.CompletedDate)
+	} else if command.Status == AssetStatusActive {
+		anAsset.Reopen()
+	} else if command.Status != "" {
 		anAsset.SetStatus(command.Status)
 	}
 
@@ -491,14 +361,6 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		anAsset.SetStartDate(command.StartDate)
 	} else if !command.AcquiredAt.IsZero() {
 		anAsset.SetStartDate(command.AcquiredAt)
-	}
-
-	if command.CompletedDate != nil {
-		anAsset.SetCompletedDate(command.CompletedDate)
-	}
-
-	if command.Tags != nil {
-		anAsset.SetTags(command.Tags)
 	}
 
 	return s.assets.Save(ctx, anAsset)
@@ -511,11 +373,11 @@ func (s *ServiceImpl) LinkChild(ctx context.Context, command LinkChildCommand) e
 	}
 
 	if command.ParentID == command.ChildID {
-		return exceptions.NewValidationException("an asset cannot be a child of itself", nil)
+		return ErrSelfReference
 	}
 
 	if command.SharePercentage <= 0 || command.SharePercentage > 100 {
-		return exceptions.NewValidationException("share percentage must be between 0 and 100", nil)
+		return ErrInvalidShare
 	}
 
 	_, err = s.assets.FindOne(ctx, Filter{ID: command.ParentID, OwnerID: personID})
@@ -534,7 +396,7 @@ func (s *ServiceImpl) LinkChild(ctx context.Context, command LinkChildCommand) e
 	}
 	for _, aID := range ancestors {
 		if aID == command.ChildID {
-			return exceptions.NewValidationException("cannot link child asset: circular dependency detected", nil)
+			return ErrCircularDependency
 		}
 	}
 
@@ -627,23 +489,24 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 
 	now := time.Now()
 	parentID := uuid.New()
-	parentAsset := NewAsset(
-		parentID,
-		command.Name,
-		command.Description,
-		project,
-		nil,
-		money.New(0, "UAH"),
-		now,
-		owner,
-	)
-	parentAsset.SetStatus(AssetStatusActive)
-	parentAsset.SetStartDate(now)
 	tags := command.Tags
 	if tags == nil {
 		tags = []string{}
 	}
-	parentAsset.SetTags(tags)
+	parentAsset := ReconstituteAsset(
+		parentID,
+		command.Name,
+		command.Description,
+		project,
+		money.New(0, "UAH"),
+		now,
+		owner,
+		AssetStatusActive,
+		now,
+		nil,
+		money.New(0, "UAH"),
+		tags,
+	)
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
 		if err := s.assets.Save(ctx, parentAsset); err != nil {

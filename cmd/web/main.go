@@ -78,18 +78,16 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		CacheTTL:            30 * time.Minute,
 	})
 
+	investmentRepository := dal.NewPgInvestmentRepository(db)
 	assetService := asset.NewService(
 		db,
 		assetRepository,
 		peopleService,
-		typeRepository,
 		projectRepository,
-		paymentRepository,
+		investmentRepository,
 		rateProvider,
 	)
 
-	investmentRepository := dal.NewPgInvestmentRepository(db)
-	assetService.SetInvestmentSource(investmentRepository)
 	investmentService := investment.NewService(
 		db,
 		investmentRepository,
