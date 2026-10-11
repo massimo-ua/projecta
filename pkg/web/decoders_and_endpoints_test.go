@@ -1396,8 +1396,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		// Test makeShowProjectTotalsEndpoint with investment service
-		inv1 := &investment.Investment{Amount: money.New(15000, "UAH")}
-		inv2 := &investment.Investment{Amount: money.New(25000, "UAH")}
+		inv1 := investment.ReconstituteInvestment(uuid.New(), proj, uuid.New(), "Asset 1", nil, owner, investment.ResourceTypeMoney, money.New(15000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
+		inv2 := investment.ReconstituteInvestment(uuid.New(), proj, uuid.New(), "Asset 2", nil, owner, investment.ResourceTypeMoney, money.New(25000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
 		invCol := investment.NewCollection(2)
 		invCol.Add(inv1)
 		invCol.Add(inv2)

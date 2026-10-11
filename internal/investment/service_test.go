@@ -62,8 +62,6 @@ type mockAssetRepo struct {
 	err    error
 }
 
-func (m *mockAssetRepo) Save(ctx context.Context, a *asset.Asset) error   { return nil }
-func (m *mockAssetRepo) Remove(ctx context.Context, a *asset.Asset) error { return nil }
 func (m *mockAssetRepo) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -74,24 +72,6 @@ func (m *mockAssetRepo) FindOne(ctx context.Context, filter asset.Filter) (*asse
 		}
 	}
 	return m.asset, nil
-}
-func (m *mockAssetRepo) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
-	return nil, nil
-}
-func (m *mockAssetRepo) AddChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID, sharePercentage float64) error {
-	return nil
-}
-func (m *mockAssetRepo) RemoveChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID) error {
-	return nil
-}
-func (m *mockAssetRepo) FindChildren(ctx context.Context, parentID uuid.UUID) ([]asset.ChildAssetLink, error) {
-	return nil, nil
-}
-func (m *mockAssetRepo) FindParents(ctx context.Context, childID uuid.UUID) ([]asset.ParentAssetLink, error) {
-	return nil, nil
-}
-func (m *mockAssetRepo) FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
-	return nil, nil
 }
 
 type mockProjectRepo struct {
@@ -160,7 +140,7 @@ func TestInvestmentService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error creating money investment: %v", err)
 		}
-		if inv.Amount.Amount() != 500 || inv.ResourceType != investment.ResourceTypeMoney {
+		if inv.Amount().Amount() != 500 || inv.ResourceType() != investment.ResourceTypeMoney {
 			t.Errorf("unexpected money investment details: %+v", inv)
 		}
 
@@ -179,8 +159,8 @@ func TestInvestmentService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error creating time investment: %v", err)
 		}
-		if invTime.Amount.Amount() != 18000 { // 4.5 * 4000 = 18000
-			t.Errorf("expected 18000 amount for time, got %d", invTime.Amount.Amount())
+		if invTime.Amount().Amount() != 18000 { // 4.5 * 4000 = 18000
+			t.Errorf("expected 18000 amount for time, got %d", invTime.Amount().Amount())
 		}
 
 		// Goods investment
@@ -199,8 +179,8 @@ func TestInvestmentService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error creating goods investment: %v", err)
 		}
-		if invGoods.GoodsItemName != "Winter Tires" {
-			t.Errorf("expected GoodsItemName 'Winter Tires', got %s", invGoods.GoodsItemName)
+		if invGoods.GoodsItemName() != "Winter Tires" {
+			t.Errorf("expected GoodsItemName 'Winter Tires', got %s", invGoods.GoodsItemName())
 		}
 	})
 
@@ -298,10 +278,11 @@ func TestInvestmentService(t *testing.T) {
 	})
 
 	t.Run("Update and Remove", func(t *testing.T) {
-		inv := investment.NewInvestment(
+		inv, err := investment.NewInvestment(
 			uuid.New(),
 			project,
-			existingAsset,
+			existingAsset.ID(),
+			existingAsset.Name(),
 			owner,
 			investment.ResourceTypeMoney,
 			money.New(100, "USD"),
@@ -310,6 +291,9 @@ func TestInvestmentService(t *testing.T) {
 			time.Now(),
 			[]string{"tag1"},
 		)
+		if err != nil {
+			t.Fatalf("unexpected error creating investment: %v", err)
+		}
 
 		repo := &mockInvestmentRepo{inv: inv}
 		svc := investment.NewService(
@@ -320,8 +304,8 @@ func TestInvestmentService(t *testing.T) {
 			&mockPeopleService{owner: owner},
 		)
 
-		err := svc.Update(authedCtx, investment.UpdateInvestmentCommand{
-			ID:          inv.ID,
+		err = svc.Update(authedCtx, investment.UpdateInvestmentCommand{
+			ID:          inv.ID(),
 			ProjectID:   project.ProjectID,
 			Amount:      money.New(250, "USD"),
 			Description: "Updated desc",
@@ -330,12 +314,12 @@ func TestInvestmentService(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected update error: %v", err)
 		}
-		if inv.Amount.Amount() != 250 || inv.Description != "Updated desc" {
+		if inv.Amount().Amount() != 250 || inv.Description() != "Updated desc" {
 			t.Errorf("update did not apply properly: %+v", inv)
 		}
 
 		err = svc.Remove(authedCtx, investment.RemoveInvestmentCommand{
-			ID:        inv.ID,
+			ID:        inv.ID(),
 			ProjectID: project.ProjectID,
 		})
 		if err != nil {
@@ -392,14 +376,14 @@ func TestInvestmentService(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(inv.AssetAllocations) != 2 {
-				t.Fatalf("expected 2 allocations, got %d", len(inv.AssetAllocations))
+			if len(inv.AssetAllocations()) != 2 {
+				t.Fatalf("expected 2 allocations, got %d", len(inv.AssetAllocations()))
 			}
-			if inv.AssetAllocations[0].SharePercentage != 60 || inv.AssetAllocations[1].SharePercentage != 40 {
-				t.Errorf("unexpected allocations: %+v", inv.AssetAllocations)
+			if inv.AssetAllocations()[0].SharePercentage != 60 || inv.AssetAllocations()[1].SharePercentage != 40 {
+				t.Errorf("unexpected allocations: %+v", inv.AssetAllocations())
 			}
-			if inv.Asset.ID() != existingAsset.ID() {
-				t.Errorf("expected primary asset ID to be asset1, got %v", inv.Asset.ID())
+			if inv.PrimaryAssetID() != existingAsset.ID() {
+				t.Errorf("expected primary asset ID to be asset1, got %v", inv.PrimaryAssetID())
 			}
 		})
 
@@ -465,11 +449,11 @@ func TestInvestmentService(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(inv.AssetAllocations) != 1 {
-				t.Fatalf("expected 1 allocation, got %d", len(inv.AssetAllocations))
+			if len(inv.AssetAllocations()) != 1 {
+				t.Fatalf("expected 1 allocation, got %d", len(inv.AssetAllocations()))
 			}
-			if inv.AssetAllocations[0].SharePercentage != 100.0 {
-				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations[0].SharePercentage)
+			if inv.AssetAllocations()[0].SharePercentage != 100.0 {
+				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations()[0].SharePercentage)
 			}
 		})
 
@@ -487,11 +471,11 @@ func TestInvestmentService(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(inv.AssetAllocations) != 1 {
-				t.Fatalf("expected 1 allocation, got %d", len(inv.AssetAllocations))
+			if len(inv.AssetAllocations()) != 1 {
+				t.Fatalf("expected 1 allocation, got %d", len(inv.AssetAllocations()))
 			}
-			if inv.AssetAllocations[0].SharePercentage != 100.0 {
-				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations[0].SharePercentage)
+			if inv.AssetAllocations()[0].SharePercentage != 100.0 {
+				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations()[0].SharePercentage)
 			}
 		})
 	})
