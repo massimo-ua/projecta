@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -20,10 +19,15 @@ const (
 	failedToUpdateInvestment = "failed to update investment"
 )
 
+// AssetReader is a consumer-owned interface providing read access to assets.
+type AssetReader interface {
+	FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error)
+}
+
 type ServiceImpl struct {
 	db          core.DbConnection
 	investments Repository
-	assets      asset.Repository
+	assets      AssetReader
 	projects    projecta.ProjectRepository
 	people      projecta.PeopleService
 }
@@ -31,7 +35,7 @@ type ServiceImpl struct {
 func NewService(
 	db core.DbConnection,
 	investments Repository,
-	assets asset.Repository,
+	assets AssetReader,
 	projects projecta.ProjectRepository,
 	people projecta.PeopleService,
 ) *ServiceImpl {
@@ -72,74 +76,9 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
-	var allocations []InvestmentAssetLink
-	var primaryAsset *asset.Asset
-
-	if len(command.AssetAllocations) > 1 {
-		var totalShare float64
-		seenAssets := make(map[uuid.UUID]bool)
-		for _, aInput := range command.AssetAllocations {
-			if aInput.AssetID == uuid.Nil {
-				return nil, exceptions.NewValidationException("asset id is required for each allocation", nil)
-			}
-			if seenAssets[aInput.AssetID] {
-				return nil, exceptions.NewValidationException("duplicate asset in allocations", nil)
-			}
-			seenAssets[aInput.AssetID] = true
-			if aInput.SharePercentage <= 0 || aInput.SharePercentage > 100 {
-				return nil, exceptions.NewValidationException("share percentage must be between 0 and 100 for shared investments", nil)
-			}
-			totalShare += aInput.SharePercentage
-			ast, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: command.ProjectID})
-			if err != nil {
-				return nil, exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
-			}
-			if primaryAsset == nil {
-				primaryAsset = ast
-			}
-			allocations = append(allocations, InvestmentAssetLink{
-				AssetID:         ast.ID(),
-				AssetName:       ast.Name(),
-				SharePercentage: aInput.SharePercentage,
-			})
-		}
-		if totalShare < 99.99 || totalShare > 100.01 {
-			return nil, exceptions.NewValidationException(fmt.Sprintf("total share percentages must equal 100%%, got %.2f%%", totalShare), nil)
-		}
-	} else {
-		var targetAssetID uuid.UUID
-		if len(command.AssetAllocations) == 1 {
-			targetAssetID = command.AssetAllocations[0].AssetID
-		} else if command.AssetID != uuid.Nil {
-			targetAssetID = command.AssetID
-		} else {
-			return nil, exceptions.NewValidationException("asset id or asset allocations are required", nil)
-		}
-
-		ast, err := s.assets.FindOne(ctx, asset.Filter{ID: targetAssetID, ProjectID: command.ProjectID})
-		if err != nil {
-			return nil, exceptions.NewValidationException("asset not found in project", err)
-		}
-		primaryAsset = ast
-		allocations = []InvestmentAssetLink{
-			{
-				AssetID:         ast.ID(),
-				AssetName:       ast.Name(),
-				SharePercentage: 100.0,
-			},
-		}
-	}
-
-	amount := command.Amount
-	if amount == nil || amount.Amount() == 0 {
-		if command.ResourceType == ResourceTypeTime && command.TimeHours != nil && command.TimeHourlyRate != nil {
-			calculated := int64(*command.TimeHours * float64(command.TimeHourlyRate.Amount()))
-			amount = money.New(calculated, command.TimeHourlyRate.Currency().Code)
-		}
-	}
-
-	if amount == nil || amount.Amount() <= 0 {
-		return nil, exceptions.NewValidationException("investment amount must be greater than 0", nil)
+	allocations, primaryID, primaryName, err := s.resolveAllocations(ctx, command.ProjectID, command.AssetID, command.AssetAllocations)
+	if err != nil {
+		return nil, err
 	}
 
 	resType := command.ResourceType
@@ -147,25 +86,29 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		resType = ResourceTypeMoney
 	}
 
-	inv := NewInvestment(
+	inv, err := NewInvestment(
 		uuid.New(),
 		project,
-		primaryAsset,
+		primaryID,
+		primaryName,
 		owner,
 		resType,
-		amount,
+		command.Amount,
 		command.TimeHours,
 		command.TimeHourlyRate,
 		command.GoodsQuantity,
 		command.GoodsUnit,
 		command.GoodsItemName,
 		command.Description,
-		core.DateOrNow(command.Date),
+		command.Date,
 		command.Tags,
+		allocations...,
 	)
-	inv.SetAssetAllocations(allocations)
+	if err != nil {
+		return nil, err
+	}
 
-	if err = s.investments.Save(ctx, inv); err != nil {
+	if err := s.investments.Save(ctx, inv); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
@@ -176,6 +119,10 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 	personID, err := core.AuthGuard(ctx)
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToCreateInvestment, err)
+	}
+
+	if command.ProjectID == uuid.Nil {
+		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
 	if len(command.Items) == 0 {
@@ -193,7 +140,7 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 	}
 
 	var created []*Investment
-	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
 		for i, item := range command.Items {
 			targetAssetID := item.AssetID
 			if targetAssetID == uuid.Nil {
@@ -203,18 +150,9 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 				return nil, exceptions.NewValidationException(fmt.Sprintf("item %d requires an asset", i), nil)
 			}
 
-			anAsset, err := s.assets.FindOne(ctx, asset.Filter{ID: targetAssetID, ProjectID: command.ProjectID})
+			ast, err := s.assets.FindOne(txCtx, asset.Filter{ID: targetAssetID, ProjectID: command.ProjectID})
 			if err != nil {
 				return nil, exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", targetAssetID), err)
-			}
-
-			amt := item.Amount
-			if (amt == nil || amt.Amount() == 0) && item.ResourceType == ResourceTypeTime && item.TimeHours != nil && item.TimeHourlyRate != nil {
-				calc := int64(*item.TimeHours * float64(item.TimeHourlyRate.Amount()))
-				amt = money.New(calc, item.TimeHourlyRate.Currency().Code)
-			}
-			if amt == nil || amt.Amount() <= 0 {
-				return nil, exceptions.NewValidationException(fmt.Sprintf("item %d amount must be greater than 0", i), nil)
 			}
 
 			resType := item.ResourceType
@@ -222,13 +160,14 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 				resType = ResourceTypeMoney
 			}
 
-			inv := NewInvestment(
+			inv, err := NewInvestment(
 				uuid.New(),
 				project,
-				anAsset,
+				ast.ID(),
+				ast.Name(),
 				owner,
 				resType,
-				amt,
+				item.Amount,
 				item.TimeHours,
 				item.TimeHourlyRate,
 				item.GoodsQuantity,
@@ -238,8 +177,11 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 				core.DateOrNow(item.Date),
 				item.Tags,
 			)
+			if err != nil {
+				return nil, err
+			}
 
-			if err := s.investments.Save(ctx, inv); err != nil {
+			if err := s.investments.Save(txCtx, inv); err != nil {
 				return nil, err
 			}
 			created = append(created, inv)
@@ -271,105 +213,19 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		return exceptions.NewInternalException(failedToFindInvestment, err)
 	}
 
-	if len(command.AssetAllocations) > 1 {
-		var totalShare float64
-		seenAssets := make(map[uuid.UUID]bool)
-		var allocations []InvestmentAssetLink
-		var primaryAsset *asset.Asset
-		for _, aInput := range command.AssetAllocations {
-			if aInput.AssetID == uuid.Nil {
-				return exceptions.NewValidationException("asset id is required for each allocation", nil)
-			}
-			if seenAssets[aInput.AssetID] {
-				return exceptions.NewValidationException("duplicate asset in allocations", nil)
-			}
-			seenAssets[aInput.AssetID] = true
-			if aInput.SharePercentage <= 0 || aInput.SharePercentage > 100 {
-				return exceptions.NewValidationException("share percentage must be between 0 and 100 for shared investments", nil)
-			}
-			totalShare += aInput.SharePercentage
-			ast, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: command.ProjectID})
-			if err != nil {
-				return exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
-			}
-			if primaryAsset == nil {
-				primaryAsset = ast
-			}
-			allocations = append(allocations, InvestmentAssetLink{
-				AssetID:         ast.ID(),
-				AssetName:       ast.Name(),
-				SharePercentage: aInput.SharePercentage,
-			})
-		}
-		if totalShare < 99.99 || totalShare > 100.01 {
-			return exceptions.NewValidationException(fmt.Sprintf("total share percentages must equal 100%%, got %.2f%%", totalShare), nil)
-		}
-		inv.Asset = primaryAsset
-		inv.SetAssetAllocations(allocations)
-	} else if len(command.AssetAllocations) == 1 {
-		aInput := command.AssetAllocations[0]
-		anAsset, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: command.ProjectID})
+	if len(command.AssetAllocations) > 0 || (command.AssetID != uuid.Nil && command.AssetID != inv.PrimaryAssetID()) {
+		allocations, _, _, err := s.resolveAllocations(ctx, command.ProjectID, command.AssetID, command.AssetAllocations)
 		if err != nil {
-			return exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
+			return err
 		}
-		inv.Asset = anAsset
-		inv.SetAssetAllocations([]InvestmentAssetLink{
-			{
-				AssetID:         anAsset.ID(),
-				AssetName:       anAsset.Name(),
-				SharePercentage: 100.0,
-			},
-		})
-	} else if command.AssetID != uuid.Nil && (inv.Asset == nil || command.AssetID != inv.Asset.ID()) {
-		anAsset, err := s.assets.FindOne(ctx, asset.Filter{ID: command.AssetID, ProjectID: command.ProjectID})
-		if err != nil {
-			return exceptions.NewValidationException("asset not found in project", err)
+		if err := inv.Allocate(allocations); err != nil {
+			return err
 		}
-		inv.Asset = anAsset
-		inv.SetAssetAllocations([]InvestmentAssetLink{
-			{
-				AssetID:         anAsset.ID(),
-				AssetName:       anAsset.Name(),
-				SharePercentage: 100.0,
-			},
-		})
 	}
 
-	if command.ResourceType != "" {
-		inv.ResourceType = command.ResourceType
-	}
-	if command.Amount != nil && command.Amount.Amount() > 0 {
-		inv.Amount = command.Amount
-	}
-	if command.TimeHours != nil {
-		inv.TimeHours = command.TimeHours
-	}
-	if command.TimeHourlyRate != nil {
-		inv.TimeHourlyRate = command.TimeHourlyRate
-	}
-	if command.GoodsQuantity != nil {
-		inv.GoodsQuantity = command.GoodsQuantity
-	}
-	if command.GoodsUnit != "" {
-		inv.GoodsUnit = command.GoodsUnit
-	}
-	if command.GoodsItemName != "" {
-		inv.GoodsItemName = command.GoodsItemName
-	}
-	if strings.TrimSpace(command.Description) != "" {
-		inv.Description = command.Description
-	}
-	if !command.Date.IsZero() {
-		inv.Date = command.Date
-	}
-	if command.Tags != nil {
-		cleanTags := make([]string, 0)
-		for _, t := range command.Tags {
-			if t != "" {
-				cleanTags = append(cleanTags, t)
-			}
-		}
-		inv.Tags = cleanTags
+	inv.UpdateDetails(command.Description, command.Date, command.Tags)
+	if err := inv.UpdateValuation(command.ResourceType, command.Amount, command.TimeHours, command.TimeHourlyRate, command.GoodsQuantity, command.GoodsUnit, command.GoodsItemName); err != nil {
+		return err
 	}
 
 	return s.investments.Save(ctx, inv)
@@ -420,4 +276,55 @@ func (s *ServiceImpl) FindTags(ctx context.Context, projectID uuid.UUID) ([]stri
 	}
 
 	return s.investments.FindTags(ctx, projectID)
+}
+
+func (s *ServiceImpl) resolveAllocations(
+	ctx context.Context,
+	projectID uuid.UUID,
+	primaryID uuid.UUID,
+	inputs []InvestmentAssetInput,
+) ([]InvestmentAssetLink, uuid.UUID, string, error) {
+	if len(inputs) > 1 {
+		allocs := make([]InvestmentAssetLink, 0, len(inputs))
+		var primaryName string
+		for _, aInput := range inputs {
+			if aInput.AssetID == uuid.Nil {
+				return nil, uuid.Nil, "", exceptions.NewValidationException("asset id is required for each allocation", nil)
+			}
+			ast, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: projectID})
+			if err != nil {
+				return nil, uuid.Nil, "", exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
+			}
+			if primaryName == "" {
+				primaryName = ast.Name()
+			}
+			allocs = append(allocs, InvestmentAssetLink{
+				AssetID:         ast.ID(),
+				AssetName:       ast.Name(),
+				SharePercentage: aInput.SharePercentage,
+			})
+		}
+		return allocs, inputs[0].AssetID, primaryName, nil
+	}
+
+	targetID := primaryID
+	if len(inputs) == 1 {
+		targetID = inputs[0].AssetID
+	}
+	if targetID == uuid.Nil {
+		return nil, uuid.Nil, "", exceptions.NewValidationException("asset id or asset allocations are required", nil)
+	}
+
+	ast, err := s.assets.FindOne(ctx, asset.Filter{ID: targetID, ProjectID: projectID})
+	if err != nil {
+		return nil, uuid.Nil, "", exceptions.NewValidationException("asset not found in project", err)
+	}
+	allocs := []InvestmentAssetLink{
+		{
+			AssetID:         ast.ID(),
+			AssetName:       ast.Name(),
+			SharePercentage: 100.0,
+		},
+	}
+	return allocs, ast.ID(), ast.Name(), nil
 }

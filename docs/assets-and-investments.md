@@ -188,3 +188,18 @@ flowchart TD
 ### 3. Application & Composition Root (`internal/asset/service.go`, `cmd/web/main.go`)
 - Application services receive explicit dependencies (`InvestmentSource`, `Repository`, `RateProvider`) directly via constructor injection, eliminating temporal coupling.
 
+### 4. Investment Domain Layer & Decoupling (`internal/investment/`)
+- **`Investment` Aggregate Root ([`investment.go`](../internal/investment/investment.go))**:
+  - Fully encapsulated aggregate with private state (`id`, `project`, `primaryAssetID`, `primaryAssetName`, `assetAllocations`, `contributor`, `resourceType`, `amount`, `timeHours`, etc.).
+  - **Decoupled Asset Reference**: References `primaryAssetID uuid.UUID` and `primaryAssetName string` rather than holding a direct `*asset.Asset` pointer, adhering to the DDD rule of referencing other aggregates by identity only.
+  - **Invariant Protection**:
+    - `Allocate(allocations []InvestmentAssetLink)`: Enforces that multi-asset allocation shares sum to 100%, validates positive non-zero share values, and prevents duplicate asset assignments.
+    - `UpdateDetails(description, date, tags)`: Updates descriptive metadata and sanitizes tags.
+    - `UpdateValuation(resType, amount, timeHours, timeHourlyRate, goodsQty, goodsUnit, goodsItemName)`: Validates and recomputes valuations (including time-based resource calculation from hours × hourly rate).
+    - `ReconstituteInvestment`: Dedicated persistence factory hydrating entities in a single step without re-triggering business validations.
+- **Consumer-Owned Ports**:
+  - `investment.Service` defines a narrow `AssetReader` interface (`FindOne(ctx, filter) (*asset.Asset, error)`), eliminating tight coupling to the wide `asset.Repository`.
+- **Infrastructure Alignment ([`pg_investment_repository.go`](../pkg/dal/pg_investment_repository.go))**:
+  - Employs intermediate `investmentRecord` and `scanInvestmentRecord`, eliminating dummy `asset.NewAsset(...)` stub instantiation during persistence scanning.
+  - Loads multi-asset allocations and hydrates `Investment` directly via `ReconstituteInvestment`.
+

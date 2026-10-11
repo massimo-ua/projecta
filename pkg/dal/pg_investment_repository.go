@@ -30,8 +30,8 @@ func NewPgInvestmentRepository(conn *PgDbConnection) *PgInvestmentRepository {
 
 func (r *PgInvestmentRepository) Save(ctx context.Context, inv *investment.Investment) error {
 	_, err := r.FindOne(ctx, investment.Filter{
-		ID:        inv.ID,
-		ProjectID: inv.Project.ProjectID,
+		ID:        inv.ID(),
+		ProjectID: inv.Project().ProjectID,
 	})
 
 	if err != nil {
@@ -66,26 +66,35 @@ func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Inv
 	)
 
 	var hourlyRateVal any
-	if inv.TimeHourlyRate != nil {
-		hourlyRateVal = inv.TimeHourlyRate.Amount()
+	if inv.TimeHourlyRate() != nil {
+		hourlyRateVal = inv.TimeHourlyRate().Amount()
+	}
+
+	amountVal := int64(0)
+	currVal := "UAH"
+	if inv.Amount() != nil {
+		amountVal = inv.Amount().Amount()
+		if inv.Amount().Currency() != nil {
+			currVal = inv.Amount().Currency().Code
+		}
 	}
 
 	qb.Values(
-		inv.ID.String(),
-		inv.Project.ProjectID.String(),
-		inv.Asset.ID().String(),
-		inv.Contributor.PersonID.String(),
-		inv.ResourceType.String(),
-		inv.Amount.Amount(),
-		inv.Amount.Currency().Code,
-		inv.TimeHours,
+		inv.ID().String(),
+		inv.Project().ProjectID.String(),
+		inv.PrimaryAssetID().String(),
+		inv.Contributor().PersonID.String(),
+		inv.ResourceType().String(),
+		amountVal,
+		currVal,
+		inv.TimeHours(),
 		hourlyRateVal,
-		inv.GoodsQuantity,
-		inv.GoodsUnit,
-		inv.GoodsItemName,
-		inv.Description,
-		inv.Date,
-		inv.Tags,
+		inv.GoodsQuantity(),
+		inv.GoodsUnit(),
+		inv.GoodsItemName(),
+		inv.Description(),
+		inv.Date(),
+		inv.Tags(),
 	)
 
 	sql, args := qb.Build()
@@ -105,26 +114,35 @@ func (r *PgInvestmentRepository) update(ctx context.Context, inv *investment.Inv
 	qb.Update("projecta_investments")
 
 	var hourlyRateVal any
-	if inv.TimeHourlyRate != nil {
-		hourlyRateVal = inv.TimeHourlyRate.Amount()
+	if inv.TimeHourlyRate() != nil {
+		hourlyRateVal = inv.TimeHourlyRate().Amount()
+	}
+
+	amountVal := int64(0)
+	currVal := "UAH"
+	if inv.Amount() != nil {
+		amountVal = inv.Amount().Amount()
+		if inv.Amount().Currency() != nil {
+			currVal = inv.Amount().Currency().Code
+		}
 	}
 
 	qb.Set(
-		qb.Assign("asset_id", inv.Asset.ID().String()),
-		qb.Assign("resource_type", inv.ResourceType.String()),
-		qb.Assign("amount", inv.Amount.Amount()),
-		qb.Assign("currency", inv.Amount.Currency().Code),
-		qb.Assign("time_hours", inv.TimeHours),
+		qb.Assign("asset_id", inv.PrimaryAssetID().String()),
+		qb.Assign("resource_type", inv.ResourceType().String()),
+		qb.Assign("amount", amountVal),
+		qb.Assign("currency", currVal),
+		qb.Assign("time_hours", inv.TimeHours()),
 		qb.Assign("time_hourly_rate", hourlyRateVal),
-		qb.Assign("goods_quantity", inv.GoodsQuantity),
-		qb.Assign("goods_unit", inv.GoodsUnit),
-		qb.Assign("goods_item_name", inv.GoodsItemName),
-		qb.Assign("description", inv.Description),
-		qb.Assign("date", inv.Date),
-		qb.Assign("tags", inv.Tags),
+		qb.Assign("goods_quantity", inv.GoodsQuantity()),
+		qb.Assign("goods_unit", inv.GoodsUnit()),
+		qb.Assign("goods_item_name", inv.GoodsItemName()),
+		qb.Assign("description", inv.Description()),
+		qb.Assign("date", inv.Date()),
+		qb.Assign("tags", inv.Tags()),
 	)
-	qb.Where(qb.Equal("investment_id", inv.ID.String()))
-	qb.Where(qb.Equal("project_id", inv.Project.ProjectID.String()))
+	qb.Where(qb.Equal("investment_id", inv.ID().String()))
+	qb.Where(qb.Equal("project_id", inv.Project().ProjectID.String()))
 
 	sql, args := qb.Build()
 	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
@@ -140,15 +158,16 @@ func (r *PgInvestmentRepository) update(ctx context.Context, inv *investment.Inv
 
 func (r *PgInvestmentRepository) saveAllocations(ctx context.Context, inv *investment.Investment) error {
 	delSql := "DELETE FROM projecta_investment_assets WHERE investment_id = $1"
-	if _, err := r.db.Exec(ctx, delSql, inv.ID.String()); err != nil {
+	if _, err := r.db.Exec(ctx, delSql, inv.ID().String()); err != nil {
 		return err
 	}
 
-	allocations := inv.AssetAllocations
-	if len(allocations) == 0 && inv.Asset != nil {
+	allocations := inv.AssetAllocations()
+	if len(allocations) == 0 && inv.PrimaryAssetID() != uuid.Nil {
 		allocations = []investment.InvestmentAssetLink{
 			{
-				AssetID:         inv.Asset.ID(),
+				AssetID:         inv.PrimaryAssetID(),
+				AssetName:       inv.PrimaryAssetName(),
 				SharePercentage: 100.0,
 			},
 		}
@@ -160,7 +179,7 @@ func (r *PgInvestmentRepository) saveAllocations(ctx context.Context, inv *inves
 			VALUES ($1, $2, $3)
 			ON CONFLICT (investment_id, asset_id) DO UPDATE SET share_percentage = EXCLUDED.share_percentage
 		`
-		if _, err := r.db.Exec(ctx, insertSql, inv.ID.String(), a.AssetID.String(), a.SharePercentage); err != nil {
+		if _, err := r.db.Exec(ctx, insertSql, inv.ID().String(), a.AssetID.String(), a.SharePercentage); err != nil {
 			return err
 		}
 	}
@@ -203,8 +222,8 @@ func (r *PgInvestmentRepository) loadAllocations(ctx context.Context, investment
 func (r *PgInvestmentRepository) Remove(ctx context.Context, inv *investment.Investment) error {
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_investments")
-	qb.Where(qb.Equal("investment_id", inv.ID.String()))
-	qb.Where(qb.Equal("project_id", inv.Project.ProjectID.String()))
+	qb.Where(qb.Equal("investment_id", inv.ID().String()))
+	qb.Where(qb.Equal("project_id", inv.Project().ProjectID.String()))
 
 	sql, args := qb.Build()
 	res, err := r.db.Exec(ctx, sql, args...)
@@ -234,7 +253,7 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 	sql, args := qb.Build()
 	row := r.db.QueryRow(ctx, sql, args...)
 
-	inv, err := scanInvestment(row)
+	rec, err := scanInvestmentRecord(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvestmentNotFound
@@ -242,10 +261,30 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 		return nil, err
 	}
 
-	allocsMap, _ := r.loadAllocations(ctx, []string{inv.ID.String()})
-	if allocs, ok := allocsMap[inv.ID.String()]; ok && len(allocs) > 0 {
-		inv.SetAssetAllocations(allocs)
+	allocsMap, _ := r.loadAllocations(ctx, []string{rec.id.String()})
+	var allocs []investment.InvestmentAssetLink
+	if allocsMap != nil {
+		allocs = allocsMap[rec.id.String()]
 	}
+
+	inv := investment.ReconstituteInvestment(
+		rec.id,
+		rec.project,
+		rec.primaryAssetID,
+		rec.primaryAssetName,
+		allocs,
+		rec.contributor,
+		rec.resourceType,
+		rec.amount,
+		rec.timeHours,
+		rec.timeHourlyRate,
+		rec.goodsQuantity,
+		rec.goodsUnit,
+		rec.goodsItemName,
+		rec.description,
+		rec.date,
+		rec.tags,
+	)
 
 	return inv, nil
 }
@@ -287,24 +326,47 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 	}
 	defer rows.Close()
 
-	col := investment.NewCollection(total)
+	records := make([]*investmentRecord, 0, total)
 	invIDs := make([]string, 0, total)
 	for rows.Next() {
-		inv, err := scanInvestment(rows)
+		rec, err := scanInvestmentRecord(rows)
 		if err != nil {
 			return nil, err
 		}
-		col.Add(inv)
-		invIDs = append(invIDs, inv.ID.String())
+		records = append(records, rec)
+		invIDs = append(invIDs, rec.id.String())
 	}
 
+	var allocsMap map[string][]investment.InvestmentAssetLink
 	if len(invIDs) > 0 {
-		allocsMap, _ := r.loadAllocations(ctx, invIDs)
-		for _, inv := range col.Elements() {
-			if allocs, ok := allocsMap[inv.ID.String()]; ok && len(allocs) > 0 {
-				inv.SetAssetAllocations(allocs)
-			}
+		allocsMap, _ = r.loadAllocations(ctx, invIDs)
+	}
+
+	col := investment.NewCollection(total)
+	for _, rec := range records {
+		var allocs []investment.InvestmentAssetLink
+		if allocsMap != nil {
+			allocs = allocsMap[rec.id.String()]
 		}
+		inv := investment.ReconstituteInvestment(
+			rec.id,
+			rec.project,
+			rec.primaryAssetID,
+			rec.primaryAssetName,
+			allocs,
+			rec.contributor,
+			rec.resourceType,
+			rec.amount,
+			rec.timeHours,
+			rec.timeHourlyRate,
+			rec.goodsQuantity,
+			rec.goodsUnit,
+			rec.goodsItemName,
+			rec.description,
+			rec.date,
+			rec.tags,
+		)
+		col.Add(inv)
 	}
 
 	return col, nil
@@ -398,7 +460,25 @@ type scannable interface {
 	Scan(dest ...any) error
 }
 
-func scanInvestment(s scannable) (*investment.Investment, error) {
+type investmentRecord struct {
+	id               uuid.UUID
+	project          *projecta.Project
+	primaryAssetID   uuid.UUID
+	primaryAssetName string
+	contributor      *projecta.Owner
+	resourceType     investment.ResourceType
+	amount           *money.Money
+	timeHours        *float64
+	timeHourlyRate   *money.Money
+	goodsQuantity    *float64
+	goodsUnit        string
+	goodsItemName    string
+	description      string
+	date             time.Time
+	tags             []string
+}
+
+func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 	var (
 		invID         string
 		projID        string
@@ -456,17 +536,6 @@ func scanInvestment(s scannable) (*investment.Investment, error) {
 		Description: projDesc,
 	}
 
-	ast := asset.NewAsset(
-		uuid.MustParse(astID),
-		astName,
-		astDesc,
-		proj,
-		nil,
-		nil,
-		date,
-		nil,
-	)
-
 	contrib := &projecta.Owner{
 		PersonID:    uuid.MustParse(contribID),
 		FirstName:   contribFirst,
@@ -489,22 +558,28 @@ func scanInvestment(s scannable) (*investment.Investment, error) {
 
 	rType, _ := investment.ToResourceType(resType)
 
-	return investment.NewInvestment(
-		uuid.MustParse(invID),
-		proj,
-		ast,
-		contrib,
-		rType,
-		money.New(amount, currencyCode),
-		timeHours,
-		hourlyRateMoney,
-		goodsQty,
-		gUnit,
-		gItem,
-		description,
-		date,
-		tags,
-	), nil
+	var parsedAstID uuid.UUID
+	if astID != "" {
+		parsedAstID = uuid.MustParse(astID)
+	}
+
+	return &investmentRecord{
+		id:               uuid.MustParse(invID),
+		project:          proj,
+		primaryAssetID:   parsedAstID,
+		primaryAssetName: astName,
+		contributor:      contrib,
+		resourceType:     rType,
+		amount:           money.New(amount, currencyCode),
+		timeHours:        timeHours,
+		timeHourlyRate:   hourlyRateMoney,
+		goodsQuantity:    goodsQty,
+		goodsUnit:        gUnit,
+		goodsItemName:    gItem,
+		description:      description,
+		date:             date,
+		tags:             tags,
+	}, nil
 }
 
 func (r *PgInvestmentRepository) FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]asset.InvestmentItem, error) {

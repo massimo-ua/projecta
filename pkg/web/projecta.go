@@ -583,7 +583,7 @@ func makeShowProjectTotalsEndpoint(
 
 				for _, e := range page.Elements() {
 					hasInvestments = true
-					invAmounts = append(invAmounts, e.Amount)
+					invAmounts = append(invAmounts, e.Amount())
 				}
 
 				if len(page.Elements()) < limit {

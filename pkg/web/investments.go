@@ -53,50 +53,57 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 	}
 
 	homeCurrency := "UAH"
-	if inv.Project != nil && inv.Project.MainCurrency != "" {
-		homeCurrency = inv.Project.MainCurrency
+	if inv.Project() != nil && inv.Project().MainCurrency != "" {
+		homeCurrency = inv.Project().MainCurrency
 	}
 
-	homeAmount := inv.Amount.Amount()
-	if rateProvider != nil && inv.Amount.Currency().Code != homeCurrency {
-		converted, err := rateProvider.Convert(
-			currency.NewCurrency(inv.Amount.Amount(), inv.Amount.Currency().Code),
-			currency.NewCurrency(0, homeCurrency),
-		)
-		if err == nil {
-			homeAmount = converted.Amount
+	homeAmount := int64(0)
+	if inv.Amount() != nil {
+		homeAmount = inv.Amount().Amount()
+		if rateProvider != nil && inv.Amount().Currency().Code != homeCurrency {
+			converted, err := rateProvider.Convert(
+				currency.NewCurrency(inv.Amount().Amount(), inv.Amount().Currency().Code),
+				currency.NewCurrency(0, homeCurrency),
+			)
+			if err == nil {
+				homeAmount = converted.Amount
+			}
 		}
 	}
 
 	var contribDTO OwnerDTO
-	if inv.Contributor != nil {
+	if inv.Contributor() != nil {
 		contribDTO = OwnerDTO{
-			PersonID:    inv.Contributor.PersonID.String(),
-			DisplayName: inv.Contributor.DisplayName,
+			PersonID:    inv.Contributor().PersonID.String(),
+			DisplayName: inv.Contributor().DisplayName,
 		}
 	}
 
 	var assetName string
 	var assetID string
-	if inv.Asset != nil {
-		assetID = inv.Asset.ID().String()
-		assetName = inv.Asset.Name()
+	if inv.PrimaryAssetID() != uuid.Nil {
+		assetID = inv.PrimaryAssetID().String()
+		assetName = inv.PrimaryAssetName()
 	}
 
 	var projectID string
-	if inv.Project != nil {
-		projectID = inv.Project.ProjectID.String()
+	if inv.Project() != nil {
+		projectID = inv.Project().ProjectID.String()
 	}
 
 	var hourlyRateVal *int64
-	if inv.TimeHourlyRate != nil {
-		v := inv.TimeHourlyRate.Amount()
+	if inv.TimeHourlyRate() != nil {
+		v := inv.TimeHourlyRate().Amount()
 		hourlyRateVal = &v
 	}
 
 	allocationsDTO := make([]InvestmentAssetDTO, 0)
-	for _, a := range inv.AssetAllocations {
-		allocatedAmount := int64(float64(inv.Amount.Amount()) * (a.SharePercentage / 100.0))
+	totalAmount := int64(0)
+	if inv.Amount() != nil {
+		totalAmount = inv.Amount().Amount()
+	}
+	for _, a := range inv.AssetAllocations() {
+		allocatedAmount := int64(float64(totalAmount) * (a.SharePercentage / 100.0))
 		allocationsDTO = append(allocationsDTO, InvestmentAssetDTO{
 			AssetID:         a.AssetID.String(),
 			AssetName:       a.AssetName,
@@ -105,26 +112,35 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 		})
 	}
 
+	var amountVal int64
+	var currVal string
+	if inv.Amount() != nil {
+		amountVal = inv.Amount().Amount()
+		if inv.Amount().Currency() != nil {
+			currVal = inv.Amount().Currency().Code
+		}
+	}
+
 	return InvestmentDTO{
-		InvestmentID:     inv.ID.String(),
+		InvestmentID:     inv.ID().String(),
 		ProjectID:        projectID,
 		AssetID:          assetID,
 		AssetName:        assetName,
 		AssetAllocations: allocationsDTO,
 		Contributor:      contribDTO,
-		ResourceType:     inv.ResourceType.String(),
-		Amount:           inv.Amount.Amount(),
-		Currency:         inv.Amount.Currency().Code,
+		ResourceType:     inv.ResourceType().String(),
+		Amount:           amountVal,
+		Currency:         currVal,
 		HomeAmount:       homeAmount,
 		HomeCurrency:     homeCurrency,
-		TimeHours:        inv.TimeHours,
+		TimeHours:        inv.TimeHours(),
 		TimeHourlyRate:   hourlyRateVal,
-		GoodsQuantity:    inv.GoodsQuantity,
-		GoodsUnit:        inv.GoodsUnit,
-		GoodsItemName:    inv.GoodsItemName,
-		Description:      inv.Description,
-		Date:             inv.Date.Format(time.RFC3339),
-		Tags:             inv.Tags,
+		GoodsQuantity:    inv.GoodsQuantity(),
+		GoodsUnit:        inv.GoodsUnit(),
+		GoodsItemName:    inv.GoodsItemName(),
+		Description:      inv.Description(),
+		Date:             inv.Date().Format(time.RFC3339),
+		Tags:             inv.Tags(),
 	}
 }
 
