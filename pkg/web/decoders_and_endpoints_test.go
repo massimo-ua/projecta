@@ -106,138 +106,6 @@ func TestDecodersValidationErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("decodeListTypesRequest validation errors", func(t *testing.T) {
-		// Missing project_id
-		reqNoVars, _ := http.NewRequest("GET", "/types", nil)
-		_, err := decodeListTypesRequest(context.Background(), reqNoVars)
-		if err == nil {
-			t.Errorf("expected missing project_id error")
-		}
-
-		// Invalid project_id
-		reqBadUUID, _ := http.NewRequest("GET", "/types", nil)
-		reqBadUUID = mux.SetURLVars(reqBadUUID, map[string]string{"project_id": "bad-uuid"})
-		_, err = decodeListTypesRequest(context.Background(), reqBadUUID)
-		if err == nil {
-			t.Errorf("expected invalid project_id error")
-		}
-
-		// Invalid limit & offset
-		validUUID := uuid.New().String()
-		reqBadLimit, _ := http.NewRequest("GET", "/types?limit=bad", nil)
-		reqBadLimit = mux.SetURLVars(reqBadLimit, map[string]string{"project_id": validUUID})
-		_, err = decodeListTypesRequest(context.Background(), reqBadLimit)
-		if err == nil {
-			t.Errorf("expected limit error")
-		}
-
-		reqBadOffset, _ := http.NewRequest("GET", "/types?offset=bad", nil)
-		reqBadOffset = mux.SetURLVars(reqBadOffset, map[string]string{"project_id": validUUID})
-		_, err = decodeListTypesRequest(context.Background(), reqBadOffset)
-		if err == nil {
-			t.Errorf("expected offset error")
-		}
-	})
-
-	t.Run("decodeListCategoriesRequest validation errors", func(t *testing.T) {
-		reqNoVars, _ := http.NewRequest("GET", "/categories", nil)
-		_, err := decodeListCategoriesRequest(context.Background(), reqNoVars)
-		if err == nil {
-			t.Errorf("expected missing project_id error")
-		}
-
-		reqBadUUID, _ := http.NewRequest("GET", "/categories", nil)
-		reqBadUUID = mux.SetURLVars(reqBadUUID, map[string]string{"project_id": "bad-uuid"})
-		_, err = decodeListCategoriesRequest(context.Background(), reqBadUUID)
-		if err == nil {
-			t.Errorf("expected invalid project_id error")
-		}
-
-		validUUID := uuid.New().String()
-		reqBadLimit, _ := http.NewRequest("GET", "/categories?limit=bad", nil)
-		reqBadLimit = mux.SetURLVars(reqBadLimit, map[string]string{"project_id": validUUID})
-		_, err = decodeListCategoriesRequest(context.Background(), reqBadLimit)
-		if err == nil {
-			t.Errorf("expected limit error")
-		}
-
-		reqBadOffset, _ := http.NewRequest("GET", "/categories?offset=bad", nil)
-		reqBadOffset = mux.SetURLVars(reqBadOffset, map[string]string{"project_id": validUUID})
-		_, err = decodeListCategoriesRequest(context.Background(), reqBadOffset)
-		if err == nil {
-			t.Errorf("expected offset error")
-		}
-	})
-
-	t.Run("decodeListPaymentsRequest validation errors", func(t *testing.T) {
-		validUUID := uuid.New().String()
-
-		reqNoVars, _ := http.NewRequest("GET", "/payments", nil)
-		_, err := decodeListPaymentsRequest(context.Background(), reqNoVars)
-		if err == nil {
-			t.Errorf("expected missing project_id error")
-		}
-
-		reqBadUUID, _ := http.NewRequest("GET", "/payments", nil)
-		reqBadUUID = mux.SetURLVars(reqBadUUID, map[string]string{"project_id": "bad"})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadUUID)
-		if err == nil {
-			t.Errorf("expected invalid project_id error")
-		}
-
-		reqBadCat, _ := http.NewRequest("GET", "/payments?category_id=bad", nil)
-		reqBadCat = mux.SetURLVars(reqBadCat, map[string]string{"project_id": validUUID})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadCat)
-		if err == nil {
-			t.Errorf("expected invalid category_id error")
-		}
-
-		reqBadType, _ := http.NewRequest("GET", "/payments?type_id=bad", nil)
-		reqBadType = mux.SetURLVars(reqBadType, map[string]string{"project_id": validUUID})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadType)
-		if err == nil {
-			t.Errorf("expected invalid type_id error")
-		}
-
-		reqBadLimit, _ := http.NewRequest("GET", "/payments?limit=bad", nil)
-		reqBadLimit = mux.SetURLVars(reqBadLimit, map[string]string{"project_id": validUUID})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadLimit)
-		if err == nil {
-			t.Errorf("expected invalid limit error")
-		}
-
-		reqBadOffset, _ := http.NewRequest("GET", "/payments?offset=bad", nil)
-		reqBadOffset = mux.SetURLVars(reqBadOffset, map[string]string{"project_id": validUUID})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadOffset)
-		if err == nil {
-			t.Errorf("expected invalid offset error")
-		}
-
-		reqBadFromDate, _ := http.NewRequest("GET", "/payments?from_date=bad", nil)
-		reqBadFromDate = mux.SetURLVars(reqBadFromDate, map[string]string{"project_id": validUUID})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadFromDate)
-		if err == nil {
-			t.Errorf("expected invalid from_date error")
-		}
-
-		reqBadToDate, _ := http.NewRequest("GET", "/payments?to_date=bad", nil)
-		reqBadToDate = mux.SetURLVars(reqBadToDate, map[string]string{"project_id": validUUID})
-		_, err = decodeListPaymentsRequest(context.Background(), reqBadToDate)
-		if err == nil {
-			t.Errorf("expected invalid to_date error")
-		}
-
-		reqValidDates, _ := http.NewRequest("GET", "/payments?from_date=2026-01-01&to_date=2026-01-31", nil)
-		reqValidDates = mux.SetURLVars(reqValidDates, map[string]string{"project_id": validUUID})
-		res, err := decodeListPaymentsRequest(context.Background(), reqValidDates)
-		if err != nil {
-			t.Fatalf("unexpected error decoding valid dates: %v", err)
-		}
-		filter := res.(projecta.PaymentCollectionFilter)
-		if filter.FromDate.IsZero() || filter.ToDate.IsZero() {
-			t.Errorf("expected non-zero FromDate and ToDate")
-		}
-	})
 
 	t.Run("decodeProjectTotalsRequest validation errors", func(t *testing.T) {
 		reqNoVars, _ := http.NewRequest("GET", "/totals", nil)
@@ -675,7 +543,7 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		now := time.Now()
 		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John"}
 		proj, _ := projecta.NewProject(uuid.New(), "P", "", owner, now, now)
-		mockAst := asset.NewAsset(uuid.New(), "Rent", "", proj, nil, money.New(0, "UAH"), now, owner)
+		mockAst := asset.NewAsset(uuid.New(), "Rent", "", proj, money.New(0, "UAH"), now, owner)
 		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst}, &mockRateProvider{})
 		_, err = ep(context.Background(), cmd)
 		if err != nil {
@@ -706,102 +574,7 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 	})
 }
 
-func TestPaymentsDecodersValidationErrors(t *testing.T) {
-	validUUID := uuid.New().String()
-
-	t.Run("decodeUpdatePaymentRequest errors", func(t *testing.T) {
-		reqNoProj, _ := http.NewRequest("PUT", "/", nil)
-		_, err := decodeUpdatePaymentRequest(context.Background(), reqNoProj)
-		if err == nil {
-			t.Errorf("expected missing project_id")
-		}
-
-		reqBadProj, _ := http.NewRequest("PUT", "/", nil)
-		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqBadProj)
-		if err == nil {
-			t.Errorf("expected invalid project_id")
-		}
-
-		reqNoPay, _ := http.NewRequest("PUT", "/", nil)
-		reqNoPay = mux.SetURLVars(reqNoPay, map[string]string{"project_id": validUUID})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqNoPay)
-		if err == nil {
-			t.Errorf("expected missing payment_id")
-		}
-
-		reqBadPay, _ := http.NewRequest("PUT", "/", nil)
-		reqBadPay = mux.SetURLVars(reqBadPay, map[string]string{"project_id": validUUID, "payment_id": "bad"})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqBadPay)
-		if err == nil {
-			t.Errorf("expected invalid payment_id")
-		}
-
-		reqBadJSON, _ := http.NewRequest("PUT", "/", bytes.NewReader([]byte("not json")))
-		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"project_id": validUUID, "payment_id": validUUID})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqBadJSON)
-		if err == nil {
-			t.Errorf("expected invalid json")
-		}
-
-		bodyBadDate, _ := json.Marshal(UpdatePaymentDTO{PaymentDate: "bad-date"})
-		reqBadDate, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyBadDate))
-		reqBadDate = mux.SetURLVars(reqBadDate, map[string]string{"project_id": validUUID, "payment_id": validUUID})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqBadDate)
-		if err == nil {
-			t.Errorf("expected invalid date")
-		}
-
-		nowStr := time.Now().Format(time.RFC3339)
-		bodyBadType, _ := json.Marshal(UpdatePaymentDTO{PaymentDate: nowStr, TypeID: "bad"})
-		reqBadType, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyBadType))
-		reqBadType = mux.SetURLVars(reqBadType, map[string]string{"project_id": validUUID, "payment_id": validUUID})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqBadType)
-		if err == nil {
-			t.Errorf("expected invalid type_id")
-		}
-
-		bodyBadKind, _ := json.Marshal(UpdatePaymentDTO{PaymentDate: nowStr, TypeID: validUUID, Kind: "INVALID_KIND"})
-		reqBadKind, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyBadKind))
-		reqBadKind = mux.SetURLVars(reqBadKind, map[string]string{"project_id": validUUID, "payment_id": validUUID})
-		_, err = decodeUpdatePaymentRequest(context.Background(), reqBadKind)
-		if err == nil {
-			t.Errorf("expected invalid payment kind")
-		}
-	})
-
-	t.Run("decodeGetPaymentRequest errors", func(t *testing.T) {
-		reqNoProj, _ := http.NewRequest("GET", "/", nil)
-		_, err := decodeGetPaymentRequest(context.Background(), reqNoProj)
-		if err == nil {
-			t.Errorf("expected missing project_id")
-		}
-
-		reqBadProj, _ := http.NewRequest("GET", "/", nil)
-		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
-		_, err = decodeGetPaymentRequest(context.Background(), reqBadProj)
-		if err == nil {
-			t.Errorf("expected invalid project_id")
-		}
-
-		reqNoPay, _ := http.NewRequest("GET", "/", nil)
-		reqNoPay = mux.SetURLVars(reqNoPay, map[string]string{"project_id": validUUID})
-		_, err = decodeGetPaymentRequest(context.Background(), reqNoPay)
-		if err == nil {
-			t.Errorf("expected missing payment_id")
-		}
-
-		reqBadPay, _ := http.NewRequest("GET", "/", nil)
-		reqBadPay = mux.SetURLVars(reqBadPay, map[string]string{"project_id": validUUID, "payment_id": "bad"})
-		_, err = decodeGetPaymentRequest(context.Background(), reqBadPay)
-		if err == nil {
-			t.Errorf("expected invalid payment_id")
-		}
-	})
-}
-
 func TestProjectaDecodersValidationErrors(t *testing.T) {
-	validUUID := uuid.New().String()
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, uuid.New())
 
 	t.Run("DecodeCreateProjectRequest errors", func(t *testing.T) {
@@ -817,137 +590,17 @@ func TestProjectaDecodersValidationErrors(t *testing.T) {
 			t.Errorf("expected invalid json")
 		}
 	})
-
-	t.Run("DecodeCreateCategoryRequest errors", func(t *testing.T) {
-		reqNoProj, _ := http.NewRequest("POST", "/", nil)
-		_, err := DecodeCreateCategoryRequest(authedCtx, reqNoProj)
-		if err == nil {
-			t.Errorf("expected missing project_id")
-		}
-
-		reqBadProj, _ := http.NewRequest("POST", "/", nil)
-		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
-		_, err = DecodeCreateCategoryRequest(authedCtx, reqBadProj)
-		if err == nil {
-			t.Errorf("expected invalid project_id")
-		}
-
-		reqUnauth, _ := http.NewRequest("POST", "/", nil)
-		reqUnauth = mux.SetURLVars(reqUnauth, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreateCategoryRequest(context.Background(), reqUnauth)
-		if err == nil {
-			t.Errorf("expected unauthorized")
-		}
-
-		reqBadJSON, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("not json")))
-		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreateCategoryRequest(authedCtx, reqBadJSON)
-		if err == nil {
-			t.Errorf("expected invalid json")
-		}
-	})
-
-	t.Run("DecodeCreateTypeRequest errors", func(t *testing.T) {
-		reqNoProj, _ := http.NewRequest("POST", "/", nil)
-		_, err := DecodeCreateTypeRequest(context.Background(), reqNoProj)
-		if err == nil {
-			t.Errorf("expected missing project_id")
-		}
-
-		reqBadProj, _ := http.NewRequest("POST", "/", nil)
-		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
-		_, err = DecodeCreateTypeRequest(context.Background(), reqBadProj)
-		if err == nil {
-			t.Errorf("expected invalid project_id")
-		}
-
-		reqBadJSON, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("not json")))
-		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreateTypeRequest(context.Background(), reqBadJSON)
-		if err == nil {
-			t.Errorf("expected invalid json")
-		}
-
-		bodyEmptyName, _ := json.Marshal(CreateTypeDTO{Name: ""})
-		reqEmptyName, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyEmptyName))
-		reqEmptyName = mux.SetURLVars(reqEmptyName, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreateTypeRequest(context.Background(), reqEmptyName)
-		if err == nil {
-			t.Errorf("expected empty name error")
-		}
-
-		bodyBadCat, _ := json.Marshal(CreateTypeDTO{Name: "Type", CategoryID: "bad"})
-		reqBadCat, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadCat))
-		reqBadCat = mux.SetURLVars(reqBadCat, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreateTypeRequest(context.Background(), reqBadCat)
-		if err == nil {
-			t.Errorf("expected invalid category_id")
-		}
-	})
-
-	t.Run("DecodeCreatePaymentRequest errors", func(t *testing.T) {
-		reqNoProj, _ := http.NewRequest("POST", "/", nil)
-		_, err := DecodeCreatePaymentRequest(context.Background(), reqNoProj)
-		if err == nil {
-			t.Errorf("expected missing project_id")
-		}
-
-		reqBadProj, _ := http.NewRequest("POST", "/", nil)
-		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
-		_, err = DecodeCreatePaymentRequest(context.Background(), reqBadProj)
-		if err == nil {
-			t.Errorf("expected invalid project_id")
-		}
-
-		reqBadJSON, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("not json")))
-		reqBadJSON = mux.SetURLVars(reqBadJSON, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreatePaymentRequest(context.Background(), reqBadJSON)
-		if err == nil {
-			t.Errorf("expected invalid json")
-		}
-
-		bodyBadDate, _ := json.Marshal(CreatePaymentDTO{PaymentDate: "bad-date"})
-		reqBadDate, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadDate))
-		reqBadDate = mux.SetURLVars(reqBadDate, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreatePaymentRequest(context.Background(), reqBadDate)
-		if err == nil {
-			t.Errorf("expected invalid date")
-		}
-
-		nowStr := time.Now().Format(time.RFC3339)
-		bodyBadType, _ := json.Marshal(CreatePaymentDTO{PaymentDate: nowStr, TypeID: "bad"})
-		reqBadType, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadType))
-		reqBadType = mux.SetURLVars(reqBadType, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreatePaymentRequest(context.Background(), reqBadType)
-		if err == nil {
-			t.Errorf("expected invalid type_id")
-		}
-
-		bodyBadKind, _ := json.Marshal(CreatePaymentDTO{PaymentDate: nowStr, TypeID: validUUID, Kind: "BAD_KIND"})
-		reqBadKind, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyBadKind))
-		reqBadKind = mux.SetURLVars(reqBadKind, map[string]string{"project_id": validUUID})
-		_, err = DecodeCreatePaymentRequest(context.Background(), reqBadKind)
-		if err == nil {
-			t.Errorf("expected invalid payment kind")
-		}
-	})
 }
 
 func TestEndpointsErrorBranches(t *testing.T) {
 	errSvc := errors.New("service failure")
 	owner := &projecta.Owner{PersonID: uuid.New()}
 	proj, _ := projecta.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-	cat, _ := projecta.NewCostCategory(uuid.New(), proj.ProjectID, "Cat", "Desc")
-	costType, _ := projecta.NewCostType(proj.ProjectID, cat, "Type", "Desc")
-	pay := projecta.NewPayment(uuid.New(), proj, owner, costType, "Pay", money.New(100, money.USD), time.Now(), projecta.DownPayment)
-	ast := asset.NewAsset(uuid.New(), "Asset", "Desc", proj, costType, money.New(1000, money.USD), time.Now(), owner)
+	ast := asset.NewAsset(uuid.New(), "Asset", "Desc", proj, money.New(1000, money.USD), time.Now(), owner)
 
 	peopleSvcErr := &mockPeopleService{err: errSvc}
 	authSvcErr := &mockAuthService{err: errSvc}
 	projSvcErr := &mockProjectService{err: errSvc}
-	catSvcErr := &mockCategoryService{err: errSvc}
-	typeSvcErr := &mockTypeService{err: errSvc}
-	paySvcErr := &mockPaymentService{err: errSvc}
 	astSvcErr := &mockAssetService{err: errSvc}
 
 	t.Run("makeRegisterEndpoint errors", func(t *testing.T) {
@@ -1019,46 +672,6 @@ func TestEndpointsErrorBranches(t *testing.T) {
 		}
 	})
 
-	t.Run("makeCreateCategoryEndpoint error", func(t *testing.T) {
-		ep := makeCreateCategoryEndpoint(catSvcErr)
-		_, err := ep(context.Background(), projecta.CreateCategoryCommand{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-	})
-
-	t.Run("makeCreateTypeEndpoint error", func(t *testing.T) {
-		ep := makeCreateTypeEndpoint(typeSvcErr)
-		_, err := ep(context.Background(), projecta.CreateTypeCommand{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-	})
-
-	t.Run("makeCreatePaymentEndpoint error", func(t *testing.T) {
-		ep := makeCreatePaymentEndpoint(paySvcErr, nil)
-		_, err := ep(context.Background(), projecta.CreatePaymentCommand{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-	})
-
-	t.Run("makeListPaymentsEndpoint error", func(t *testing.T) {
-		ep := makeListPaymentsEndpoint(paySvcErr, nil)
-		_, err := ep(context.Background(), projecta.PaymentCollectionFilter{})
-		if err == nil {
-			t.Errorf("expected service error")
-		}
-	})
-
-	t.Run("makeRemovePaymentEndpoint error", func(t *testing.T) {
-		ep := makeRemovePaymentEndpoint(paySvcErr)
-		_, err := ep(context.Background(), "invalid request type")
-		if err == nil {
-			t.Errorf("expected type assertion error")
-		}
-	})
-
 	t.Run("makeRemoveAssetEndpoint error", func(t *testing.T) {
 		ep := makeRemoveAssetEndpoint(astSvcErr)
 		_, err := ep(context.Background(), "invalid request type")
@@ -1069,59 +682,33 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeShowProjectTotalsEndpoint currency mismatch and service error", func(t *testing.T) {
 		mProjSvc := &mockProjectService{project: proj}
-		// Payments service error
-		epErr := makeShowProjectTotalsEndpoint(mProjSvc, paySvcErr, astSvcErr, nil)
-		_, err := epErr(context.Background(), uuid.New())
-		if err == nil {
-			t.Errorf("expected payments service error")
-		}
-
 		// Assets service error
-		paySvcOk := &mockPaymentService{pay: pay}
-		epAssetErr := makeShowProjectTotalsEndpoint(mProjSvc, paySvcOk, astSvcErr, nil)
-		_, err = epAssetErr(context.Background(), uuid.New())
+		epAssetErr := makeShowProjectTotalsEndpoint(mProjSvc, astSvcErr, nil)
+		_, err := epAssetErr(context.Background(), uuid.New())
 		if err == nil {
 			t.Errorf("expected assets service error")
 		}
 
-		// Payments conversion
-		payEUR := projecta.NewPayment(uuid.New(), proj, owner, costType, "Pay EUR", money.New(50, money.EUR), time.Now(), projecta.DownPayment)
-		colMismatch := projecta.NewPaymentCollection(2)
-		colMismatch.Add(pay, payEUR)
-		mPaySvc := &mockPaymentServiceWithCol{col: colMismatch}
-		mAstSvc := &mockAssetService{asset: ast}
-
-		epMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mPaySvc, mAstSvc, nil)
-		_, err = epMismatch(context.Background(), uuid.New())
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
+		// Investment service error
+		epInvErr := makeShowProjectTotalsEndpoint(mProjSvc, &mockAssetService{asset: ast}, nil, &mockInvestmentServiceWithCol{err: errSvc})
+		_, err = epInvErr(context.Background(), uuid.New())
+		if err == nil {
+			t.Errorf("expected investment service error")
 		}
 
 		// Assets conversion
-		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj, costType, money.New(500, money.EUR), time.Now(), owner)
+		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj, money.New(500, money.EUR), time.Now(), owner)
 		astColMismatch := asset.NewCollection(2)
 		astColMismatch.Add(ast, astEUR)
 
-		mPaySvcSingle := &mockPaymentServiceWithCol{col: projecta.NewPaymentCollection(1)}
-		mPaySvcSingle.col.Add(pay)
-
 		mAstSvcMismatch := &mockAssetServiceWithCol{col: astColMismatch}
 
-		epAstMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mPaySvcSingle, mAstSvcMismatch, nil)
+		epAstMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mAstSvcMismatch, nil)
 		_, err = epAstMismatch(context.Background(), uuid.New())
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
-}
-
-type mockPaymentServiceWithCol struct {
-	mockPaymentService
-	col *projecta.PaymentCollection
-}
-
-func (m *mockPaymentServiceWithCol) Find(_ context.Context, _ projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
-	return m.col, nil
 }
 
 type mockAssetServiceWithCol struct {
@@ -1235,13 +822,13 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		projSvc := &mockProjectService{project: proj}
 
 		epGet := makeGetProjectEndpoint(projSvc)
-		res, err := epGet(context.Background(), projecta.ProjectFilter{ProjectID: proj.ProjectID})
+		res, err := epGet(context.Background(), projecta.ProjectFilter{ProjectID: proj.ID()})
 		if err != nil || res == nil {
 			t.Fatalf("makeGetProjectEndpoint error: %v", err)
 		}
 
 		epAccept := makeAcceptShareEndpoint(projSvc)
-		res, err = epAccept(context.Background(), AcceptShareCommand{ShareToken: proj.ShareToken, PersonID: owner.PersonID})
+		res, err = epAccept(context.Background(), AcceptShareCommand{ShareToken: proj.ShareToken(), PersonID: owner.PersonID})
 		if err != nil || res == nil {
 			t.Fatalf("makeAcceptShareEndpoint error: %v", err)
 		}
@@ -1311,20 +898,11 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 
 	t.Run("currency conversion endpoints with rateProvider", func(t *testing.T) {
 		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
-		proj, _ := projecta.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now())
-		proj.MainCurrency = "UAH"
-		cat, _ := projecta.NewCostCategory(uuid.New(), proj.ProjectID, "Cat1", "Desc")
-		costType, _ := projecta.NewCostType(proj.ProjectID, cat, "Type1", "Desc")
+		proj, _ := projecta.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now(), "UAH")
 
-		payUSD := projecta.NewPayment(uuid.New(), proj, owner, costType, "Pay USD", money.New(100, money.USD), time.Now(), projecta.DownPayment)
-		astUSD := asset.NewAsset(uuid.New(), "Ast USD", "Desc", proj, costType, money.New(200, money.USD), time.Now(), owner)
+		astUSD := asset.NewAsset(uuid.New(), "Ast USD", "Desc", proj, money.New(200, money.USD), time.Now(), owner)
 
 		rateProv := &mockRateProvider{}
-
-		pDto := toPaymentDTO(payUSD, rateProv)
-		if pDto.HomeAmount != 4000 {
-			t.Errorf("expected converted home amount 4000, got %d", pDto.HomeAmount)
-		}
 
 		astUSD.SetTotalCost(money.New(200, money.USD))
 		astUSD.SetTargetPrice(money.New(100, money.USD))
@@ -1337,25 +915,6 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 		if aDto.ProgressPercentage == nil || *aDto.ProgressPercentage != 200.0 {
 			t.Errorf("expected ProgressPercentage 200.0, got %v", aDto.ProgressPercentage)
-		}
-
-		paySvc := &mockPaymentService{pay: payUSD}
-		epCreatePay := makeCreatePaymentEndpoint(paySvc, rateProv)
-		if _, err := epCreatePay(context.Background(), projecta.CreatePaymentCommand{}); err != nil {
-			t.Errorf("makeCreatePaymentEndpoint error: %v", err)
-		}
-
-		epGetPay := makeGetPaymentEndpoint(paySvc, rateProv)
-		if _, err := epGetPay(context.Background(), projecta.PaymentFilter{}); err != nil {
-			t.Errorf("makeGetPaymentEndpoint error: %v", err)
-		}
-
-		col := projecta.NewPaymentCollection(1)
-		col.Add(payUSD)
-		mPayColSvc := &mockPaymentServiceWithCol{col: col}
-		epListPay := makeListPaymentsEndpoint(mPayColSvc, rateProv)
-		if _, err := epListPay(context.Background(), projecta.PaymentCollectionFilter{}); err != nil {
-			t.Errorf("makeListPaymentsEndpoint error: %v", err)
 		}
 
 		astSvc := &mockAssetService{asset: astUSD}
@@ -1383,17 +942,6 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		mProjSvc := &mockProjectService{project: proj}
-		epTotals := makeShowProjectTotalsEndpoint(mProjSvc, mPayColSvc, mAstColSvc, rateProv)
-		resTotals, err := epTotals(context.Background(), proj.ProjectID)
-		if err != nil || resTotals == nil {
-			t.Fatalf("makeShowProjectTotalsEndpoint error: %v", err)
-		}
-
-		errRateProv := &mockRateProvider{err: errors.New("rate error")}
-		epTotalsErr := makeShowProjectTotalsEndpoint(mProjSvc, mPayColSvc, mAstColSvc, errRateProv)
-		if _, err := epTotalsErr(context.Background(), proj.ProjectID); err == nil {
-			t.Error("expected rate error in makeShowProjectTotalsEndpoint")
-		}
 
 		// Test makeShowProjectTotalsEndpoint with investment service
 		inv1 := investment.ReconstituteInvestment(uuid.New(), proj, uuid.New(), "Asset 1", nil, owner, investment.ResourceTypeMoney, money.New(15000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
@@ -1403,8 +951,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		invCol.Add(inv2)
 		mInvColSvc := &mockInvestmentServiceWithCol{col: invCol}
 
-		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj, nil, money.New(10000, "UAH"), time.Now(), owner)
-		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj, nil, money.New(5000, "UAH"), time.Now(), owner)
+		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj, money.New(10000, "UAH"), time.Now(), owner)
+		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj, money.New(5000, "UAH"), time.Now(), owner)
 		childAsset.SetParents([]asset.ParentAssetLink{{ParentID: parentAsset.ID(), SharePercentage: 100}})
 		parentAsset.SetTotalCost(money.New(15000, "UAH"))
 		parentAsset.SetDirectCost(money.New(10000, "UAH"))
@@ -1414,8 +962,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		colWithHierarchy.Add(childAsset)
 		mAstHierarchySvc := &mockAssetServiceWithCol{col: colWithHierarchy}
 
-		epTotalsInv := makeShowProjectTotalsEndpoint(mProjSvc, nil, mAstHierarchySvc, rateProv, mInvColSvc)
-		resInvTotals, err := epTotalsInv(context.Background(), proj.ProjectID)
+		epTotalsInv := makeShowProjectTotalsEndpoint(mProjSvc, mAstHierarchySvc, rateProv, mInvColSvc)
+		resInvTotals, err := epTotalsInv(context.Background(), proj.ID())
 		if err != nil {
 			t.Fatalf("unexpected error with inv service: %v", err)
 		}
@@ -1430,6 +978,12 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		// Assets should count parent (15000) and ignore child with parent, so balance = 40000 - 15000 = 25000
 		if dtoTotals.Totals[1].Title != "Project Balance" || dtoTotals.Totals[1].Amount != 25000 {
 			t.Errorf("expected Project Balance 25000, got %+v", dtoTotals.Totals[1])
+		}
+
+		errRateProv := &mockRateProvider{err: errors.New("rate error")}
+		epTotalsErr := makeShowProjectTotalsEndpoint(mProjSvc, mAstColSvc, errRateProv, mInvColSvc)
+		if _, err := epTotalsErr(context.Background(), proj.ID()); err == nil {
+			t.Error("expected rate error in makeShowProjectTotalsEndpoint")
 		}
 	})
 

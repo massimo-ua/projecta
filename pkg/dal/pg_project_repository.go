@@ -5,16 +5,105 @@ import (
 	types "database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/projecta"
-	"strings"
-	"time"
 )
+
+type projectRecord struct {
+	projectID     string
+	name          string
+	description   string
+	ownerID       string
+	startedAt     time.Time
+	endedAt       time.Time
+	firstName     string
+	lastName      string
+	displayName   types.NullString
+	shareTokenStr string
+	mainCurrency  types.NullString
+}
+
+func (r *projectRecord) scanFields() []any {
+	return []any{
+		&r.projectID,
+		&r.name,
+		&r.description,
+		&r.ownerID,
+		&r.startedAt,
+		&r.endedAt,
+		&r.firstName,
+		&r.lastName,
+		&r.displayName,
+		&r.shareTokenStr,
+		&r.mainCurrency,
+	}
+}
+
+func (r *projectRecord) toProject(isShared bool, sharedParticipants []projecta.Participant) (*projecta.Project, error) {
+	pID, err := uuid.Parse(r.projectID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project id: %w", err)
+	}
+	oID, err := uuid.Parse(r.ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid owner id: %w", err)
+	}
+
+	dispName := r.displayName.String
+	if dispName == "" {
+		dispName = strings.TrimSpace(r.firstName + " " + r.lastName)
+	}
+
+	owner := &projecta.Owner{
+		PersonID:    oID,
+		DisplayName: dispName,
+	}
+
+	var participants []projecta.Participant
+	if dispName != "" {
+		if op, err := projecta.NewParticipant(dispName); err == nil {
+			participants = append(participants, op)
+		}
+	}
+	for _, sp := range sharedParticipants {
+		duplicate := false
+		for _, ep := range participants {
+			if ep.DisplayName() == sp.DisplayName() {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			participants = append(participants, sp)
+		}
+	}
+
+	shareToken, _ := uuid.Parse(r.shareTokenStr)
+	curr := r.mainCurrency.String
+	if curr == "" {
+		curr = "UAH"
+	}
+
+	return projecta.ReconstituteProject(
+		pID,
+		r.name,
+		r.description,
+		owner,
+		r.startedAt,
+		r.endedAt,
+		shareToken,
+		isShared,
+		curr,
+		participants,
+	), nil
+}
 
 type PgProjectRepository struct {
 	db *PgRepository
@@ -62,37 +151,8 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 
 	sql, args := qb.Build()
 
-	var (
-		projectID     string
-		name          string
-		description   string
-		ownerID       string
-		startedAt     time.Time
-		endedAt       time.Time
-		firstName     string
-		lastName      string
-		displayName   types.NullString
-		shareTokenStr string
-		mainCurrency  types.NullString
-	)
-
-	if err := r.db.QueryRow(
-		ctx,
-		sql,
-		args...,
-	).Scan(
-		&projectID,
-		&name,
-		&description,
-		&ownerID,
-		&startedAt,
-		&endedAt,
-		&firstName,
-		&lastName,
-		&displayName,
-		&shareTokenStr,
-		&mainCurrency,
-	); err != nil {
+	var rec projectRecord
+	if err := r.db.QueryRow(ctx, sql, args...).Scan(rec.scanFields()...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
 		}
@@ -100,15 +160,18 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 		return nil, err
 	}
 
-	p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
+	pID, err := uuid.Parse(rec.projectID)
 	if err != nil {
 		return nil, err
 	}
-	p.IsShared = (p.Owner.PersonID != personID)
-	if err := r.loadParticipants(ctx, p); err != nil {
+
+	sharedParts, err := r.fetchParticipants(ctx, pID)
+	if err != nil {
 		return nil, err
 	}
-	return p, nil
+
+	isShared := (rec.ownerID != personID.String())
+	return rec.toProject(isShared, sharedParts)
 }
 
 func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
@@ -136,54 +199,28 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 
 	sql, args := qb.Build()
 
-	var (
-		projectID     string
-		name          string
-		description   string
-		ownerID       string
-		startedAt     time.Time
-		endedAt       time.Time
-		firstName     string
-		lastName      string
-		displayName   types.NullString
-		shareTokenStr string
-		mainCurrency  types.NullString
-	)
-
-	if err := r.db.QueryRow(ctx, sql, args...).Scan(
-		&projectID,
-		&name,
-		&description,
-		&ownerID,
-		&startedAt,
-		&endedAt,
-		&firstName,
-		&lastName,
-		&displayName,
-		&shareTokenStr,
-		&mainCurrency,
-	); err != nil {
+	var rec projectRecord
+	if err := r.db.QueryRow(ctx, sql, args...).Scan(rec.scanFields()...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
 		}
 		return nil, err
 	}
 
-	p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
+	pID, err := uuid.Parse(rec.projectID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.loadParticipants(ctx, p); err != nil {
+
+	sharedParts, err := r.fetchParticipants(ctx, pID)
+	if err != nil {
 		return nil, err
 	}
-	return p, nil
+
+	return rec.toProject(false, sharedParts)
 }
 
-func (r *PgProjectRepository) loadParticipants(ctx context.Context, project *projecta.Project) error {
-	if project == nil {
-		return nil
-	}
-
+func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID uuid.UUID) ([]projecta.Participant, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_project_shares")
 	qb.Select(
@@ -192,17 +229,18 @@ func (r *PgProjectRepository) loadParticipants(ctx context.Context, project *pro
 		"people.display_name",
 	)
 	qb.Join("people", "people.person_id = projecta_project_shares.person_id")
-	qb.Where(qb.Equal("projecta_project_shares.project_id", project.ProjectID.String()))
+	qb.Where(qb.Equal("projecta_project_shares.project_id", projectID.String()))
 	qb.OrderBy("projecta_project_shares.created_at").Asc()
 
 	sql, args := qb.Build()
 
 	rows, err := r.db.Query(ctx, sql, args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 
+	var participants []projecta.Participant
 	for rows.Next() {
 		var (
 			firstName   string
@@ -211,7 +249,7 @@ func (r *PgProjectRepository) loadParticipants(ctx context.Context, project *pro
 		)
 
 		if err := rows.Scan(&firstName, &lastName, &displayName); err != nil {
-			return err
+			return nil, err
 		}
 
 		name := displayName.String
@@ -222,12 +260,12 @@ func (r *PgProjectRepository) loadParticipants(ctx context.Context, project *pro
 		if name != "" {
 			participant, err := projecta.NewParticipant(name)
 			if err == nil {
-				project.AddParticipant(participant)
+				participants = append(participants, participant)
 			}
 		}
 	}
 
-	return rows.Err()
+	return participants, rows.Err()
 }
 
 func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
@@ -244,11 +282,7 @@ func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID u
 }
 
 func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
-	if project.ShareToken == uuid.Nil {
-		project.ShareToken = uuid.New()
-	}
-
-	mainCurrency := project.MainCurrency
+	mainCurrency := project.MainCurrency()
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
 	}
@@ -266,13 +300,13 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 		"main_currency",
 	)
 	qb.Values(
-		project.ProjectID.String(),
-		project.Name,
-		project.Description,
-		project.Owner.PersonID.String(),
-		project.StartDate,
-		project.EndDate,
-		project.ShareToken.String(),
+		project.ID().String(),
+		project.Name(),
+		project.Description(),
+		project.OwnerID().String(),
+		project.StartDate(),
+		project.EndDate(),
+		project.ShareToken().String(),
 		mainCurrency,
 	)
 
@@ -284,7 +318,7 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 }
 
 func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
-	mainCurrency := project.MainCurrency
+	mainCurrency := project.MainCurrency()
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
 	}
@@ -292,15 +326,15 @@ func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Proj
 	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
 	qb.Update("projecta_projects")
 	qb.Set(
-		qb.Assign("name", project.Name),
-		qb.Assign("description", project.Description),
-		qb.Assign("owner_id", project.Owner.PersonID.String()),
-		qb.Assign("started_at", project.StartDate),
-		qb.Assign("ended_at", project.EndDate),
+		qb.Assign("name", project.Name()),
+		qb.Assign("description", project.Description()),
+		qb.Assign("owner_id", project.OwnerID().String()),
+		qb.Assign("started_at", project.StartDate()),
+		qb.Assign("ended_at", project.EndDate()),
 		qb.Assign("main_currency", mainCurrency),
 	)
-	qb.Where(qb.Equal("project_id", project.ProjectID.String()))
-	qb.Where(qb.Equal("owner_id", project.Owner.PersonID.String()))
+	qb.Where(qb.Equal("project_id", project.ID().String()))
+	qb.Where(qb.Equal("owner_id", project.OwnerID().String()))
 
 	sql, args := qb.Build()
 
@@ -312,8 +346,8 @@ func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Proj
 func (r *PgProjectRepository) Remove(ctx context.Context, project *projecta.Project) error {
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_projects")
-	qb.Where(qb.Equal("project_id", project.ProjectID.String()))
-	qb.Where(qb.Equal("owner_id", project.Owner.PersonID.String()))
+	qb.Where(qb.Equal("project_id", project.ID().String()))
+	qb.Where(qb.Equal("owner_id", project.OwnerID().String()))
 
 	sql, args := qb.Build()
 
@@ -368,85 +402,20 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 	var projects []*projecta.Project
 
 	for rows.Next() {
-		var (
-			projectID     string
-			name          string
-			description   string
-			ownerID       string
-			startedAt     time.Time
-			endedAt       time.Time
-			firstName     string
-			lastName      string
-			displayName   types.NullString
-			shareTokenStr string
-			mainCurrency  types.NullString
-		)
+		var rec projectRecord
 
-		if err = rows.Scan(
-			&projectID,
-			&name,
-			&description,
-			&ownerID,
-			&startedAt,
-			&endedAt,
-			&firstName,
-			&lastName,
-			&displayName,
-			&shareTokenStr,
-			&mainCurrency,
-		); err != nil {
+		if err = rows.Scan(rec.scanFields()...); err != nil {
 			return nil, err
 		}
 
-		p, err := toProject(projectID, name, description, ownerID, firstName, lastName, displayName.String, startedAt, endedAt, mainCurrency.String, shareTokenStr)
-
+		isShared := (rec.ownerID != personID.String())
+		p, err := rec.toProject(isShared, nil)
 		if err != nil {
 			return nil, err
 		}
-
-		p.IsShared = (p.Owner.PersonID != personID)
 
 		projects = append(projects, p)
 	}
 
 	return projects, nil
-}
-
-func toProject(projectID, name, description, ownerID, firstName, lastName, displayName string, startedAt, enddedAt time.Time, mainCurrency string, shareToken ...string) (*projecta.Project, error) {
-	person, err := people.NewPerson(
-		uuid.MustParse(ownerID),
-		firstName,
-		lastName,
-		displayName,
-		nil,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	p, err := projecta.NewProject(
-		uuid.MustParse(projectID),
-		name,
-		description,
-		&projecta.Owner{
-			PersonID:    person.ID(),
-			DisplayName: person.DisplayName(),
-		},
-		startedAt,
-		enddedAt,
-		mainCurrency,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(shareToken) > 0 && shareToken[0] != "" {
-		if token, err := uuid.Parse(shareToken[0]); err == nil {
-			p.ShareToken = token
-		}
-	}
-
-	return p, nil
 }

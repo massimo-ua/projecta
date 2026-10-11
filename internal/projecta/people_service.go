@@ -6,11 +6,15 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/people"
 )
 
-type PeopleServiceImpl struct {
-	repository people.Repository
+type PersonReader interface {
+	FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error)
 }
 
-func NewPeopleService(repository people.Repository) *PeopleServiceImpl {
+type PeopleServiceImpl struct {
+	repository PersonReader
+}
+
+func NewPeopleService(repository PersonReader) *PeopleServiceImpl {
 	return &PeopleServiceImpl{repository: repository}
 }
 

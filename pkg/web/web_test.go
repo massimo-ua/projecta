@@ -169,110 +169,6 @@ func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ uuid.
 	return m.project, nil
 }
 
-type mockCategoryService struct {
-	cat *projecta.CostCategory
-	err error
-}
-
-func (m *mockCategoryService) Find(_ context.Context, _ projecta.CategoryCollectionFilter) (*projecta.CostCategoryCollection, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return projecta.NewCategoryCollection(1), nil
-}
-func (m *mockCategoryService) Create(_ context.Context, _ projecta.CreateCategoryCommand) (*projecta.CostCategory, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.cat, nil
-}
-func (m *mockCategoryService) Update(_ context.Context, _ projecta.UpdateCategoryCommand) error {
-	return m.err
-}
-func (m *mockCategoryService) Remove(_ context.Context, _ projecta.RemoveCategoryCommand) error {
-	return m.err
-}
-
-type mockTypeService struct {
-	costType *projecta.CostType
-	err      error
-}
-
-func (m *mockTypeService) Find(_ context.Context, _ projecta.TypeCollectionFilter) (*projecta.CostTypeCollection, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return projecta.NewCostTypeCollection(1), nil
-}
-func (m *mockTypeService) FindOne(_ context.Context, _ projecta.TypeFilter) (*projecta.CostType, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.costType, nil
-}
-func (m *mockTypeService) Create(_ context.Context, _ projecta.CreateTypeCommand) (*projecta.CostType, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.costType, nil
-}
-func (m *mockTypeService) Remove(_ context.Context, _ projecta.RemoveProjectResourceCommand) error {
-	return m.err
-}
-func (m *mockTypeService) Update(_ context.Context, _ projecta.UpdateTypeCommand) error {
-	return m.err
-}
-
-type mockPaymentService struct {
-	pay *projecta.Payment
-	err error
-}
-
-func (m *mockPaymentService) FindOne(_ context.Context, _ projecta.PaymentFilter) (*projecta.Payment, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.pay, nil
-}
-func (m *mockPaymentService) Find(_ context.Context, _ projecta.PaymentCollectionFilter) (*projecta.PaymentCollection, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return projecta.NewPaymentCollection(1), nil
-}
-func (m *mockPaymentService) Create(_ context.Context, _ projecta.CreatePaymentCommand) (*projecta.Payment, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.pay, nil
-}
-func (m *mockPaymentService) CreateBatch(_ context.Context, _ []projecta.CreatePaymentCommand) ([]*projecta.Payment, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	if m.pay != nil {
-		return []*projecta.Payment{m.pay}, nil
-	}
-	return []*projecta.Payment{}, nil
-}
-func (m *mockPaymentService) ParseStatement(_ context.Context, _ uuid.UUID, _ []byte) (*projecta.StatementParseResult, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &projecta.StatementParseResult{
-		Account:      "ACC123",
-		Currency:     "PLN",
-		Period:       "01.09.2026 - 30.09.2026",
-		Transactions: []projecta.StatementParseItem{},
-	}, nil
-}
-func (m *mockPaymentService) Update(_ context.Context, _ projecta.UpdatePaymentCommand) error {
-	return m.err
-}
-func (m *mockPaymentService) Remove(_ context.Context, _ projecta.RemovePaymentCommand) error {
-	return m.err
-}
-
 type mockAssetService struct {
 	asset *asset.Asset
 	err   error
@@ -324,15 +220,11 @@ func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenC
 	return m.err
 }
 
-
 func TestWebHandlersAndEndpoints(t *testing.T) {
 	personID := uuid.New()
 	owner := &projecta.Owner{PersonID: personID, DisplayName: "John Doe"}
 	proj, _ := projecta.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
-	cat, _ := projecta.NewCostCategory(uuid.New(), proj.ProjectID, "Category 1", "Desc")
-	costType, _ := projecta.NewCostType(proj.ProjectID, cat, "Type 1", "Desc")
-	pay := projecta.NewPayment(uuid.New(), proj, owner, costType, "Pay", money.New(100, money.USD), time.Now(), projecta.DownPayment)
-	ast := asset.NewAsset(uuid.New(), "Laptop", "Desc", proj, costType, money.New(1000, money.USD), time.Now(), owner)
+	ast := asset.NewAsset(uuid.New(), "Laptop", "Desc", proj, money.New(1000, money.USD), time.Now(), owner)
 	cred, _ := people.NewCredentials("LOCAL", "john@example.com", "secret")
 	person, _ := people.NewPerson(personID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -340,12 +232,10 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	authSvc := &mockAuthService{authResp: &core.AuthResponse{AccessToken: "token_123", RefreshToken: "ref_123"}}
 	tokenProv := &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String(), Roles: []string{"User"}}}}
 	projSvc := &mockProjectService{project: proj}
-	catSvc := &mockCategoryService{cat: cat}
-	typeSvc := &mockTypeService{costType: costType}
-	paySvc := &mockPaymentService{pay: pay}
+	stmtSvc := &mockStatementService{}
 	astSvc := &mockAssetService{asset: ast}
 
-	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, &mockInvitationService{}, projSvc, catSvc, typeSvc, paySvc, astSvc, nil)
+	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, &mockInvitationService{}, projSvc, stmtSvc, astSvc, nil)
 	if err != nil || handler == nil {
 		t.Fatalf("failed to create http handler: %v", err)
 	}
@@ -429,7 +319,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 
 		// PATCH /projects/{id}
 		patchProjBody, _ := json.Marshal(UpdateProjectDTO{MainCurrency: "USD"})
-		reqPatch, _ := http.NewRequest("PATCH", server.URL+"/projects/"+proj.ProjectID.String(), bytes.NewReader(patchProjBody))
+		reqPatch, _ := http.NewRequest("PATCH", server.URL+"/projects/"+proj.ID().String(), bytes.NewReader(patchProjBody))
 		reqPatch.Header.Set("Authorization", "Bearer token")
 		respPatch, err := client.Do(reqPatch)
 		if err != nil || respPatch.StatusCode != http.StatusOK {
@@ -437,119 +327,22 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Categories endpoints", func(t *testing.T) {
+	t.Run("Totals endpoint", func(t *testing.T) {
 		client := &http.Client{}
-		pID := proj.ProjectID.String()
-
-		// GET /projects/{id}/categories
-		reqList, _ := http.NewRequest("GET", server.URL+"/projects/"+pID+"/categories?limit=5&offset=0&name=cat", nil)
-		reqList.Header.Set("Authorization", "Bearer token")
-		respList, err := client.Do(reqList)
-		if err != nil || respList.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 for GET categories, got %v", respList.StatusCode)
-		}
-
-		// POST /projects/{id}/categories
-		body, _ := json.Marshal(CreateCategoryDTO{Name: "New Cat", Description: "Desc"})
-		reqCreate, _ := http.NewRequest("POST", server.URL+"/projects/"+pID+"/categories", bytes.NewReader(body))
-		reqCreate.Header.Set("Authorization", "Bearer token")
-		respCreate, err := client.Do(reqCreate)
-		if err != nil || respCreate.StatusCode != http.StatusCreated {
-			t.Errorf("expected 201 for POST category, got %v", respCreate.StatusCode)
-		}
-	})
-
-	t.Run("Types endpoints", func(t *testing.T) {
-		client := &http.Client{}
-		pID := proj.ProjectID.String()
-		tID := costType.ID.String()
-
-		// GET /projects/{id}/types
-		reqList, _ := http.NewRequest("GET", server.URL+"/projects/"+pID+"/types?limit=5&offset=0", nil)
-		reqList.Header.Set("Authorization", "Bearer token")
-		respList, _ := client.Do(reqList)
-		if respList.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 for GET types")
-		}
-
-		// POST /projects/{id}/types
-		body, _ := json.Marshal(CreateTypeDTO{CategoryID: cat.ID.String(), Name: "Type", Description: "Desc"})
-		reqCreate, _ := http.NewRequest("POST", server.URL+"/projects/"+pID+"/types", bytes.NewReader(body))
-		reqCreate.Header.Set("Authorization", "Bearer token")
-		respCreate, _ := client.Do(reqCreate)
-		if respCreate.StatusCode != http.StatusCreated {
-			t.Errorf("expected 201 for POST type")
-		}
-
-		// DELETE /projects/{id}/types/{type_id}
-		reqDel, _ := http.NewRequest("DELETE", server.URL+"/projects/"+pID+"/types/"+tID, nil)
-		reqDel.Header.Set("Authorization", "Bearer token")
-		respDel, _ := client.Do(reqDel)
-		if respDel.StatusCode != http.StatusNoContent {
-			t.Errorf("expected 244 No Content for DELETE type, got %v", respDel.StatusCode)
-		}
-	})
-
-	t.Run("Payments endpoints", func(t *testing.T) {
-		client := &http.Client{}
-		pID := proj.ProjectID.String()
-		payID := pay.ID.String()
-		nowStr := time.Now().Format(time.RFC3339)
-
-		// GET /projects/{id}/payments
-		reqList, _ := http.NewRequest("GET", server.URL+"/projects/"+pID+"/payments?category_id="+cat.ID.String()+"&type_id="+costType.ID.String()+"&order_by=date&order=DESC", nil)
-		reqList.Header.Set("Authorization", "Bearer token")
-		respList, _ := client.Do(reqList)
-		if respList.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 for GET payments")
-		}
+		pID := proj.ID().String()
 
 		// GET /projects/{id}/totals
 		reqTotals, _ := http.NewRequest("GET", server.URL+"/projects/"+pID+"/totals", nil)
 		reqTotals.Header.Set("Authorization", "Bearer token")
-		respTotals, _ := client.Do(reqTotals)
-		if respTotals.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 for GET totals")
-		}
-
-		// POST /projects/{id}/payments
-		payBody, _ := json.Marshal(CreatePaymentDTO{TypeID: costType.ID.String(), Description: "Pay", Amount: 50, Currency: "USD", PaymentDate: nowStr, Kind: "DOWN_PAYMENT"})
-		reqCreate, _ := http.NewRequest("POST", server.URL+"/projects/"+pID+"/payments", bytes.NewReader(payBody))
-		reqCreate.Header.Set("Authorization", "Bearer token")
-		respCreate, _ := client.Do(reqCreate)
-		if respCreate.StatusCode != http.StatusCreated {
-			t.Errorf("expected 201 for POST payment, got %v", respCreate.StatusCode)
-		}
-
-		// PUT /projects/{id}/payments/{payment_id}
-		updPayBody, _ := json.Marshal(UpdatePaymentDTO{TypeID: costType.ID.String(), Description: "Upd Pay", Amount: 60, Currency: "USD", PaymentDate: nowStr, Kind: "DOWN_PAYMENT"})
-		reqPut, _ := http.NewRequest("PUT", server.URL+"/projects/"+pID+"/payments/"+payID, bytes.NewReader(updPayBody))
-		reqPut.Header.Set("Authorization", "Bearer token")
-		respPut, _ := client.Do(reqPut)
-		if respPut.StatusCode != http.StatusNoContent {
-			t.Errorf("expected 204 for PUT payment, got %v", respPut.StatusCode)
-		}
-
-		// GET /projects/{id}/payments/{payment_id}
-		reqGetOne, _ := http.NewRequest("GET", server.URL+"/projects/"+pID+"/payments/"+payID, nil)
-		reqGetOne.Header.Set("Authorization", "Bearer token")
-		respGetOne, _ := client.Do(reqGetOne)
-		if respGetOne.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 for GET payment one")
-		}
-
-		// DELETE /projects/{id}/payments/{payment_id}
-		reqDel, _ := http.NewRequest("DELETE", server.URL+"/projects/"+pID+"/payments/"+payID, nil)
-		reqDel.Header.Set("Authorization", "Bearer token")
-		respDel, _ := client.Do(reqDel)
-		if respDel.StatusCode != http.StatusNoContent {
-			t.Errorf("expected 204 for DELETE payment")
+		respTotals, err := client.Do(reqTotals)
+		if err != nil || respTotals.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET totals, got %v", respTotals.StatusCode)
 		}
 	})
 
 	t.Run("Assets endpoints", func(t *testing.T) {
 		client := &http.Client{}
-		pID := proj.ProjectID.String()
+		pID := proj.ID().String()
 		astID := ast.ID().String()
 		nowStr := time.Now().Format(time.RFC3339)
 
@@ -562,7 +355,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 		}
 
 		// POST /projects/{id}/assets
-		assetBody, _ := json.Marshal(CreateAssetDTO{TypeID: costType.ID.String(), Name: "Laptop", Description: "Desc", Price: 1000, Currency: "USD", AcquiredAt: nowStr, WithPayment: true})
+		assetBody, _ := json.Marshal(CreateAssetDTO{Name: "Laptop", Description: "Desc", Price: 1000, Currency: "USD", AcquiredAt: nowStr, WithPayment: true})
 		reqCreate, _ := http.NewRequest("POST", server.URL+"/projects/"+pID+"/assets", bytes.NewReader(assetBody))
 		reqCreate.Header.Set("Authorization", "Bearer token")
 		respCreate, _ := client.Do(reqCreate)
@@ -579,7 +372,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 		}
 
 		// PUT /projects/{id}/assets/{asset_id}
-		updAssetBody, _ := json.Marshal(UpdateAssetDTO{TypeID: costType.ID.String(), Name: "Desktop", Description: "Desc", Price: 1200, Currency: "USD", AcquiredAt: nowStr})
+		updAssetBody, _ := json.Marshal(UpdateAssetDTO{Name: "Desktop", Description: "Desc", Price: 1200, Currency: "USD", AcquiredAt: nowStr})
 		reqPut, _ := http.NewRequest("PUT", server.URL+"/projects/"+pID+"/assets/"+astID, bytes.NewReader(updAssetBody))
 		reqPut.Header.Set("Authorization", "Bearer token")
 		respPut, _ := client.Do(reqPut)
@@ -655,7 +448,7 @@ func TestRoleBasedAccessControl(t *testing.T) {
 		dynamicTokenProv.claims.AuthTokenPayload.Roles = currentRoles
 	}
 
-	handler, err := MakeHTTPHandler(peopleSvc, dynamicTokenProv, authSvc, &mockInvitationService{}, projSvc, nil, nil, nil, nil, nil)
+	handler, err := MakeHTTPHandler(peopleSvc, dynamicTokenProv, authSvc, &mockInvitationService{}, projSvc, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to make handler: %v", err)
 	}

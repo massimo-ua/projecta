@@ -111,15 +111,37 @@ This document records the exact steps, patterns, and anti-pattern resolutions ap
 | :--- | :--- | :--- |
 | **Cross-Aggregate Pointer Coupling** | `Investment` held `Asset *asset.Asset` | Replaced with `primaryAssetID uuid.UUID` and `primaryAssetName string`. Aggregates reference by ID only. |
 | **Fake Stub Hydration in DAL** | `pg_investment_repository.go` constructed fake `asset.NewAsset(...)` | Used intermediate `investmentRecord` and hydrated `Investment` directly via `ReconstituteInvestment`. |
+| **Fake Stub Hydration in Project DAL** | `pg_project_repository.go` constructed stub `people.NewPerson(...)` | Introduced `projectRecord`, `scanFields()`, and `fetchParticipants()` directly into `ReconstituteProject`. |
 | **Duplicated Invariant Checks** | Invariant allocation loops copy-pasted in `Create` and `Update` in `service.go` | Consolidated in domain method `Investment.Allocate`. |
-| **Wide Foreign Dependencies** | `investment.Service` imported full `asset.Repository` | Narrowed to consumer-owned `AssetReader` interface. |
+| **Wide Foreign Dependencies** | `investment.Service` and `asset.Service` imported full `projecta.ProjectRepository` | Narrowed to consumer-owned `ProjectReader` interface (`FindOne(ctx, filter)`). |
+| **Mutable Aggregate Fields** | `projecta.Project` had public mutable fields | Encapsulated all fields as private; mutations via invariant methods (`UpdateDetails`, `SetDates`, `RegenerateShareToken`). |
+| **Slice Reference Exposure** | `Project.Participants` slice exposed internal state | Encapsulated slice with defensive copy on `Participants()` getter. |
 | **Post-Hoc Aggregate Mutation in DAL** | `inv.SetAssetAllocations(allocs)` after DB scan | Pass `allocations` directly into `ReconstituteInvestment`. |
 
 ---
 
-## 4. Checklist for Future Refactorings
+## 4. `internal/projecta` Aggregate Root Refactoring
 
-When refactoring the next context (e.g., `internal/projecta` or `internal/people`):
+### Transformations Applied:
+1. **Encapsulated `Project` State**:
+   - Converted all fields (`id`, `name`, `description`, `owner`, `startDate`, `endDate`, `shareToken`, `isShared`, `mainCurrency`, `participants`) to private.
+   - Added invariant protection in constructor (`NewProject` enforces non-empty name, required owner, date sequence, valid currency).
+   - Added domain methods: `UpdateDetails(name, desc, currency)`, `SetDates(start, end)`, `RegenerateShareToken()`.
+   - Exposed read-only getters (`ID()`, `Name()`, `Description()`, `Owner()`, `OwnerID()`, `StartDate()`, `EndDate()`, `ShareToken()`, `IsShared()`, `MainCurrency()`, `Participants()`).
+   - Guarded internal slice with defensive copy in `Participants()`.
+2. **Persistence Factory (`ReconstituteProject`)**:
+   - Single-shot factory instantiating fully-formed `Project` instances without side-effects or date recalculations.
+3. **Consumer-Owned Port Narrowing**:
+   - `internal/asset` and `internal/investment` now define minimal consumer-owned `ProjectReader` interfaces containing only `FindOne(ctx, filter)`.
+4. **DAL Decoupling (`pkg/dal/pg_project_repository.go`)**:
+   - Replaced ad-hoc scanning and stub `people.NewPerson(...)` hydration with `projectRecord` and `fetchParticipants()`.
+   - All persistence methods (`Create`, `Update`, `Remove`, `Find`, `FindOne`) read aggregate state exclusively through domain getters.
+
+---
+
+## 5. Checklist for Future Refactorings
+
+When refactoring the next context (e.g., `internal/people` or `internal/core`):
 - [ ] Are all aggregate fields unexported?
 - [ ] Are other aggregates referenced solely by UUID / snapshot values?
 - [ ] Is there an invariant-free `Reconstitute<Entity>` factory for DAL?
@@ -128,3 +150,4 @@ When refactoring the next context (e.g., `internal/projecta` or `internal/people
 - [ ] Does the DAL scan into an intermediate struct without instantiating dummy foreign entities?
 - [ ] Does `graphify update .` succeed?
 - [ ] Do all tests pass across `./internal/...`, `./pkg/...`, and `./cmd/...`?
+

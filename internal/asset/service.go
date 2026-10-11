@@ -20,11 +20,16 @@ const (
 	failedToUpdateAsset = "failed to update asset"
 )
 
+// ProjectReader is a consumer-owned interface providing read access to projects.
+type ProjectReader interface {
+	FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error)
+}
+
 type ServiceImpl struct {
 	db           core.DbConnection
 	assets       Repository
 	people       projecta.PeopleService
-	projects     projecta.ProjectRepository
+	projects     ProjectReader
 	rateProvider currency.CurrencyRateProvider
 	investments  InvestmentSource
 }
@@ -37,7 +42,7 @@ func NewService(
 	db core.DbConnection,
 	assets Repository,
 	people projecta.PeopleService,
-	projects projecta.ProjectRepository,
+	projects ProjectReader,
 	investmentSource InvestmentSource,
 	rateProvider ...currency.CurrencyRateProvider,
 ) *ServiceImpl {
@@ -242,7 +247,7 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		if allSameCurr {
 			targetCurrency = firstCurr
 		} else {
-			targetCurrency = project.MainCurrency
+			targetCurrency = project.MainCurrency()
 			if targetCurrency == "" {
 				targetCurrency = "UAH"
 			}

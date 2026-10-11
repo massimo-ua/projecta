@@ -47,8 +47,8 @@ func TestInvestment_NewAndGetters(t *testing.T) {
 	if inv.ID() != invID {
 		t.Errorf("expected ID %v, got %v", invID, inv.ID())
 	}
-	if inv.Project().ProjectID != projID {
-		t.Errorf("expected project ID %v, got %v", projID, inv.Project().ProjectID)
+	if inv.Project().ID() != projID {
+		t.Errorf("expected project ID %v, got %v", projID, inv.Project().ID())
 	}
 	if inv.PrimaryAssetID() != assetID {
 		t.Errorf("expected asset ID %v, got %v", assetID, inv.PrimaryAssetID())

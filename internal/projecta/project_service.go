@@ -3,19 +3,16 @@ package projecta
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"time"
 )
 
 type ProjectServiceImpl struct {
 	repository    ProjectRepository
 	peopleService PeopleService
-}
-
-func (s *ProjectServiceImpl) Save(ctx context.Context, expense *Payment) error {
-	//TODO implement me
-	panic("implement me")
 }
 
 func (s *ProjectServiceImpl) FindOne(ctx context.Context, filter ProjectFilter) (*Project, error) {
@@ -40,14 +37,12 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 		return nil, exceptions.NewInternalException("failed to find project", err)
 	}
 
-	if command.Name != "" {
-		p.Name = command.Name
+	if command.PersonID != uuid.Nil && !p.IsOwnedByPerson(command.PersonID) {
+		return nil, exceptions.NewForbiddenException("only project owner can update project", nil)
 	}
-	if command.Description != "" {
-		p.Description = command.Description
-	}
-	if command.MainCurrency != "" {
-		p.MainCurrency = command.MainCurrency
+
+	if err := p.UpdateDetails(command.Name, command.Description, command.MainCurrency); err != nil {
+		return nil, err
 	}
 
 	err = s.repository.Update(ctx, p)
@@ -63,6 +58,10 @@ func NewProjectService(repository ProjectRepository, peopleService PeopleService
 }
 
 func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCommand) (*Project, error) {
+	if strings.TrimSpace(command.Name) == "" {
+		return nil, exceptions.NewValidationException("project name is required", nil)
+	}
+
 	owner, err := s.peopleService.FindOwner(ctx, command.PersonID)
 
 	if err != nil {
@@ -114,15 +113,25 @@ func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, p
 		return nil, err
 	}
 
-	if project.Owner.PersonID == personID {
+	if project.IsOwnedByPerson(personID) {
 		return project, nil
 	}
 
-	err = s.repository.CreateShareRecord(ctx, project.ProjectID, personID)
+	err = s.repository.CreateShareRecord(ctx, project.ID(), personID)
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to record project share", err)
 	}
 
-	project.IsShared = true
-	return project, nil
+	return ReconstituteProject(
+		project.ID(),
+		project.Name(),
+		project.Description(),
+		project.Owner(),
+		project.StartDate(),
+		project.EndDate(),
+		project.ShareToken(),
+		true,
+		project.MainCurrency(),
+		project.Participants(),
+	), nil
 }

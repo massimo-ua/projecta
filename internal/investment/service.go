@@ -24,11 +24,16 @@ type AssetReader interface {
 	FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error)
 }
 
+// ProjectReader is a consumer-owned interface providing read access to projects.
+type ProjectReader interface {
+	FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error)
+}
+
 type ServiceImpl struct {
 	db          core.DbConnection
 	investments Repository
 	assets      AssetReader
-	projects    projecta.ProjectRepository
+	projects    ProjectReader
 	people      projecta.PeopleService
 }
 
@@ -36,7 +41,7 @@ func NewService(
 	db core.DbConnection,
 	investments Repository,
 	assets AssetReader,
-	projects projecta.ProjectRepository,
+	projects ProjectReader,
 	people projecta.PeopleService,
 ) *ServiceImpl {
 	return &ServiceImpl{

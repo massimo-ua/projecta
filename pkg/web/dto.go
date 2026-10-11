@@ -65,21 +65,6 @@ type ListProjectsResponse struct {
 	PaginationDTO
 }
 
-type ListTypesResponse struct {
-	Types []TypeDTO `json:"types"`
-	PaginationDTO
-}
-
-type ListCategoriesResponse struct {
-	Categories []CategoryDTO `json:"categories"`
-	PaginationDTO
-}
-
-type ListPaymentsResponse struct {
-	Payments []PaymentDTO `json:"payments"`
-	PaginationDTO
-}
-
 type TotalDTO struct {
 	Title    string `json:"title"`
 	Amount   int64  `json:"amount"`
@@ -88,10 +73,4 @@ type TotalDTO struct {
 
 type ProjectTotalsDTO struct {
 	Totals []TotalDTO `json:"totals"`
-}
-
-type CreateTypeDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CategoryID  string `json:"category_id"`
 }

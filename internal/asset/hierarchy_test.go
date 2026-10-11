@@ -14,7 +14,7 @@ func makeTestAsset(name string) *asset.Asset {
 	id := uuid.New()
 	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "User"}
 	project, _ := projecta.NewProject(uuid.New(), "Project", "", owner, time.Now(), time.Now())
-	return asset.NewAsset(id, name, "", project, nil, money.New(0, "UAH"), time.Now(), owner)
+	return asset.NewAsset(id, name, "", project, money.New(0, "UAH"), time.Now(), owner)
 }
 
 func TestHierarchy_SelfReferenceAndInvalidShare(t *testing.T) {

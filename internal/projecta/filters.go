@@ -1,17 +1,9 @@
 package projecta
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
-
-type CategoryFilter struct {
-	Name       string
-	ProjectID  uuid.UUID
-	CategoryID uuid.UUID
-}
 
 type ProjectFilter struct {
 	Name      string
@@ -21,41 +13,4 @@ type ProjectFilter struct {
 type ProjectCollectionFilter struct {
 	core.Pagination
 	Name string
-}
-
-type TypeFilter struct {
-	Name       string
-	TypeID     uuid.UUID
-	ProjectID  uuid.UUID
-	CategoryID uuid.UUID
-}
-
-type PaymentFilter struct {
-	PaymentID uuid.UUID
-	ProjectID uuid.UUID
-	TypeID    uuid.UUID
-}
-
-type TypeCollectionFilter struct {
-	core.Pagination
-	ProjectID  uuid.UUID
-	CategoryID uuid.UUID
-	Name       string
-}
-
-type CategoryCollectionFilter struct {
-	core.Pagination
-	ProjectID uuid.UUID
-	Name      string
-}
-
-type PaymentCollectionFilter struct {
-	core.Pagination
-	core.Sorting
-	ProjectID  uuid.UUID
-	CategoryID uuid.UUID
-	TypeID     uuid.UUID
-	Kind       PaymentKind
-	FromDate   time.Time
-	ToDate     time.Time
 }

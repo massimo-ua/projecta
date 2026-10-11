@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/Rhymond/go-money"
 	"github.com/go-kit/kit/endpoint"
@@ -22,21 +21,6 @@ import (
 type CreateProjectDTO struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-}
-
-type CreateCategoryDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-type CreatePaymentDTO struct {
-	ProjectID   string `json:"project_id"`
-	TypeID      string `json:"type_id"`
-	Description string `json:"description"`
-	Amount      int64  `json:"amount"`
-	Currency    string `json:"currency"`
-	PaymentDate string `json:"payment_date"`
-	Kind        string `json:"kind,omitempty"`
 }
 
 type OwnerDTO struct {
@@ -65,130 +49,44 @@ func toProjectDTO(project *projecta.Project) ProjectDTO {
 	if project == nil {
 		return ProjectDTO{}
 	}
-	mainCurrency := project.MainCurrency
+	mainCurrency := project.MainCurrency()
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
 	}
-	participants := project.Participants
+	participants := project.Participants()
 	if participants == nil {
 		participants = make([]projecta.Participant, 0)
 	}
 	dto := ProjectDTO{
-		ProjectID:    project.ProjectID.String(),
-		Name:         project.Name,
-		Description:  project.Description,
-		ShareToken:   project.ShareToken.String(),
-		IsShared:     project.IsShared,
+		ProjectID:    project.ID().String(),
+		Name:         project.Name(),
+		Description:  project.Description(),
+		ShareToken:   project.ShareToken().String(),
+		IsShared:     project.IsShared(),
 		MainCurrency: mainCurrency,
 		Participants: participants,
 	}
-	if project.Owner != nil {
+	if project.Owner() != nil {
 		dto.Owner = OwnerDTO{
-			PersonID:    project.Owner.PersonID.String(),
-			DisplayName: project.Owner.DisplayName,
+			PersonID:    project.Owner().PersonID.String(),
+			DisplayName: project.Owner().DisplayName,
 		}
 	}
 	return dto
 }
 
-type CategoryDTO struct {
-	CategoryID  string `json:"category_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-type TypeCategoryDTO struct {
-	CategoryID string `json:"category_id"`
-	Name       string `json:"name"`
-}
-
-type TypeDTO struct {
-	TypeID   string          `json:"type_id"`
-	Name     string          `json:"name"`
-	Category TypeCategoryDTO `json:"category"`
-}
-
-type PaymentDTO struct {
-	PaymentID    string      `json:"payment_id"`
-	Project      ProjectDTO  `json:"project"`
-	Owner        OwnerDTO    `json:"owner"`
-	Type         TypeDTO     `json:"type"`
-	Category     CategoryDTO `json:"category"`
-	Description  string      `json:"description"`
-	Amount       int64       `json:"amount"`
-	Currency     string      `json:"currency"`
-	HomeAmount   int64       `json:"home_amount,omitempty"`
-	HomeCurrency string      `json:"home_currency,omitempty"`
-	PaymentDate  string      `json:"payment_date"`
-	Kind         string      `json:"kind,omitempty"`
-}
-
-func toPaymentDTO(p *projecta.Payment, rateProvider currency.CurrencyRateProvider) PaymentDTO {
-	if p == nil {
-		return PaymentDTO{}
-	}
-	projDTO := toProjectDTO(p.Project)
-	homeCurrency := projDTO.MainCurrency
-	if homeCurrency == "" {
-		homeCurrency = "UAH"
-	}
-
-	homeAmount := p.Amount.Amount()
-	if rateProvider != nil && p.Amount.Currency().Code != homeCurrency {
-		converted, err := rateProvider.Convert(
-			currency.NewCurrency(p.Amount.Amount(), p.Amount.Currency().Code),
-			currency.NewCurrency(0, homeCurrency),
-		)
-		if err == nil {
-			homeAmount = converted.Amount
-		}
-	}
-
-	return PaymentDTO{
-		PaymentID: p.ID.String(),
-		Project:   projDTO,
-		Owner: OwnerDTO{
-			PersonID:    p.Owner.PersonID.String(),
-			DisplayName: p.Owner.DisplayName,
-		},
-		Type: TypeDTO{
-			TypeID: p.Type.ID.String(),
-			Name:   p.Type.Name,
-			Category: TypeCategoryDTO{
-				CategoryID: p.Type.Category.ID.String(),
-				Name:       p.Type.Category.Name,
-			},
-		},
-		Description:  p.Description,
-		Amount:       p.Amount.Amount(),
-		Currency:     p.Amount.Currency().Code,
-		HomeAmount:   homeAmount,
-		HomeCurrency: homeCurrency,
-		PaymentDate:  p.Date.Format(time.RFC3339),
-		Kind:         p.Kind.String(),
-	}
-}
-
 type ProjectEndpoints struct {
-	CreateProject     endpoint.Endpoint
-	GetProject        endpoint.Endpoint
-	AcceptShare       endpoint.Endpoint
-	CreateCategory    endpoint.Endpoint
-	CreateType        endpoint.Endpoint
-	CreatePayment     endpoint.Endpoint
-	ListProjects      endpoint.Endpoint
-	ListTypes         endpoint.Endpoint
-	ListCategories    endpoint.Endpoint
-	ListPayments      endpoint.Endpoint
-	ShowProjectTotals endpoint.Endpoint
-	RemoveType        endpoint.Endpoint
-	RemovePayment     endpoint.Endpoint
-	CreateAsset               endpoint.Endpoint
-	CreateAssetFromPayments   endpoint.Endpoint
-	RemoveAsset               endpoint.Endpoint
-	ListAssets        endpoint.Endpoint
-	UpdateAsset       endpoint.Endpoint
-	GetAsset          endpoint.Endpoint
+	CreateProject           endpoint.Endpoint
+	GetProject              endpoint.Endpoint
+	AcceptShare             endpoint.Endpoint
+	ListProjects            endpoint.Endpoint
+	ShowProjectTotals       endpoint.Endpoint
+	CreateAsset             endpoint.Endpoint
+	CreateAssetFromPayments endpoint.Endpoint
+	RemoveAsset             endpoint.Endpoint
+	ListAssets              endpoint.Endpoint
+	UpdateAsset             endpoint.Endpoint
+	GetAsset                endpoint.Endpoint
 	LinkChildAsset          endpoint.Endpoint
 	UnlinkChildAsset        endpoint.Endpoint
 	AssignInvestments       endpoint.Endpoint
@@ -201,11 +99,8 @@ type ProjectEndpoints struct {
 	RemoveInvestment        endpoint.Endpoint
 	CreateBatchInvestments  endpoint.Endpoint
 	ListTags                endpoint.Endpoint
-	UpdatePayment       endpoint.Endpoint
-	GetPayment          endpoint.Endpoint
-	UpdateProject       endpoint.Endpoint
-	ParseStatement      endpoint.Endpoint
-	CreateBatchPayments endpoint.Endpoint
+	UpdateProject           endpoint.Endpoint
+	ParseStatement          endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -229,139 +124,6 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}, err
 }
 
-func DecodeCreateCategoryRequest(ctx context.Context, r *http.Request) (any, error) {
-	vars := mux.Vars(r)
-
-	projectID, ok := vars["project_id"]
-
-	if !ok {
-		return nil, exceptions.NewValidationException("project id not found", nil)
-	}
-
-	projectUUID, err := uuid.Parse(projectID)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid project id", err)
-	}
-
-	personID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
-	}
-
-	var req CreateCategoryDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid request", err)
-	}
-
-	return projecta.CreateCategoryCommand{
-		ProjectID:   projectUUID,
-		PersonID:    personID,
-		Name:        req.Name,
-		Description: req.Description,
-	}, err
-}
-
-func DecodeCreateTypeRequest(_ context.Context, r *http.Request) (any, error) {
-	vars := mux.Vars(r)
-
-	projectID, ok := vars["project_id"]
-
-	if !ok {
-		return nil, exceptions.NewValidationException("invalid project id", nil)
-	}
-
-	projectUUID, err := uuid.Parse(projectID)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid project id", err)
-	}
-
-	var req CreateTypeDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid request", err)
-	}
-
-	if req.Name == "" {
-		return nil, exceptions.NewValidationException("name is required", nil)
-	}
-
-	categoryUUID, err := uuid.Parse(req.CategoryID)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid category id", err)
-	}
-
-	return projecta.CreateTypeCommand{
-		ProjectID:   projectUUID,
-		Name:        req.Name,
-		Description: req.Description,
-		CategoryID:  categoryUUID,
-	}, err
-}
-
-func DecodeCreatePaymentRequest(_ context.Context, r *http.Request) (any, error) {
-	vars := mux.Vars(r)
-
-	projectID, ok := vars["project_id"]
-
-	if !ok {
-		return nil, exceptions.NewValidationException("invalid project id", nil)
-	}
-
-	projectUUID, err := uuid.Parse(projectID)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid project id", err)
-	}
-
-	var req CreatePaymentDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid request", err)
-	}
-
-	amount := money.New(req.Amount, req.Currency)
-
-	date, err := time.Parse(time.RFC3339, req.PaymentDate)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid date", err)
-	}
-
-	typeUUID, err := uuid.Parse(req.TypeID)
-
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid type id", err)
-	}
-
-	var paymentKind projecta.PaymentKind
-
-	if req.Kind == "" {
-		paymentKind = projecta.UponCompletionPayment
-	} else {
-		paymentKind, err = projecta.ToPaymentKind(req.Kind)
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid payment kind", err)
-		}
-	}
-
-	return projecta.CreatePaymentCommand{
-		ProjectID:   projectUUID,
-		TypeID:      typeUUID,
-		Description: req.Description,
-		Amount:      amount,
-		PaymentDate: date,
-		Kind:        paymentKind,
-	}, err
-}
-
 func makeCreateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		command := request.(projecta.CreateProjectCommand)
@@ -373,55 +135,6 @@ func makeCreateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 		}
 
 		return toProjectDTO(project), nil
-	}
-}
-
-func makeCreateCategoryEndpoint(svc projecta.CategoryService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.CreateCategoryCommand)
-
-		category, err := svc.Create(ctx, command)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return CategoryDTO{
-			CategoryID:  category.ID.String(),
-			Name:        category.Name,
-			Description: category.Description,
-		}, nil
-	}
-}
-
-func makeCreateTypeEndpoint(svc projecta.TypeService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.CreateTypeCommand)
-
-		costType, err := svc.Create(ctx, command)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return TypeDTO{
-			TypeID: costType.ID.String(),
-			Name:   costType.Name,
-		}, nil
-	}
-}
-
-func makeCreatePaymentEndpoint(svc projecta.PaymentService, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.CreatePaymentCommand)
-
-		expense, err := svc.Create(ctx, command)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return toPaymentDTO(expense, rateProvider), nil
 	}
 }
 
@@ -447,93 +160,8 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 	}
 }
 
-func makeListProjectTypesEndpoint(svc projecta.TypeService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(projecta.TypeCollectionFilter)
-
-		collection, err := svc.Find(ctx, filter)
-
-		var list []TypeDTO = make([]TypeDTO, 0)
-
-		for _, p := range collection.Elements() {
-			list = append(list, TypeDTO{
-				TypeID: p.ID.String(),
-				Name:   p.Name,
-				Category: TypeCategoryDTO{
-					CategoryID: p.Category.ID.String(),
-					Name:       p.Category.Name,
-				},
-			})
-		}
-
-		return ListTypesResponse{
-			Types: list,
-			PaginationDTO: PaginationDTO{
-				Limit:  filter.Limit,
-				Offset: filter.Offset,
-				Total:  collection.Total(),
-			},
-		}, err
-	}
-}
-
-func makeListCategoriesEndpoint(svc projecta.CategoryService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(projecta.CategoryCollectionFilter)
-
-		collection, err := svc.Find(ctx, filter)
-
-		var list []CategoryDTO = make([]CategoryDTO, 0)
-
-		for _, c := range collection.Elements() {
-			list = append(list, CategoryDTO{
-				CategoryID:  c.ID.String(),
-				Name:        c.Name,
-				Description: c.Description,
-			})
-		}
-
-		return ListCategoriesResponse{
-			Categories: list,
-			PaginationDTO: PaginationDTO{
-				Limit:  filter.Limit,
-				Offset: filter.Offset,
-				Total:  collection.Total(),
-			},
-		}, err
-	}
-}
-
-func makeListPaymentsEndpoint(svc projecta.PaymentService, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(projecta.PaymentCollectionFilter)
-
-		collection, err := svc.Find(ctx, filter)
-
-		if err != nil {
-			return nil, err
-		}
-
-		var list []PaymentDTO = make([]PaymentDTO, 0)
-
-		for _, e := range collection.Elements() {
-			list = append(list, toPaymentDTO(e, rateProvider))
-		}
-
-		return ListPaymentsResponse{
-			Payments: list,
-			PaginationDTO: PaginationDTO{
-				Limit:  filter.Limit,
-				Offset: filter.Offset,
-				Total:  collection.Total(),
-			},
-		}, err
-	}
-}
-
 func makeShowProjectTotalsEndpoint(
 	projectSvc projecta.ProjectService,
-	payments projecta.PaymentService,
 	assets asset.Service,
 	rateProvider currency.CurrencyRateProvider,
 	investments ...investment.Service,
@@ -546,7 +174,7 @@ func makeShowProjectTotalsEndpoint(
 			return nil, err
 		}
 
-		homeCurrency := proj.MainCurrency
+		homeCurrency := proj.MainCurrency()
 		if homeCurrency == "" {
 			homeCurrency = "UAH"
 		}
@@ -584,34 +212,6 @@ func makeShowProjectTotalsEndpoint(
 				for _, e := range page.Elements() {
 					hasInvestments = true
 					invAmounts = append(invAmounts, e.Amount())
-				}
-
-				if len(page.Elements()) < limit {
-					next = false
-				}
-
-				offset += limit
-			}
-		} else if payments != nil {
-			for next {
-				page, err := payments.Find(ctx, projecta.PaymentCollectionFilter{
-					ProjectID: projectID,
-					Pagination: core.Pagination{
-						Limit:  limit,
-						Offset: offset,
-					},
-				})
-				if err != nil {
-					return nil, err
-				}
-
-				if page.Total() == 0 {
-					break
-				}
-
-				for _, e := range page.Elements() {
-					hasInvestments = true
-					invAmounts = append(invAmounts, e.Amount)
 				}
 
 				if len(page.Elements()) < limit {
@@ -683,33 +283,6 @@ func makeShowProjectTotalsEndpoint(
 		return ProjectTotalsDTO{
 			Totals: totals,
 		}, nil
-	}
-}
-
-func makeRemoveTypeEndpoint(svc projecta.TypeService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.RemoveProjectResourceCommand)
-
-		err := svc.Remove(ctx, command)
-
-		return nil, err
-	}
-}
-
-func makeRemovePaymentEndpoint(svc projecta.PaymentService) endpoint.Endpoint {
-	return func(ctx context.Context, request any) (any, error) {
-		command, ok := request.(projecta.RemoveProjectResourceCommand)
-
-		if !ok {
-			return nil, exceptions.NewValidationException("invalid request", nil)
-		}
-
-		err := svc.Remove(ctx, projecta.RemovePaymentCommand{
-			ID:        command.ResourceID,
-			ProjectID: command.ProjectID,
-		})
-
-		return nil, err
 	}
 }
 
@@ -828,9 +401,7 @@ func makeUpdateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 
 func MakeProjectEndpoints(
 	projectService projecta.ProjectService,
-	categoryService projecta.CategoryService,
-	typeService projecta.TypeService,
-	expenseService projecta.PaymentService,
+	statementService projecta.StatementService,
 	assetService asset.Service,
 	rateProvider currency.CurrencyRateProvider,
 	investmentService ...investment.Service,
@@ -857,42 +428,36 @@ func MakeProjectEndpoints(
 		epListTags = makeListTagsEndpoint(invSvc)
 	}
 
+	var epParseStatement endpoint.Endpoint
+	if statementService != nil {
+		epParseStatement = makeParseStatementEndpoint(statementService)
+	}
+
 	return ProjectEndpoints{
-		CreateProject:     makeCreateProjectEndpoint(projectService),
-		GetProject:        makeGetProjectEndpoint(projectService),
-		AcceptShare:       makeAcceptShareEndpoint(projectService),
-		CreateCategory:    makeCreateCategoryEndpoint(categoryService),
-		CreateType:        makeCreateTypeEndpoint(typeService),
-		CreatePayment:     makeCreatePaymentEndpoint(expenseService, rateProvider),
-		ListProjects:      makeListProjectsEndpoint(projectService),
-		ListTypes:         makeListProjectTypesEndpoint(typeService),
-		ListCategories:    makeListCategoriesEndpoint(categoryService),
-		ListPayments:      makeListPaymentsEndpoint(expenseService, rateProvider),
-		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService, expenseService, assetService, rateProvider, invSvc),
-		RemoveType:        makeRemoveTypeEndpoint(typeService),
-		RemovePayment:     makeRemovePaymentEndpoint(expenseService),
+		CreateProject:           makeCreateProjectEndpoint(projectService),
+		GetProject:              makeGetProjectEndpoint(projectService),
+		AcceptShare:             makeAcceptShareEndpoint(projectService),
+		ListProjects:            makeListProjectsEndpoint(projectService),
+		ShowProjectTotals:       makeShowProjectTotalsEndpoint(projectService, assetService, rateProvider, invSvc),
 		CreateAsset:             makeCreateAssetEndpoint(assetService, rateProvider),
 		CreateAssetFromPayments: makeCreateAssetFromPaymentsEndpoint(assetService, rateProvider),
 		RemoveAsset:             makeRemoveAssetEndpoint(assetService),
-		ListAssets:        makeListAssetsEndpoint(assetService, rateProvider),
-		UpdateAsset:       makeUpdateAssetEndpoint(assetService),
-		GetAsset:          makeGetAssetEndpoint(assetService, rateProvider),
-		LinkChildAsset:    makeLinkChildAssetEndpoint(assetService),
-		UnlinkChildAsset:  makeUnlinkChildAssetEndpoint(assetService),
-		AssignInvestments: makeAssignInvestmentsEndpoint(assetService),
-		GroupAssets:       makeGroupAssetsEndpoint(assetService, rateProvider),
-		LinkChildren:      makeLinkChildrenEndpoint(assetService),
-		CreateInvestment:  epCreateInv,
-		ListInvestments:   epListInv,
-		GetInvestment:     epGetInv,
-		UpdateInvestment:  epUpdInv,
-		RemoveInvestment:  epRemInv,
-		CreateBatchInvestments: epBatchInv,
-		ListTags:          epListTags,
-		UpdatePayment:       makeUpdatePaymentEndpoint(expenseService),
-		GetPayment:          makeGetPaymentEndpoint(expenseService, rateProvider),
-		UpdateProject:       makeUpdateProjectEndpoint(projectService),
-		ParseStatement:      makeParseStatementEndpoint(expenseService),
-		CreateBatchPayments: makeCreateBatchPaymentsEndpoint(expenseService, rateProvider),
+		ListAssets:              makeListAssetsEndpoint(assetService, rateProvider),
+		UpdateAsset:             makeUpdateAssetEndpoint(assetService),
+		GetAsset:                makeGetAssetEndpoint(assetService, rateProvider),
+		LinkChildAsset:          makeLinkChildAssetEndpoint(assetService),
+		UnlinkChildAsset:        makeUnlinkChildAssetEndpoint(assetService),
+		AssignInvestments:       makeAssignInvestmentsEndpoint(assetService),
+		GroupAssets:             makeGroupAssetsEndpoint(assetService, rateProvider),
+		LinkChildren:            makeLinkChildrenEndpoint(assetService),
+		CreateInvestment:        epCreateInv,
+		ListInvestments:         epListInv,
+		GetInvestment:           epGetInv,
+		UpdateInvestment:        epUpdInv,
+		RemoveInvestment:        epRemInv,
+		CreateBatchInvestments:  epBatchInv,
+		ListTags:                epListTags,
+		UpdateProject:           makeUpdateProjectEndpoint(projectService),
+		ParseStatement:          epParseStatement,
 	}, nil
 }

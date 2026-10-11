@@ -45,7 +45,6 @@ type Asset struct {
 	name          string
 	description   string
 	project       *projecta.Project
-	costType      *projecta.CostType
 	price         *money.Money
 	acquiredAt    time.Time
 	owner         *projecta.Owner
@@ -65,7 +64,6 @@ func NewAsset(
 	name string,
 	description string,
 	project *projecta.Project,
-	costType *projecta.CostType,
 	price *money.Money,
 	acquiredAt time.Time,
 	owner *projecta.Owner,
@@ -79,7 +77,6 @@ func NewAsset(
 		name:        name,
 		description: description,
 		project:     project,
-		costType:    costType,
 		price:       price,
 		acquiredAt:  start,
 		owner:       owner,
@@ -106,10 +103,6 @@ func (a *Asset) Description() string {
 
 func (a *Asset) Project() *projecta.Project {
 	return a.project
-}
-
-func (a *Asset) Type() *projecta.CostType {
-	return a.costType
 }
 
 func (a *Asset) Price() *money.Money {
@@ -194,10 +187,6 @@ func (a *Asset) SetDescription(description string) {
 
 func (a *Asset) SetProject(project *projecta.Project) {
 	a.project = project
-}
-
-func (a *Asset) SetType(costType *projecta.CostType) {
-	a.costType = costType
 }
 
 func (a *Asset) SetPrice(price *money.Money) {

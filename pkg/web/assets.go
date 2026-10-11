@@ -52,7 +52,6 @@ type AssetDTO struct {
 	AcquiredAt         string           `json:"acquired_at"`
 	Owner              OwnerDTO         `json:"owner"`
 	Project            ProjectDTO       `json:"project"`
-	Type               *TypeDTO         `json:"type,omitempty"`
 	Children           []ChildAssetDTO  `json:"children"`
 	Parents            []ParentAssetDTO `json:"parents"`
 	Tags               []string         `json:"tags"`
@@ -133,20 +132,6 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		DisplayName: a.Owner().DisplayName,
 	}
 
-	var typeDTO *TypeDTO
-	if a.Type() != nil {
-		typeDTO = &TypeDTO{
-			TypeID: a.Type().ID.String(),
-			Name:   a.Type().Name,
-		}
-		if a.Type().Category != nil {
-			typeDTO.Category = TypeCategoryDTO{
-				CategoryID: a.Type().Category.ID.String(),
-				Name:       a.Type().Category.Name,
-			}
-		}
-	}
-
 	childrenDTO := make([]ChildAssetDTO, 0)
 	for _, c := range a.Children() {
 		var cCost int64
@@ -190,7 +175,6 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		AcquiredAt:     a.AcquiredAt().Format(time.RFC3339),
 		Owner:          owner,
 		Project:        projDTO,
-		Type:           typeDTO,
 		Children:       childrenDTO,
 		Parents:        parentsDTO,
 		Tags:           a.Tags(),
