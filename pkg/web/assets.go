@@ -106,44 +106,21 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 
 	var targetPriceVal *int64
 	var targetCurrVal string
-	var targetHomeAmountVal *int64
-	var progressPercentageVal *float64
 
 	if a.TargetPrice() != nil && a.TargetPrice().Amount() > 0 {
 		v := a.TargetPrice().Amount()
 		targetPriceVal = &v
 		targetCurrVal = a.TargetPrice().Currency().Code
-
-		targetHomeVal := v
-		if rateProvider != nil && targetCurrVal != homeCurrency && v > 0 {
-			converted, err := rateProvider.Convert(
-				currency.NewCurrency(v, targetCurrVal),
-				currency.NewCurrency(0, homeCurrency),
-			)
-			if err == nil {
-				targetHomeVal = converted.Amount
-			}
-		}
-		targetHomeAmountVal = &targetHomeVal
-
-		if targetHomeVal > 0 {
-			totalHomeVal := totalCostVal
-			if totalCostCurr != homeCurrency && rateProvider != nil && totalCostVal > 0 {
-				converted, err := rateProvider.Convert(
-					currency.NewCurrency(totalCostVal, totalCostCurr),
-					currency.NewCurrency(0, homeCurrency),
-				)
-				if err == nil {
-					totalHomeVal = converted.Amount
-				}
-			} else if totalCostCurr == homeCurrency {
-				totalHomeVal = totalCostVal
-			}
-
-			pct := (float64(totalHomeVal) / float64(targetHomeVal)) * 100.0
-			progressPercentageVal = &pct
-		}
 	}
+
+	bp := asset.CalculateBudgetProgress(
+		money.New(totalCostVal, totalCostCurr),
+		a.TargetPrice(),
+		homeCurrency,
+		rateProvider,
+	)
+	targetHomeAmountVal := bp.TargetHomeAmount
+	progressPercentageVal := bp.ProgressPercentage
 
 	var completedDateStr *string
 	if a.CompletedDate() != nil {

@@ -66,7 +66,7 @@
 
 ## 📚 Documentation
 
-- [Asset-Centric Resource Model & Composition](docs/assets-and-investments.md): Comprehensive guide to asset composition, DAG rules, cost rollup formulas, multi-currency progress, and investment tracking.
+- [Asset-Centric Resource Model & Backend Architecture](docs/assets-and-investments.md): Comprehensive guide to asset composition, DAG rules, cost rollup formulas, multi-currency progress, investment tracking, and Go Domain-Driven Design (DDD) architecture.
 - [Frontend Design Principles & Architecture Guide](docs/frontend-design-principals.md): Architectural guide to layered frontend design, humble views, state machines, and domain models.
 - [Web UI Development Guide](web-ui/README.md): Frontend project structure, npm scripts, and development setup.
 

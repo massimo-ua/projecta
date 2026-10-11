@@ -254,6 +254,92 @@ func (a *Asset) SetTags(tags []string) {
 	}
 }
 
+// AssignValuation assigns computed financial metrics and composition links to the asset.
+func (a *Asset) AssignValuation(directCost, totalCost *money.Money, children []ChildAssetLink, parents []ParentAssetLink) {
+	a.directCost = directCost
+	a.totalCost = totalCost
+	if children == nil {
+		a.children = make([]ChildAssetLink, 0)
+	} else {
+		a.children = children
+	}
+	if parents == nil {
+		a.parents = make([]ParentAssetLink, 0)
+	} else {
+		a.parents = parents
+	}
+}
+
+// UpdateDetails updates the descriptive information, target budget, and tags of the asset.
+func (a *Asset) UpdateDetails(name, description string, targetPrice *money.Money, tags []string) {
+	if name != "" {
+		a.name = name
+	}
+	a.description = description
+	a.targetPrice = targetPrice
+	if tags != nil {
+		a.tags = tags
+	}
+}
+
+// Complete transitions the asset to COMPLETED status with a completion timestamp.
+func (a *Asset) Complete(completedDate time.Time) {
+	a.status = AssetStatusCompleted
+	a.completedDate = &completedDate
+}
+
+// Reopen transitions a completed asset back to ACTIVE status.
+func (a *Asset) Reopen() {
+	a.status = AssetStatusActive
+	a.completedDate = nil
+}
+
+// ReconstituteAsset reconstructs an Asset entity from persistence data without executing business invariants.
+func ReconstituteAsset(
+	id uuid.UUID,
+	name string,
+	description string,
+	project *projecta.Project,
+	price *money.Money,
+	acquiredAt time.Time,
+	owner *projecta.Owner,
+	status AssetStatus,
+	startDate time.Time,
+	completedDate *time.Time,
+	targetPrice *money.Money,
+	tags []string,
+) *Asset {
+	start := startDate
+	if start.IsZero() {
+		start = acquiredAt
+	}
+	if start.IsZero() {
+		start = time.Now()
+	}
+	if tags == nil {
+		tags = make([]string, 0)
+	}
+	if status == "" {
+		status = AssetStatusActive
+	}
+	return &Asset{
+		id:            id,
+		name:          name,
+		description:   description,
+		project:       project,
+		price:         price,
+		acquiredAt:    start,
+		owner:         owner,
+		status:        status,
+		startDate:     start,
+		completedDate: completedDate,
+		targetPrice:   targetPrice,
+		children:      make([]ChildAssetLink, 0),
+		parents:       make([]ParentAssetLink, 0),
+		tags:          tags,
+	}
+}
+
 type Collection = core.PaginatedCollection[*Asset]
 
 func NewCollection(total int) *Collection {

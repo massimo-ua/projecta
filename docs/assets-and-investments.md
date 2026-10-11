@@ -46,8 +46,8 @@ Project (Workspace & Base Currency Context)
 
 ### Creation Flexibility
 Assets can be created:
-1. **Standalone**: With or without an optional asset type.
-2. **From Investments / Payments**: Bundling existing resource investments directly into a newly created asset.
+1. **Standalone**: Direct asset creation with target budget, start date, status, and descriptive tags (no legacy cost type required).
+2. **From Investments / Payments**: Bundling existing resource investments directly into a newly created asset with automatic tag and value aggregation.
 3. **With Initial Investment**: Creating an asset along with its first initial financial investment in a single transaction.
 
 ---
@@ -125,3 +125,66 @@ Rigid and restrictive categories and cost types are replaced with arbitrary, sea
 ### Project Total Invested Metric
 To avoid double-counting composed/child asset values across nested hierarchies:
 - **Total Invested** (`Всього інвестовано`) on the project totals overview aggregates the raw direct investments across the project.
+
+---
+
+## 7. Backend Domain-Driven Design (DDD) Architecture
+
+The backend implementation organizes business logic and data access according to Domain-Driven Design principles:
+
+```mermaid
+flowchart TD
+    subgraph Presentation ["Transport / Presentation Layer (pkg/web)"]
+        HTTPHandler["HTTP Handlers & Endpoints"]
+        DTO["DTO Encoders / Decoders"]
+    end
+
+    subgraph Application ["Application Layer (internal/asset, internal/investment)"]
+        Service["Asset Service / Investment Service"]
+        Commands["Commands & Use-Case Orchestration"]
+    end
+
+    subgraph Domain ["Pure Domain Layer (internal/asset)"]
+        Hierarchy["AssetHierarchy (DAG Aggregate Root)"]
+        Entity["Asset (Entity with Invariants)"]
+        Valuation["Valuation Services (valuation.go)"]
+    end
+
+    subgraph Infrastructure ["Infrastructure & DAL (pkg/dal)"]
+        PgRepo["PgAssetRepository (PostgreSQL)"]
+        CompositionRoot["Composition Root (cmd/web/main.go)"]
+    end
+
+    HTTPHandler --> Service
+    Service --> Hierarchy
+    Service --> Entity
+    Service --> Valuation
+    Service --> PgRepo
+    PgRepo -. Reconstitutes .-> Entity
+    PgRepo -. Delegates DAG Rollups .-> Hierarchy
+    CompositionRoot --> Service
+    CompositionRoot --> PgRepo
+```
+
+### 1. Pure Domain Layer (`internal/asset/`)
+- **`AssetHierarchy` Aggregate Root ([`hierarchy.go`](../internal/asset/hierarchy.go))**:
+  - Encapsulates the Directed Acyclic Graph structure of assets and composition edges.
+  - Enforces cycle detection invariants (`AddEdge` returns `ErrCircularDependency` if a path already exists from child to parent).
+  - Calculates recursive cost rollups with dynamic memoization (`CalculateRollups`).
+  - Distributes computed valuations back to entities via `ApplyToAssets`.
+  - Determines project root assets (`RootAssets`) for hierarchical tree rendering.
+- **`Asset` Entity ([`asset.go`](../internal/asset/asset.go))**:
+  - Protects state mutation through explicit invariant methods: `AssignValuation`, `UpdateDetails`, `Complete`, and `Reopen`.
+  - Uses `ReconstituteAsset` factory for persistence hydration without triggering validation side-effects.
+- **Valuation Services ([`valuation.go`](../internal/asset/valuation.go))**:
+  - `CalculateBudgetProgress`: Computes progress percentage, overbudget amount, and UI color styling across currencies via `CurrencyRateProvider`.
+  - `CalculateProjectTotals`: Computes project balance and total invested without double-counting composed assets.
+
+### 2. Clean Infrastructure Separation (`pkg/dal/`)
+- **`PgAssetRepository` ([`pg_asset_repository.go`](../pkg/dal/pg_asset_repository.go))**:
+  - Stripped of financial rollup calculations and in-SQL traversal logic.
+  - Loads raw assets and composition edge records from PostgreSQL, then delegates rollup propagation to the pure domain aggregate `AssetHierarchy.ApplyToAssets`.
+
+### 3. Application & Composition Root (`internal/asset/service.go`, `cmd/web/main.go`)
+- Application services receive explicit dependencies (`InvestmentSource`, `Repository`, `RateProvider`) directly via constructor injection, eliminating temporal coupling.
+

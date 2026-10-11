@@ -559,8 +559,8 @@ func makeShowProjectTotalsEndpoint(
 		offset := 0
 		limit := 100
 		next := true
-		var totalInvestedAmount int64
-		var totalAssetsAmount int64
+		var invAmounts []*money.Money
+		var rootAssets []*asset.Asset
 		hasInvestments := false
 		hasAssets := false
 
@@ -583,18 +583,7 @@ func makeShowProjectTotalsEndpoint(
 
 				for _, e := range page.Elements() {
 					hasInvestments = true
-					amount := e.Amount.Amount()
-					if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
-						converted, err := rateProvider.Convert(
-							currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
-							currency.NewCurrency(0, homeCurrency),
-						)
-						if err != nil {
-							return nil, err
-						}
-						amount = converted.Amount
-					}
-					totalInvestedAmount += amount
+					invAmounts = append(invAmounts, e.Amount)
 				}
 
 				if len(page.Elements()) < limit {
@@ -612,7 +601,6 @@ func makeShowProjectTotalsEndpoint(
 						Offset: offset,
 					},
 				})
-
 				if err != nil {
 					return nil, err
 				}
@@ -623,18 +611,7 @@ func makeShowProjectTotalsEndpoint(
 
 				for _, e := range page.Elements() {
 					hasInvestments = true
-					amount := e.Amount.Amount()
-					if rateProvider != nil && e.Amount.Currency().Code != homeCurrency {
-						converted, err := rateProvider.Convert(
-							currency.NewCurrency(e.Amount.Amount(), e.Amount.Currency().Code),
-							currency.NewCurrency(0, homeCurrency),
-						)
-						if err != nil {
-							return nil, err
-						}
-						amount = converted.Amount
-					}
-					totalInvestedAmount += amount
+					invAmounts = append(invAmounts, e.Amount)
 				}
 
 				if len(page.Elements()) < limit {
@@ -671,30 +648,8 @@ func makeShowProjectTotalsEndpoint(
 					continue
 				}
 
-				var price int64
-				var priceCurrency string
-				if e.TotalCost() != nil {
-					price = e.TotalCost().Amount()
-					priceCurrency = e.TotalCost().Currency().Code
-				} else if e.Price() != nil {
-					price = e.Price().Amount()
-					priceCurrency = e.Price().Currency().Code
-				}
-
-				if price > 0 {
-					hasAssets = true
-					if rateProvider != nil && priceCurrency != "" && priceCurrency != homeCurrency {
-						converted, err := rateProvider.Convert(
-							currency.NewCurrency(price, priceCurrency),
-							currency.NewCurrency(0, homeCurrency),
-						)
-						if err != nil {
-							return nil, err
-						}
-						price = converted.Amount
-					}
-					totalAssetsAmount += price
-				}
+				hasAssets = true
+				rootAssets = append(rootAssets, e)
 			}
 
 			if len(page.Elements()) < limit {
@@ -704,18 +659,23 @@ func makeShowProjectTotalsEndpoint(
 			offset += limit
 		}
 
+		calculatedTotals, err := asset.CalculateProjectTotals(invAmounts, rootAssets, homeCurrency, rateProvider)
+		if err != nil {
+			return nil, err
+		}
+
 		totals := make([]TotalDTO, 0)
 
 		totals = append(totals, TotalDTO{
 			Title:    "Total Invested",
-			Amount:   totalInvestedAmount,
+			Amount:   calculatedTotals.TotalInvested,
 			Currency: homeCurrency,
 		})
 
 		if hasAssets || hasInvestments {
 			totals = append(totals, TotalDTO{
 				Title:    "Project Balance",
-				Amount:   totalInvestedAmount - totalAssetsAmount,
+				Amount:   calculatedTotals.TotalInvested - calculatedTotals.TotalValuation,
 				Currency: homeCurrency,
 			})
 		}
