@@ -62,7 +62,7 @@ func MakeHTTPHandler(
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
-	peopleEndpoints, err := MakeCustomerEndpoints(peopleService, authService)
+	peopleEndpoints, err := MakeUserEndpoints(peopleService, authService)
 	invitationEndpoints := MakeInvitationEndpoints(invitationService)
 	projectEndpoints, err := MakeProjectEndpoints(
 		projectService,

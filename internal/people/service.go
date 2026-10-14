@@ -19,9 +19,10 @@ func (s *ServiceImpl) FindByID(ctx context.Context, personID uuid.UUID) (*Person
 }
 
 var loginFailedError = errors.New("failed to login")
-var customerRegistrationFailedError = errors.New("failed to register customer")
+var userRegistrationFailedError = errors.New("failed to register user")
+var customerRegistrationFailedError = userRegistrationFailedError
 
-func NewCustomerService(
+func NewUserService(
 	db core.DbConnection,
 	repo Repository,
 	hasher core.Hasher) UserService {
@@ -30,6 +31,14 @@ func NewCustomerService(
 		peopleRepository: repo,
 		hasher:           hasher,
 	}
+}
+
+// Deprecated: Use NewUserService instead.
+func NewCustomerService(
+	db core.DbConnection,
+	repo Repository,
+	hasher core.Hasher) UserService {
+	return NewUserService(db, repo, hasher)
 }
 
 func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) error {
@@ -119,7 +128,7 @@ func (s *ServiceImpl) UpdateDisplayName(ctx context.Context, command UpdateDispl
 	person.UpdateDisplayName(command.DisplayName)
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
-		if err := s.peopleRepository.UpdateProfile(ctx, person.ID(), person.FirstName(), person.LastName(), person.displayName.String()); err != nil {
+		if err := s.peopleRepository.UpdateProfile(ctx, person.ID(), person.FirstName(), person.LastName(), person.DisplayNameVO().String()); err != nil {
 			return nil, err
 		}
 		return nil, nil

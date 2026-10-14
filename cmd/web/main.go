@@ -59,7 +59,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	)
 	invitationService := people.NewInvitationService(db, invitationRepository, peopleRepository)
 
-	customerService := people.NewCustomerService(db, peopleRepository, hasher)
+	userService := people.NewUserService(db, peopleRepository, hasher)
 	projectRepository := dal.NewPgProjectRepository(db)
 	assetRepository := dal.NewPgAssetRepository(db)
 	peopleService := projecta.NewPeopleService(peopleRepository)
@@ -93,7 +93,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	)
 
 	return web.MakeHTTPHandler(
-		customerService,
+		userService,
 		tokenProvider,
 		authService,
 		invitationService,

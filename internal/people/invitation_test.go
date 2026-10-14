@@ -405,3 +405,38 @@ func TestInvitationCode(t *testing.T) {
 		}
 	})
 }
+
+func TestReconstituteInvitation(t *testing.T) {
+	id := uuid.New()
+	creatorID := uuid.New()
+	personID := uuid.New()
+	expiresAt := time.Now().Add(24 * time.Hour)
+	createdAt := time.Now().Add(-1 * time.Hour)
+	completedAt := time.Now()
+
+	inv := people.ReconstituteInvitation(
+		id,
+		"test@example.com",
+		"hash123",
+		expiresAt,
+		creatorID,
+		&personID,
+		people.InvitationStatusCompleted,
+		createdAt,
+		&completedAt,
+	)
+
+	if inv.ID() != id || inv.Email() != "test@example.com" || inv.CodeHash() != "hash123" {
+		t.Errorf("ReconstituteInvitation basic fields mismatch: %+v", inv)
+	}
+	if inv.CreatedBy() != creatorID || *inv.PersonID() != personID {
+		t.Errorf("ReconstituteInvitation IDs mismatch: %+v", inv)
+	}
+	if inv.Status() != people.InvitationStatusCompleted || !inv.IsCompleted() {
+		t.Errorf("ReconstituteInvitation status mismatch")
+	}
+	if !inv.CreatedAt().Equal(createdAt) || !inv.CompletedAt().Equal(completedAt) {
+		t.Errorf("ReconstituteInvitation timestamp mismatch")
+	}
+}
+
