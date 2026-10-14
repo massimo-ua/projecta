@@ -10,16 +10,21 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
+type PersonRegistrar interface {
+	Register(ctx context.Context, person *Person) error
+	DeletePerson(ctx context.Context, personID uuid.UUID) error
+}
+
 type InvitationServiceImpl struct {
 	db             core.DbConnection
 	invitationRepo InvitationRepository
-	peopleRepo     Repository
+	peopleRepo     PersonRegistrar
 }
 
 func NewInvitationService(
 	db core.DbConnection,
 	invitationRepo InvitationRepository,
-	peopleRepo Repository,
+	peopleRepo PersonRegistrar,
 ) InvitationService {
 	return &InvitationServiceImpl{
 		db:             db,

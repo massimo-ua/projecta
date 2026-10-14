@@ -154,6 +154,8 @@ type mockPgDb struct {
 	execTag    pgconn.CommandTag
 	queryErr   error
 	rowsData   [][]any
+	rolesData  [][]any
+	credsData  [][]any
 	rowVal     []any
 	rowErr     error
 	countErr   error
@@ -174,6 +176,12 @@ func (m *mockPgDb) Exec(ctx context.Context, sql string, arguments ...interface{
 func (m *mockPgDb) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	if m.queryErr != nil {
 		return nil, m.queryErr
+	}
+	if strings.Contains(sql, "person_roles") {
+		return &mockRows{data: m.rolesData}, nil
+	}
+	if strings.Contains(sql, "credentials") {
+		return &mockRows{data: m.credsData}, nil
 	}
 	return &mockRows{data: m.rowsData}, nil
 }
@@ -352,10 +360,16 @@ func TestPgPeopleRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("toPersonFromPg test", func(t *testing.T) {
-		p, err := toPersonFromPg(pID.String(), "John", "Doe", "J.D.", people.RoleUser, people.RoleAdministrator)
-		if err != nil || p.FirstName() != "John" || !p.IsAdministrator() || !p.IsUser() {
-			t.Errorf("toPersonFromPg error: %v", err)
+	t.Run("personRecord toPerson test", func(t *testing.T) {
+		rec := personRecord{
+			id:          pID.String(),
+			firstName:   "John",
+			lastName:    "Doe",
+			displayName: types.NullString{String: "J.D.", Valid: true},
+		}
+		p, err := rec.toPerson([]people.Role{people.RoleUser, people.RoleAdministrator}, []people.Credentials{cred})
+		if err != nil || p.FirstName() != "John" || !p.IsAdministrator() || !p.IsUser() || len(p.Identities()) != 1 {
+			t.Errorf("personRecord toPerson error: %v", err)
 		}
 	})
 
@@ -744,10 +758,11 @@ func TestPgAssetRepository(t *testing.T) {
 	})
 
 	t.Run("Repository additional FindOne and error branches", func(t *testing.T) {
-		// toPersonFromPg with empty fields
-		_, err := toPersonFromPg(pID.String(), "", "", "")
+		// personRecord toPerson with invalid id
+		badRec := personRecord{id: "invalid-uuid"}
+		_, err := badRec.toPerson(nil, nil)
 		if err == nil {
-			t.Errorf("expected error for empty person fields")
+			t.Errorf("expected error for invalid person id")
 		}
 
 		// toProject with valid fields
