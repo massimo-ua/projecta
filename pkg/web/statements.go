@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
 type ParseStatementRequest struct {
@@ -48,7 +48,7 @@ func decodeParseStatementRequest(_ context.Context, r *http.Request) (any, error
 	}, nil
 }
 
-func makeParseStatementEndpoint(svc projecta.StatementService) endpoint.Endpoint {
+func makeParseStatementEndpoint(svc statement.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req := request.(ParseStatementRequest)
 		return svc.ParseStatement(ctx, req.ProjectID, req.FileData)

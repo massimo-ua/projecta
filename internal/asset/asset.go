@@ -6,7 +6,6 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 type AssetStatus string
@@ -40,14 +39,19 @@ type ParentAssetLink struct {
 	SharePercentage float64   `json:"share_percentage"`
 }
 
+type OwnerRef struct {
+	PersonID    uuid.UUID `json:"person_id"`
+	DisplayName string    `json:"display_name"`
+}
+
 type Asset struct {
 	id            uuid.UUID
 	name          string
 	description   string
-	project       *projecta.Project
+	projectID     uuid.UUID
 	price         *money.Money
 	acquiredAt    time.Time
-	owner         *projecta.Owner
+	owner         OwnerRef
 	status        AssetStatus
 	startDate     time.Time
 	completedDate *time.Time
@@ -63,10 +67,10 @@ func NewAsset(
 	id uuid.UUID,
 	name string,
 	description string,
-	project *projecta.Project,
+	projectID uuid.UUID,
 	price *money.Money,
 	acquiredAt time.Time,
-	owner *projecta.Owner,
+	owner OwnerRef,
 ) *Asset {
 	start := acquiredAt
 	if start.IsZero() {
@@ -76,7 +80,7 @@ func NewAsset(
 		id:          id,
 		name:        name,
 		description: description,
-		project:     project,
+		projectID:   projectID,
 		price:       price,
 		acquiredAt:  start,
 		owner:       owner,
@@ -101,8 +105,8 @@ func (a *Asset) Description() string {
 	return a.description
 }
 
-func (a *Asset) Project() *projecta.Project {
-	return a.project
+func (a *Asset) ProjectID() uuid.UUID {
+	return a.projectID
 }
 
 func (a *Asset) Price() *money.Money {
@@ -122,7 +126,7 @@ func (a *Asset) AcquiredAt() time.Time {
 	return a.acquiredAt
 }
 
-func (a *Asset) Owner() *projecta.Owner {
+func (a *Asset) Owner() OwnerRef {
 	return a.owner
 }
 
@@ -185,8 +189,8 @@ func (a *Asset) SetDescription(description string) {
 	a.description = description
 }
 
-func (a *Asset) SetProject(project *projecta.Project) {
-	a.project = project
+func (a *Asset) SetProjectID(projectID uuid.UUID) {
+	a.projectID = projectID
 }
 
 func (a *Asset) SetPrice(price *money.Money) {
@@ -199,7 +203,7 @@ func (a *Asset) SetAcquiredAt(acquiredAt time.Time) {
 	a.startDate = acquiredAt
 }
 
-func (a *Asset) SetOwner(owner *projecta.Owner) {
+func (a *Asset) SetOwner(owner OwnerRef) {
 	a.owner = owner
 }
 
@@ -288,10 +292,10 @@ func ReconstituteAsset(
 	id uuid.UUID,
 	name string,
 	description string,
-	project *projecta.Project,
+	projectID uuid.UUID,
 	price *money.Money,
 	acquiredAt time.Time,
-	owner *projecta.Owner,
+	owner OwnerRef,
 	status AssetStatus,
 	startDate time.Time,
 	completedDate *time.Time,
@@ -315,7 +319,7 @@ func ReconstituteAsset(
 		id:            id,
 		name:          name,
 		description:   description,
-		project:       project,
+		projectID:     projectID,
 		price:         price,
 		acquiredAt:    start,
 		owner:         owner,

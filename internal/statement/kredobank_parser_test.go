@@ -1,10 +1,10 @@
-package projecta_test
+package statement_test
 
 import (
 	_ "embed"
 	"testing"
 
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
 //go:embed testdata/fake_kredobank_report.pdf
@@ -15,25 +15,26 @@ func TestParseKredobankStatement_Success(t *testing.T) {
 		t.Fatalf("embedded fake report PDF is empty")
 	}
 
-	statement, err := projecta.ParseKredobankStatement(fakeReportPDF)
+	parser := statement.NewKredobankParser()
+	parsed, err := parser.Parse(fakeReportPDF)
 	if err != nil {
 		t.Fatalf("unexpected error parsing statement: %v", err)
 	}
 
-	if statement.Currency != "PLN" {
-		t.Errorf("expected currency PLN, got %s", statement.Currency)
+	if parsed.Currency != "PLN" {
+		t.Errorf("expected currency PLN, got %s", parsed.Currency)
 	}
 
-	if statement.Account != "UA000000000000000000000000000" {
-		t.Errorf("expected account UA000000000000000000000000000, got %s", statement.Account)
+	if parsed.Account != "UA000000000000000000000000000" {
+		t.Errorf("expected account UA000000000000000000000000000, got %s", parsed.Account)
 	}
 
-	if len(statement.Transactions) != 26 {
-		t.Fatalf("expected 26 expense transactions, got %d", len(statement.Transactions))
+	if len(parsed.Transactions) != 26 {
+		t.Fatalf("expected 26 expense transactions, got %d", len(parsed.Transactions))
 	}
 
 	// First transaction verification
-	firstTx := statement.Transactions[0]
+	firstTx := parsed.Transactions[0]
 	if firstTx.DocNum != "43539945" {
 		t.Errorf("expected first doc num 43539945, got %s", firstTx.DocNum)
 	}
@@ -51,7 +52,7 @@ func TestParseKredobankStatement_Success(t *testing.T) {
 	}
 
 	// Verify all amounts are positive
-	for i, tx := range statement.Transactions {
+	for i, tx := range parsed.Transactions {
 		if tx.AmountMinor <= 0 || tx.AmountFloat <= 0 {
 			t.Errorf("transaction %d has non-positive amount: %f (%d)", i, tx.AmountFloat, tx.AmountMinor)
 		}
@@ -65,7 +66,8 @@ func TestParseKredobankStatement_Success(t *testing.T) {
 }
 
 func TestParseKredobankStatement_InvalidPDF(t *testing.T) {
-	_, err := projecta.ParseKredobankStatement([]byte("invalid pdf content"))
+	parser := statement.NewKredobankParser()
+	_, err := parser.Parse([]byte("invalid pdf content"))
 	if err == nil {
 		t.Errorf("expected error for invalid PDF content, got nil")
 	}
@@ -73,7 +75,8 @@ func TestParseKredobankStatement_InvalidPDF(t *testing.T) {
 
 func TestParseKredobankStatement_NonKredobank(t *testing.T) {
 	header := "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000108 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n180\n%%EOF"
-	_, err := projecta.ParseKredobankStatement([]byte(header))
+	parser := statement.NewKredobankParser()
+	_, err := parser.Parse([]byte(header))
 	if err == nil {
 		t.Errorf("expected error for non-Kredobank PDF, got nil")
 	}

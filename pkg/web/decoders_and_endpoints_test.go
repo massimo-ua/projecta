@@ -18,7 +18,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -541,9 +541,8 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 
 		// Test makeGroupAssetsEndpoint
 		now := time.Now()
-		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "John"}
-		proj, _ := projecta.NewProject(uuid.New(), "P", "", owner, now, now)
-		mockAst := asset.NewAsset(uuid.New(), "Rent", "", proj, money.New(0, "UAH"), now, owner)
+		ownerRef := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "John"}
+		mockAst := asset.NewAsset(uuid.New(), "Rent", "", uuid.New(), money.New(0, "UAH"), now, ownerRef)
 		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst}, &mockRateProvider{})
 		_, err = ep(context.Background(), cmd)
 		if err != nil {
@@ -594,9 +593,10 @@ func TestProjectaDecodersValidationErrors(t *testing.T) {
 
 func TestEndpointsErrorBranches(t *testing.T) {
 	errSvc := errors.New("service failure")
-	owner := &projecta.Owner{PersonID: uuid.New()}
-	proj, _ := projecta.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-	ast := asset.NewAsset(uuid.New(), "Asset", "Desc", proj, money.New(1000, money.USD), time.Now(), owner)
+	owner := &project.Owner{PersonID: uuid.New()}
+	ownerRef := asset.OwnerRef{PersonID: owner.PersonID}
+	proj, _ := project.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
+	ast := asset.NewAsset(uuid.New(), "Asset", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef)
 
 	peopleSvcErr := &mockPeopleService{err: errSvc}
 	authSvcErr := &mockAuthService{err: errSvc}
@@ -658,7 +658,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeCreateProjectEndpoint error", func(t *testing.T) {
 		ep := makeCreateProjectEndpoint(projSvcErr)
-		_, err := ep(context.Background(), projecta.CreateProjectCommand{})
+		_, err := ep(context.Background(), project.CreateProjectCommand{})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
@@ -666,7 +666,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeUpdateProjectEndpoint error", func(t *testing.T) {
 		ep := makeUpdateProjectEndpoint(projSvcErr)
-		_, err := ep(context.Background(), projecta.UpdateProjectCommand{})
+		_, err := ep(context.Background(), project.UpdateProjectCommand{})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
@@ -697,7 +697,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 		}
 
 		// Assets conversion
-		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj, money.New(500, money.EUR), time.Now(), owner)
+		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj.ID(), money.New(500, money.EUR), time.Now(), ownerRef)
 		astColMismatch := asset.NewCollection(2)
 		astColMismatch.Add(ast, astEUR)
 
@@ -811,18 +811,18 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, ok := res.(projecta.ProjectFilter); !ok {
+		if _, ok := res.(project.ProjectFilter); !ok {
 			t.Errorf("expected ProjectFilter result")
 		}
 	})
 
 	t.Run("makeGetProjectEndpoint and makeAcceptShareEndpoint", func(t *testing.T) {
-		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
-		proj, _ := projecta.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now())
+		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
+		proj, _ := project.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now())
 		projSvc := &mockProjectService{project: proj}
 
 		epGet := makeGetProjectEndpoint(projSvc)
-		res, err := epGet(context.Background(), projecta.ProjectFilter{ProjectID: proj.ID()})
+		res, err := epGet(context.Background(), project.ProjectFilter{ProjectID: proj.ID()})
 		if err != nil || res == nil {
 			t.Fatalf("makeGetProjectEndpoint error: %v", err)
 		}
@@ -835,7 +835,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 
 		projErrSvc := &mockProjectService{err: errors.New("svc error")}
 		epGetErr := makeGetProjectEndpoint(projErrSvc)
-		if _, err := epGetErr(context.Background(), projecta.ProjectFilter{}); err == nil {
+		if _, err := epGetErr(context.Background(), project.ProjectFilter{}); err == nil {
 			t.Error("expected error from makeGetProjectEndpoint")
 		}
 
@@ -846,9 +846,9 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 
 	t.Run("toProjectDTO and ProjectDTO JSON marshaling with participants", func(t *testing.T) {
-		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner Name"}
-		proj, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
-		part1, _ := projecta.NewParticipant("Participant Two")
+		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner Name"}
+		proj, _ := project.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
+		part1, _ := project.NewParticipant("Participant Two")
 		proj.AddParticipant(part1)
 
 		dto := toProjectDTO(proj)
@@ -897,10 +897,12 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 
 	t.Run("currency conversion endpoints with rateProvider", func(t *testing.T) {
-		owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
-		proj, _ := projecta.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now(), "UAH")
+		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
+		ownerRef := asset.OwnerRef{PersonID: owner.PersonID, DisplayName: "Owner"}
+		contribRef := investment.ContributorRef{PersonID: owner.PersonID, DisplayName: "Owner"}
+		proj, _ := project.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now(), "UAH")
 
-		astUSD := asset.NewAsset(uuid.New(), "Ast USD", "Desc", proj, money.New(200, money.USD), time.Now(), owner)
+		astUSD := asset.NewAsset(uuid.New(), "Ast USD", "Desc", proj.ID(), money.New(200, money.USD), time.Now(), ownerRef)
 
 		rateProv := &mockRateProvider{}
 
@@ -944,15 +946,15 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		mProjSvc := &mockProjectService{project: proj}
 
 		// Test makeShowProjectTotalsEndpoint with investment service
-		inv1 := investment.ReconstituteInvestment(uuid.New(), proj, uuid.New(), "Asset 1", nil, owner, investment.ResourceTypeMoney, money.New(15000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
-		inv2 := investment.ReconstituteInvestment(uuid.New(), proj, uuid.New(), "Asset 2", nil, owner, investment.ResourceTypeMoney, money.New(25000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
+		inv1 := investment.ReconstituteInvestment(uuid.New(), proj.ID(), "UAH", uuid.New(), "Asset 1", nil, contribRef, investment.ResourceTypeMoney, money.New(15000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
+		inv2 := investment.ReconstituteInvestment(uuid.New(), proj.ID(), "UAH", uuid.New(), "Asset 2", nil, contribRef, investment.ResourceTypeMoney, money.New(25000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
 		invCol := investment.NewCollection(2)
 		invCol.Add(inv1)
 		invCol.Add(inv2)
 		mInvColSvc := &mockInvestmentServiceWithCol{col: invCol}
 
-		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj, money.New(10000, "UAH"), time.Now(), owner)
-		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj, money.New(5000, "UAH"), time.Now(), owner)
+		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj.ID(), money.New(10000, "UAH"), time.Now(), ownerRef)
+		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj.ID(), money.New(5000, "UAH"), time.Now(), ownerRef)
 		childAsset.SetParents([]asset.ParentAssetLink{{ParentID: parentAsset.ID(), SharePercentage: 100}})
 		parentAsset.SetTotalCost(money.New(15000, "UAH"))
 		parentAsset.SetDirectCost(money.New(10000, "UAH"))

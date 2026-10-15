@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 type ResourceType string
@@ -44,13 +43,19 @@ type InvestmentAssetLink struct {
 	SharePercentage float64   `json:"share_percentage"`
 }
 
+type ContributorRef struct {
+	PersonID    uuid.UUID `json:"person_id"`
+	DisplayName string    `json:"display_name"`
+}
+
 type Investment struct {
 	id               uuid.UUID
-	project          *projecta.Project
+	projectID        uuid.UUID
+	homeCurrency     string
 	primaryAssetID   uuid.UUID
 	primaryAssetName string
 	assetAllocations []InvestmentAssetLink
-	contributor      *projecta.Owner
+	contributor      ContributorRef
 	resourceType     ResourceType
 	amount           *money.Money
 	timeHours        *float64
@@ -65,10 +70,11 @@ type Investment struct {
 
 func NewInvestment(
 	id uuid.UUID,
-	project *projecta.Project,
+	projectID uuid.UUID,
+	homeCurrency string,
 	primaryAssetID uuid.UUID,
 	primaryAssetName string,
-	contributor *projecta.Owner,
+	contributor ContributorRef,
 	resourceType ResourceType,
 	amount *money.Money,
 	timeHours *float64,
@@ -84,7 +90,7 @@ func NewInvestment(
 	if id == uuid.Nil {
 		return nil, exceptions.NewValidationException("investment id is required", nil)
 	}
-	if project == nil || project.ID() == uuid.Nil {
+	if projectID == uuid.Nil {
 		return nil, exceptions.NewValidationException("project is required", nil)
 	}
 	if strings.TrimSpace(description) == "" {
@@ -110,7 +116,8 @@ func NewInvestment(
 
 	inv := &Investment{
 		id:             id,
-		project:        project,
+		projectID:      projectID,
+		homeCurrency:   homeCurrency,
 		contributor:    contributor,
 		resourceType:   resourceType,
 		amount:         finalAmount,
@@ -254,11 +261,12 @@ func (i *Investment) UpdateValuation(
 // ReconstituteInvestment reconstitutes an Investment entity from persistence data without executing business invariants.
 func ReconstituteInvestment(
 	id uuid.UUID,
-	project *projecta.Project,
+	projectID uuid.UUID,
+	homeCurrency string,
 	primaryAssetID uuid.UUID,
 	primaryAssetName string,
 	allocations []InvestmentAssetLink,
-	contributor *projecta.Owner,
+	contributor ContributorRef,
 	resourceType ResourceType,
 	amount *money.Money,
 	timeHours *float64,
@@ -290,7 +298,8 @@ func ReconstituteInvestment(
 
 	return &Investment{
 		id:               id,
-		project:          project,
+		projectID:        projectID,
+		homeCurrency:     homeCurrency,
 		primaryAssetID:   primaryAssetID,
 		primaryAssetName: primaryAssetName,
 		assetAllocations: finalAllocations,
@@ -310,11 +319,12 @@ func ReconstituteInvestment(
 
 // Getters
 func (i *Investment) ID() uuid.UUID                               { return i.id }
-func (i *Investment) Project() *projecta.Project                 { return i.project }
+func (i *Investment) ProjectID() uuid.UUID                        { return i.projectID }
+func (i *Investment) HomeCurrency() string                        { return i.homeCurrency }
 func (i *Investment) PrimaryAssetID() uuid.UUID                  { return i.primaryAssetID }
 func (i *Investment) PrimaryAssetName() string                   { return i.primaryAssetName }
 func (i *Investment) AssetAllocations() []InvestmentAssetLink     { return i.assetAllocations }
-func (i *Investment) Contributor() *projecta.Owner               { return i.contributor }
+func (i *Investment) Contributor() ContributorRef                 { return i.contributor }
 func (i *Investment) ResourceType() ResourceType                 { return i.resourceType }
 func (i *Investment) Amount() *money.Money                       { return i.amount }
 func (i *Investment) TimeHours() *float64                        { return i.timeHours }

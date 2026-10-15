@@ -11,7 +11,6 @@ import (
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 var ErrFailedToSaveAsset = errors.New("failed to save asset")
@@ -80,7 +79,7 @@ func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) er
 		anAsset.ID().String(),
 		anAsset.Name(),
 		anAsset.Description(),
-		anAsset.Project().ID().String(),
+		anAsset.ProjectID().String(),
 		anAsset.Owner().PersonID.String(),
 		anAsset.Status().String(),
 		anAsset.StartDate(),
@@ -287,23 +286,19 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	sql, args := qb.Build()
 
 	var (
-		assetID             string
-		name                string
-		description         string
-		projectID           string
-		projectName         string
-		projectDescription  string
-		projectMainCurrency string
-		acquiredAt          time.Time
-		ownerID             string
-		ownerFirstName      string
-		ownerDisplayName    string
-		status              string
-		startDate           time.Time
-		completedDate       *time.Time
-		targetPrice         *int64
-		targetCurrency      *string
-		tags                []string
+		assetID          string
+		name             string
+		description      string
+		projectID        string
+		acquiredAt       time.Time
+		ownerID          string
+		ownerDisplayName string
+		status           string
+		startDate        time.Time
+		completedDate    *time.Time
+		targetPrice      *int64
+		targetCurrency   *string
+		tags             []string
 	)
 
 	if err := r.db.QueryRow(
@@ -315,12 +310,8 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		&name,
 		&description,
 		&projectID,
-		&projectName,
-		&projectDescription,
-		&projectMainCurrency,
 		&acquiredAt,
 		&ownerID,
-		&ownerFirstName,
 		&ownerDisplayName,
 		&status,
 		&startDate,
@@ -341,12 +332,8 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		name,
 		description,
 		projectID,
-		projectName,
-		projectDescription,
-		projectMainCurrency,
 		acquiredAt,
 		ownerID,
-		ownerFirstName,
 		ownerDisplayName,
 		status,
 		startDate,
@@ -360,7 +347,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
 
-	r.loadCompositionsAndRollup(ctx, []*asset.Asset{a}, a.Project().ID())
+	r.loadCompositionsAndRollup(ctx, []*asset.Asset{a}, a.ProjectID())
 	return a, nil
 }
 
@@ -416,23 +403,19 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 
 	for rows.Next() {
 		var (
-			assetID             string
-			name                string
-			description         string
-			projectID           string
-			projectName         string
-			projectDescription  string
-			projectMainCurrency string
-			acquiredAt          time.Time
-			ownerID             string
-			ownerFirstName      string
-			ownerDisplayName    string
-			status              string
-			startDate           time.Time
-			completedDate       *time.Time
-			targetPrice         *int64
-			targetCurrency      *string
-			tags                []string
+			assetID          string
+			name             string
+			description      string
+			projectID        string
+			acquiredAt       time.Time
+			ownerID          string
+			ownerDisplayName string
+			status           string
+			startDate        time.Time
+			completedDate    *time.Time
+			targetPrice      *int64
+			targetCurrency   *string
+			tags             []string
 		)
 
 		if err = rows.Scan(
@@ -440,12 +423,8 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			&name,
 			&description,
 			&projectID,
-			&projectName,
-			&projectDescription,
-			&projectMainCurrency,
 			&acquiredAt,
 			&ownerID,
-			&ownerFirstName,
 			&ownerDisplayName,
 			&status,
 			&startDate,
@@ -462,12 +441,8 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			name,
 			description,
 			projectID,
-			projectName,
-			projectDescription,
-			projectMainCurrency,
 			acquiredAt,
 			ownerID,
-			ownerFirstName,
 			ownerDisplayName,
 			status,
 			startDate,
@@ -506,9 +481,6 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 
 	directCosts := make(map[uuid.UUID]*money.Money)
 	var defaultCurr string = "UAH"
-	if len(assets) > 0 && assets[0].Project() != nil && assets[0].Project().MainCurrency() != "" {
-		defaultCurr = assets[0].Project().MainCurrency()
-	}
 
 	// 1. Direct costs
 	var dcSql string
@@ -600,14 +572,10 @@ func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {
 		"projecta_assets.asset_id",
 		"projecta_assets.name",
 		qb.As("COALESCE(projecta_assets.description, '')", "description"),
-		"projecta_projects.project_id",
-		qb.As("projecta_projects.name", "project_name"),
-		qb.As("COALESCE(projecta_projects.description, '')", "project_description"),
-		qb.As("COALESCE(projecta_projects.main_currency, 'UAH')", "project_main_currency"),
+		"projecta_assets.project_id",
 		"projecta_assets.acquired_at",
 		"projecta_assets.owner_id",
-		"people.first_name",
-		qb.As("COALESCE(people.display_name, '')", "display_name"),
+		qb.As("COALESCE(people.display_name, people.first_name, '')", "display_name"),
 		"projecta_assets.status",
 		"projecta_assets.start_date",
 		"projecta_assets.completed_date",
@@ -617,7 +585,6 @@ func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {
 	)
 
 	qb.Join("people", "people.person_id = projecta_assets.owner_id")
-	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_assets.project_id")
 }
 
 func toAssetFromPg(
@@ -625,12 +592,8 @@ func toAssetFromPg(
 	name string,
 	description string,
 	projectID string,
-	projectName string,
-	projectDescription string,
-	projectMainCurrency string,
 	acquiredAt time.Time,
 	ownerID string,
-	ownerFirstName string,
 	ownerDisplayName string,
 	status string,
 	startDate time.Time,
@@ -639,24 +602,10 @@ func toAssetFromPg(
 	targetCurrency *string,
 	tags []string,
 ) (*asset.Asset, error) {
-	owner := &projecta.Owner{
+	owner := asset.OwnerRef{
 		PersonID:    uuid.MustParse(ownerID),
-		FirstName:   ownerFirstName,
 		DisplayName: ownerDisplayName,
 	}
-
-	project := projecta.ReconstituteProject(
-		uuid.MustParse(projectID),
-		projectName,
-		projectDescription,
-		owner,
-		time.Time{},
-		time.Time{},
-		uuid.Nil,
-		false,
-		projectMainCurrency,
-		nil,
-	)
 
 	var targetPriceMoney *money.Money
 	if targetPrice != nil && targetCurrency != nil && *targetCurrency != "" {
@@ -667,7 +616,7 @@ func toAssetFromPg(
 		uuid.MustParse(assetID),
 		name,
 		description,
-		project,
+		uuid.MustParse(projectID),
 		targetPriceMoney,
 		acquiredAt,
 		owner,
