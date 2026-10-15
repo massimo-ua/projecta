@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 func decodeRegisterUser(_ context.Context, r *http.Request) (any, error) {
@@ -114,7 +114,7 @@ func decodeListProjectsRequest(_ context.Context, r *http.Request) (any, error) 
 		}
 	}
 
-	filter := projecta.ProjectCollectionFilter{
+	filter := project.ProjectCollectionFilter{
 		Pagination: core.Pagination{
 			Limit:  limit,
 			Offset: offset,
@@ -176,7 +176,7 @@ func decodeProjectResourceRemoveCommand(projectIDKey string, resourceIDKey strin
 			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid %s", resourceIDKey), err)
 		}
 
-		return projecta.RemoveProjectResourceCommand{
+		return project.RemoveProjectResourceCommand{
 			ProjectID:  projectUUID,
 			ResourceID: resourceUUID,
 		}, nil

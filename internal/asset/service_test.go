@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -67,11 +67,11 @@ func (m *mockAssetRepo) FindAncestors(ctx context.Context, assetID uuid.UUID) ([
 }
 
 type mockPeopleService struct {
-	owner *projecta.Owner
+	owner *project.Owner
 	err   error
 }
 
-func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (*projecta.Owner, error) {
+func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (*project.Owner, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -79,23 +79,23 @@ func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (*proje
 }
 
 type mockProjectRepo struct {
-	project *projecta.Project
+	project *project.Project
 	err     error
 }
 
-func (m *mockProjectRepo) Create(ctx context.Context, p *projecta.Project) error { return nil }
-func (m *mockProjectRepo) Update(ctx context.Context, p *projecta.Project) error { return nil }
-func (m *mockProjectRepo) Remove(ctx context.Context, p *projecta.Project) error { return nil }
-func (m *mockProjectRepo) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+func (m *mockProjectRepo) Create(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockProjectRepo) Update(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockProjectRepo) Remove(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockProjectRepo) Find(ctx context.Context, filter project.ProjectCollectionFilter) ([]*project.Project, error) {
 	return nil, nil
 }
-func (m *mockProjectRepo) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
+func (m *mockProjectRepo) FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.project, nil
 }
-func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
+func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -165,8 +165,8 @@ func (m *mockRateProvider) Convert(a currency.Currency, b currency.Currency) (cu
 func newTestService(
 	db core.DbConnection,
 	assets asset.Repository,
-	people projecta.PeopleService,
-	projects projecta.ProjectRepository,
+	people project.PeopleService,
+	projects project.ProjectRepository,
 	inv asset.InvestmentSource,
 	rp ...currency.CurrencyRateProvider,
 ) *asset.ServiceImpl {
@@ -178,9 +178,10 @@ func TestAssetService(t *testing.T) {
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, requesterID)
 
 	now := time.Now()
-	owner := &projecta.Owner{PersonID: requesterID, DisplayName: "John Doe"}
-	project, _ := projecta.NewProject(uuid.New(), "Project 1", "Desc", owner, now, now)
-	existingAsset := asset.NewAsset(uuid.New(), "Laptop", "Work Laptop", project, money.New(1000, money.USD), now, owner)
+	owner := &project.Owner{PersonID: requesterID, DisplayName: "John Doe"}
+	ownerRef := asset.OwnerRef{PersonID: requesterID, DisplayName: "John Doe"}
+	project, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, now, now)
+	existingAsset := asset.NewAsset(uuid.New(), "Laptop", "Work Laptop", project.ID(), money.New(1000, money.USD), now, ownerRef)
 
 	t.Run("Find unauthorized and success", func(t *testing.T) {
 		svc := newTestService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{}, &mockProjectRepo{}, nil)
@@ -547,7 +548,7 @@ func TestAssetService(t *testing.T) {
 		astID := uuid.New()
 		invID1 := uuid.New()
 		invID2 := uuid.New()
-		targetAsset := asset.NewAsset(astID, "Car", "Vehicle", project, money.New(100000, "UAH"), time.Now(), owner)
+		targetAsset := asset.NewAsset(astID, "Car", "Vehicle", project.ID(), money.New(100000, "UAH"), time.Now(), ownerRef)
 
 		mockInv := &mockInvestmentSource{
 			items: []asset.InvestmentItem{
@@ -611,8 +612,8 @@ func TestAssetService(t *testing.T) {
 	})
 
 	t.Run("Group assets success and validation", func(t *testing.T) {
-		child1 := asset.NewAsset(uuid.New(), "Child 1", "", project, money.New(100, "UAH"), now, owner)
-		child2 := asset.NewAsset(uuid.New(), "Child 2", "", project, money.New(200, "UAH"), now, owner)
+		child1 := asset.NewAsset(uuid.New(), "Child 1", "", project.ID(), money.New(100, "UAH"), now, ownerRef)
+		child2 := asset.NewAsset(uuid.New(), "Child 2", "", project.ID(), money.New(200, "UAH"), now, ownerRef)
 
 		assetRepo := &mockAssetRepo{asset: child1}
 		peopleSvc := &mockPeopleService{owner: owner}
@@ -662,7 +663,7 @@ func TestAssetService(t *testing.T) {
 		}
 
 		// LinkChildren success
-		otherChild := asset.NewAsset(uuid.New(), "Other Child", "", project, money.New(50, "UAH"), now, owner)
+		otherChild := asset.NewAsset(uuid.New(), "Other Child", "", project.ID(), money.New(50, "UAH"), now, ownerRef)
 		err = svc.LinkChildren(authedCtx, asset.LinkChildrenCommand{
 			ProjectID:     project.ID(),
 			ParentID:      grouped.ID(),

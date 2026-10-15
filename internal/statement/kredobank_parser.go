@@ -1,4 +1,4 @@
-package projecta
+package statement
 
 import (
 	"bytes"
@@ -11,44 +11,23 @@ import (
 	"github.com/dslipak/pdf"
 )
 
-type ParsedStatementTransaction struct {
-	Date        time.Time
-	DocNum      string
-	Description string
-	AmountMinor int64
-	AmountFloat float64
-	Currency    string
-}
-
-type ParsedStatement struct {
-	Account      string
-	Currency     string
-	Period       string
-	Transactions []ParsedStatementTransaction
-}
-
-type StatementParseItem struct {
-	DocNum      string    `json:"doc_num"`
-	Date        time.Time `json:"date"`
-	Amount      int64     `json:"amount"` // in minor units
-	Currency    string    `json:"currency"`
-	Description string    `json:"description"`
-	IsDuplicate bool      `json:"is_duplicate"`
-}
-
-type StatementParseResult struct {
-	Account      string               `json:"account"`
-	Currency     string               `json:"currency"`
-	Period       string               `json:"period"`
-	Transactions []StatementParseItem `json:"transactions"`
-}
-
 var (
 	currencyRegex = regexp.MustCompile(`Валюта\s*рахунку\s*([A-Z]{3})`)
 	accountRegex  = regexp.MustCompile(`Рахунок\s*([A-Z0-9]+)`)
 	periodRegex   = regexp.MustCompile(`Період\s*(.*?)(?:Сформовано|\n|\r|$)`)
 	dateRegex     = regexp.MustCompile(`^\d{2}\.\d{2}\.\d{4}$`)
 )
+
+// KredobankParser implements StatementParser for Kredobank PDF account statements.
+type KredobankParser struct{}
+
+func NewKredobankParser() *KredobankParser {
+	return &KredobankParser{}
+}
+
+func (p *KredobankParser) Parse(data []byte) (*ParsedStatement, error) {
+	return ParseKredobankStatement(data)
+}
 
 // ParseKredobankStatement parses a Kredobank account statement PDF file and returns
 // statement metadata along with all expense (negative) transactions converted to positive amounts.

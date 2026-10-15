@@ -7,7 +7,6 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -59,9 +58,8 @@ func TestCalculateProjectTotals(t *testing.T) {
 	inv1 := money.New(1000, "UAH")
 	inv2 := money.New(100, "EUR") // converted: 4000 UAH
 
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "User"}
-	proj, _ := projecta.NewProject(uuid.New(), "P", "", owner, time.Now(), time.Now())
-	rootA := asset.NewAsset(uuid.New(), "RootA", "", proj, money.New(0, "UAH"), time.Now(), owner)
+	owner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "User"}
+	rootA := asset.NewAsset(uuid.New(), "RootA", "", uuid.New(), money.New(0, "UAH"), time.Now(), owner)
 	rootA.AssignValuation(money.New(5000, "UAH"), money.New(5000, "UAH"), nil, nil)
 
 	totals, err := asset.CalculateProjectTotals(

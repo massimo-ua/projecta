@@ -8,7 +8,8 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
+	"gitlab.com/massimo-ua/projecta/internal/statement"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"gitlab.com/massimo-ua/projecta/pkg/dal"
@@ -62,8 +63,8 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	userService := people.NewUserService(db, peopleRepository, hasher)
 	projectRepository := dal.NewPgProjectRepository(db)
 	assetRepository := dal.NewPgAssetRepository(db)
-	peopleService := projecta.NewPeopleService(peopleRepository)
-	projectService := projecta.NewProjectService(projectRepository, peopleService)
+	peopleService := project.NewPeopleService(peopleRepository)
+	projectService := project.NewProjectService(projectRepository, peopleService)
 	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
 		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
 		CacheTTL:            30 * time.Minute,
@@ -87,8 +88,8 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		peopleService,
 	)
 
-	statementService := projecta.NewStatementService(
-		projectService,
+	statementService := statement.NewService(
+		&projectValidator{svc: projectService},
 		&investmentTransactionFinder{svc: investmentService},
 	)
 
@@ -105,11 +106,20 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	)
 }
 
+type projectValidator struct {
+	svc project.ProjectService
+}
+
+func (v *projectValidator) ValidateProject(ctx context.Context, projectID uuid.UUID) error {
+	_, err := v.svc.FindOne(ctx, project.ProjectFilter{ProjectID: projectID})
+	return err
+}
+
 type investmentTransactionFinder struct {
 	svc investment.Service
 }
 
-func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID uuid.UUID) ([]projecta.ExistingTransaction, error) {
+func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID uuid.UUID) ([]statement.ExistingTransaction, error) {
 	col, err := f.svc.Find(ctx, investment.CollectionFilter{
 		ProjectID: projectID,
 		Pagination: core.Pagination{Limit: 1000},
@@ -117,9 +127,9 @@ func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectI
 	if err != nil {
 		return nil, err
 	}
-	res := make([]projecta.ExistingTransaction, 0, len(col.Elements()))
+	res := make([]statement.ExistingTransaction, 0, len(col.Elements()))
 	for _, inv := range col.Elements() {
-		res = append(res, projecta.ExistingTransaction{
+		res = append(res, statement.ExistingTransaction{
 			Date:        inv.Date(),
 			Amount:      inv.Amount().Amount(),
 			Description: inv.Description(),

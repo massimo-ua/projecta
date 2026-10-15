@@ -18,6 +18,7 @@ type AuthServiceImpl struct {
 	hasher           core.Hasher
 	google           core.ThirdPartyAuth
 	invitationRepo   InvitationRepository
+	strategies       map[IdentityProvider]IdentityProviderStrategy
 }
 
 func NewAuthService(
@@ -27,7 +28,20 @@ func NewAuthService(
 	hasher core.Hasher,
 	google core.ThirdPartyAuth,
 	invitationRepo InvitationRepository,
+	strategies ...IdentityProviderStrategy,
 ) AuthService {
+	strategyMap := make(map[IdentityProvider]IdentityProviderStrategy)
+	if len(strategies) > 0 {
+		for _, strat := range strategies {
+			strategyMap[strat.Provider()] = strat
+		}
+	} else {
+		strategyMap[LOCAL] = NewLocalAuthStrategy(peopleRepository, hasher)
+		if google != nil {
+			strategyMap[GOOGLE] = NewGoogleAuthStrategy(peopleRepository, google)
+		}
+	}
+
 	return &AuthServiceImpl{
 		db:               db,
 		peopleRepository: peopleRepository,
@@ -35,18 +49,22 @@ func NewAuthService(
 		hasher:           hasher,
 		google:           google,
 		invitationRepo:   invitationRepo,
+		strategies:       strategyMap,
 	}
 }
 
 func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*core.AuthResponse, error) {
-	switch credentials.Provider() {
-	case LOCAL:
-		return s.loginWithLocal(ctx, credentials)
-	case GOOGLE:
-		return s.loginWithGoogle(ctx, credentials.Identifier())
-	default:
+	strategy, ok := s.strategies[credentials.Provider()]
+	if !ok {
 		return nil, errors.New("unsupported identity provider")
 	}
+
+	personID, err := strategy.Authenticate(ctx, credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.authorizePerson(ctx, personID)
 }
 
 func (s *AuthServiceImpl) LoginWithInvitation(
@@ -183,23 +201,6 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 	return s.authorizePerson(ctx, person.ID())
 }
 
-func (s *AuthServiceImpl) loginWithLocal(ctx context.Context, credentials Credentials) (*core.AuthResponse, error) {
-	personID, hash, err := s.peopleRepository.FindCredentials(
-		ctx,
-		credentials.Provider(),
-		credentials.RegistrationID())
-
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
-	}
-
-	if !s.hasher.Compare(credentials.Identifier(), hash) {
-		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
-	}
-
-	return s.authorizePerson(ctx, personID)
-}
-
 func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUID) (*core.AuthResponse, error) {
 	customer, err := s.peopleRepository.FindByID(ctx, personID)
 
@@ -218,26 +219,6 @@ func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUI
 	}
 
 	return authResponse, nil
-}
-
-func (s *AuthServiceImpl) loginWithGoogle(ctx context.Context, token string) (*core.AuthResponse, error) {
-	claims, err := s.google.ValidateToken(token)
-
-	if err != nil {
-		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
-		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
-	}
-
-	log.Printf("[GOOGLE AUTH] Successfully validated Google token for Sub ID: %s (DisplayName: %s)", claims.Sub, claims.DisplayName)
-
-	personID, _, err := s.peopleRepository.FindCredentials(ctx, GOOGLE, claims.Sub)
-
-	if err != nil {
-		log.Printf("[GOOGLE AUTH ERROR] No user found for Google Sub ID: %s. To map this user, insert credentials with provider='GOOGLE' and registration_id='%s'", claims.Sub, claims.Sub)
-		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
-	}
-
-	return s.authorizePerson(ctx, personID)
 }
 
 func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing) (*core.AuthResponse, error) {

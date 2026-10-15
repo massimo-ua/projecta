@@ -17,7 +17,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 type mockRow struct {
@@ -429,14 +429,14 @@ func TestPgProjectRepository(t *testing.T) {
 
 	pID := uuid.New()
 	ownerID := uuid.New()
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
+	owner := &project.Owner{PersonID: ownerID, DisplayName: "John Doe"}
 	now := time.Now()
-	proj, _ := projecta.NewProject(pID, "Project A", "Desc", owner, now, now)
+	proj, _ := project.NewProject(pID, "Project A", "Desc", owner, now, now)
 
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
 
 	t.Run("FindOne unauthenticated", func(t *testing.T) {
-		_, err := repo.FindOne(context.Background(), projecta.ProjectFilter{})
+		_, err := repo.FindOne(context.Background(), project.ProjectFilter{})
 		if err == nil {
 			t.Errorf("expected unauthenticated error")
 		}
@@ -446,7 +446,7 @@ func TestPgProjectRepository(t *testing.T) {
 		mockDb := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", uuid.New().String(), "UAH"}}
 		ctx := withMockDb(authedCtx, mockDb)
 
-		p, err := repo.FindOne(ctx, projecta.ProjectFilter{ProjectID: pID, Name: "Project A"})
+		p, err := repo.FindOne(ctx, project.ProjectFilter{ProjectID: pID, Name: "Project A"})
 		if err != nil || p == nil {
 			t.Errorf("FindOne error: %v", err)
 		}
@@ -455,21 +455,21 @@ func TestPgProjectRepository(t *testing.T) {
 		sharedPersonID := uuid.New()
 		sharedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, sharedPersonID)
 		ctxShared := withMockDb(sharedCtx, mockDb)
-		pShared, err := repo.FindOne(ctxShared, projecta.ProjectFilter{ProjectID: pID})
+		pShared, err := repo.FindOne(ctxShared, project.ProjectFilter{ProjectID: pID})
 		if err != nil || !pShared.IsShared() {
 			t.Errorf("expected shared project")
 		}
 
 		mockDbErr := &mockPgDb{rowErr: pgx.ErrNoRows}
 		ctxErr := withMockDb(authedCtx, mockDbErr)
-		_, err = repo.FindOne(ctxErr, projecta.ProjectFilter{})
+		_, err = repo.FindOne(ctxErr, project.ProjectFilter{})
 		if err == nil {
 			t.Errorf("expected not found error")
 		}
 
 		mockDbQueryErr := &mockPgDb{rowErr: errors.New("db error")}
 		ctxQueryErr := withMockDb(authedCtx, mockDbQueryErr)
-		_, err = repo.FindOne(ctxQueryErr, projecta.ProjectFilter{})
+		_, err = repo.FindOne(ctxQueryErr, project.ProjectFilter{})
 		if err == nil {
 			t.Errorf("expected db error")
 		}
@@ -482,7 +482,7 @@ func TestPgProjectRepository(t *testing.T) {
 		}
 		ctx := withMockDb(authedCtx, mockDb)
 
-		p, err := repo.FindOne(ctx, projecta.ProjectFilter{ProjectID: pID})
+		p, err := repo.FindOne(ctx, project.ProjectFilter{ProjectID: pID})
 		if err != nil || p == nil {
 			t.Fatalf("FindOne error: %v", err)
 		}
@@ -507,13 +507,13 @@ func TestPgProjectRepository(t *testing.T) {
 		}
 
 		token := uuid.New()
-		projWithToken := projecta.ReconstituteProject(pID, "Project A", "Desc", owner, now, now, token, false, "UAH", nil)
+		projWithToken := project.ReconstituteProject(pID, "Project A", "Desc", owner, now, now, token, false, "UAH", nil)
 		err = repo.Create(ctx, projWithToken)
 		if err != nil {
 			t.Errorf("Create error with existing share token: %v", err)
 		}
 
-		projEmptyCurr := projecta.ReconstituteProject(pID, "Project A", "Desc", owner, now, now, token, false, "", nil)
+		projEmptyCurr := project.ReconstituteProject(pID, "Project A", "Desc", owner, now, now, token, false, "", nil)
 		err = repo.Create(ctx, projEmptyCurr)
 		if err != nil {
 			t.Errorf("Create error with empty currency: %v", err)
@@ -534,13 +534,13 @@ func TestPgProjectRepository(t *testing.T) {
 		mockDb := &mockPgDb{rowsData: [][]any{{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", uuid.New().String(), "UAH"}}}
 		ctx := withMockDb(authedCtx, mockDb)
 
-		projects, err := repo.Find(ctx, projecta.ProjectCollectionFilter{Name: "Project A", Pagination: core.Pagination{Limit: 10, Offset: 0}})
+		projects, err := repo.Find(ctx, project.ProjectCollectionFilter{Name: "Project A", Pagination: core.Pagination{Limit: 10, Offset: 0}})
 		if err != nil || len(projects) != 1 {
 			t.Errorf("Find error: %v", err)
 		}
 
 		// Unauthenticated
-		_, err = repo.Find(context.Background(), projecta.ProjectCollectionFilter{})
+		_, err = repo.Find(context.Background(), project.ProjectCollectionFilter{})
 		if err == nil {
 			t.Errorf("expected unauthenticated error")
 		}
@@ -548,7 +548,7 @@ func TestPgProjectRepository(t *testing.T) {
 		// Query error
 		mockDbErr := &mockPgDb{queryErr: errors.New("query error")}
 		ctxErr := withMockDb(authedCtx, mockDbErr)
-		_, err = repo.Find(ctxErr, projecta.ProjectCollectionFilter{})
+		_, err = repo.Find(ctxErr, project.ProjectCollectionFilter{})
 		if err == nil {
 			t.Errorf("expected query error")
 		}
@@ -652,9 +652,8 @@ func TestPgAssetRepository(t *testing.T) {
 	ownerID := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John"}
-	proj, _ := projecta.NewProject(pID, "Project", "Desc", owner, now, now)
-	ast := asset.NewAsset(astID, "Laptop", "Desc", proj, money.New(1000, money.USD), now, owner)
+	ownerRef := asset.OwnerRef{PersonID: ownerID, DisplayName: "John"}
+	ast := asset.NewAsset(astID, "Laptop", "Desc", pID, money.New(1000, money.USD), now, ownerRef)
 
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
 
@@ -663,13 +662,13 @@ func TestPgAssetRepository(t *testing.T) {
 		targetCurr := "USD"
 		mockDb := &mockPgDb{
 			rowVal: []any{
-				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
-				now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+				astID.String(), "Laptop", "Desc", pID.String(),
+				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
 				&targetPrice, &targetCurr, []string{"tag1"},
 			},
 			rowsData: [][]any{{
-				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
-				now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+				astID.String(), "Laptop", "Desc", pID.String(),
+				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
 				&targetPrice, &targetCurr, []string{"tag1"},
 			}},
 		}
@@ -691,8 +690,8 @@ func TestPgAssetRepository(t *testing.T) {
 		// Save update failure (exec error)
 		mockDbUpdErr := &mockPgDb{
 			rowVal: []any{
-				astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
-				now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+				astID.String(), "Laptop", "Desc", pID.String(),
+				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
 				&targetPrice, &targetCurr, []string{"tag1"},
 			},
 			execErr: errors.New("exec update error"),
@@ -751,7 +750,7 @@ func TestPgAssetRepository(t *testing.T) {
 	t.Run("toAssetFromPg test", func(t *testing.T) {
 		tp := int64(1000)
 		tc := "USD"
-		a, err := toAssetFromPg(astID.String(), "Laptop", "Desc", pID.String(), "Proj", "Desc", "USD", now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil, &tp, &tc, []string{"tag1"})
+		a, err := toAssetFromPg(astID.String(), "Laptop", "Desc", pID.String(), now, ownerID.String(), "J.D.", "ACTIVE", now, nil, &tp, &tc, []string{"tag1"})
 		if err != nil || a == nil {
 			t.Errorf("toAssetFromPg error: %v", err)
 		}
@@ -785,7 +784,7 @@ func TestPgAssetRepository(t *testing.T) {
 
 		mockDbProj := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D."}}
 		ctxProj := withMockDb(authedCtx, mockDbProj)
-		p, err := projRepo.FindOne(ctxProj, projecta.ProjectFilter{ProjectID: pID, Name: "Project A"})
+		p, err := projRepo.FindOne(ctxProj, project.ProjectFilter{ProjectID: pID, Name: "Project A"})
 		if err != nil || p == nil {
 			t.Errorf("FindOne project error: %v", err)
 		}
@@ -793,8 +792,8 @@ func TestPgAssetRepository(t *testing.T) {
 		targetPriceVal := int64(1000)
 		targetCurrVal := "USD"
 		mockDbAst := &mockPgDb{rowVal: []any{
-			astID.String(), "Laptop", "Desc", pID.String(), "Project", "Proj Desc", "USD",
-			now, ownerID.String(), "John", "J.D.", "ACTIVE", now, nil,
+			astID.String(), "Laptop", "Desc", pID.String(),
+			now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
 			&targetPriceVal, &targetCurrVal, []string{"tag1"},
 		}}
 		ctxAst := withMockDb(authedCtx, mockDbAst)

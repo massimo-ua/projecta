@@ -15,7 +15,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 // Mocks for web package tests
@@ -131,38 +131,38 @@ func (m *mockTokenProvider) ValidateRefreshToken(_ uuid.UUID, _ string) bool {
 }
 
 type mockProjectService struct {
-	project *projecta.Project
+	project *project.Project
 	err     error
 }
 
-func (m *mockProjectService) Find(_ context.Context, _ projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+func (m *mockProjectService) Find(_ context.Context, _ project.ProjectCollectionFilter) ([]*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return []*projecta.Project{m.project}, nil
+	return []*project.Project{m.project}, nil
 }
-func (m *mockProjectService) FindOne(_ context.Context, _ projecta.ProjectFilter) (*projecta.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectService) Create(_ context.Context, _ projecta.CreateProjectCommand) (*projecta.Project, error) {
+func (m *mockProjectService) FindOne(_ context.Context, _ project.ProjectFilter) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.project, nil
 }
-func (m *mockProjectService) Remove(_ context.Context, _ projecta.RemoveProjectCommand) error {
+func (m *mockProjectService) Create(_ context.Context, _ project.CreateProjectCommand) (*project.Project, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.project, nil
+}
+func (m *mockProjectService) Remove(_ context.Context, _ project.RemoveProjectCommand) error {
 	return m.err
 }
-func (m *mockProjectService) Update(_ context.Context, _ projecta.UpdateProjectCommand) (*projecta.Project, error) {
+func (m *mockProjectService) Update(_ context.Context, _ project.UpdateProjectCommand) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.project, nil
 }
-func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*projecta.Project, error) {
+func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -198,6 +198,12 @@ func (m *mockAssetService) CreateFromPayments(_ context.Context, _ asset.CreateA
 	}
 	return m.asset, nil
 }
+func (m *mockAssetService) CreateFromInvestments(_ context.Context, _ asset.CreateAssetFromInvestmentsCommand) (*asset.Asset, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.asset, nil
+}
 func (m *mockAssetService) Remove(_ context.Context, _ asset.RemoveAssetCommand) error {
 	return m.err
 }
@@ -222,9 +228,10 @@ func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenC
 
 func TestWebHandlersAndEndpoints(t *testing.T) {
 	personID := uuid.New()
-	owner := &projecta.Owner{PersonID: personID, DisplayName: "John Doe"}
-	proj, _ := projecta.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
-	ast := asset.NewAsset(uuid.New(), "Laptop", "Desc", proj, money.New(1000, money.USD), time.Now(), owner)
+	owner := &project.Owner{PersonID: personID, DisplayName: "John Doe"}
+	ownerRef := asset.OwnerRef{PersonID: personID, DisplayName: "John Doe"}
+	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
+	ast := asset.NewAsset(uuid.New(), "Laptop", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef)
 	cred, _ := people.NewCredentials("LOCAL", "john@example.com", "secret")
 	person, _ := people.NewPerson(personID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -425,8 +432,8 @@ func TestRoleBasedAccessControl(t *testing.T) {
 	cred, _ := people.NewCredentials(people.LOCAL, "admin@example.com", "pass")
 	person, _ := people.NewPerson(personID, "Admin", "User", "Admin", []people.Credentials{cred}, people.RoleAdministrator)
 
-	owner := &projecta.Owner{PersonID: personID, DisplayName: "Admin User", CanHaveProjects: true}
-	proj, _ := projecta.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
+	owner := &project.Owner{PersonID: personID, DisplayName: "Admin User", CanHaveProjects: true}
+	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
 
 	peopleSvc := &mockPeopleService{user: person}
 	authSvc := &mockAuthService{}

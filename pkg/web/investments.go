@@ -14,7 +14,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -53,8 +53,8 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 	}
 
 	homeCurrency := "UAH"
-	if inv.Project() != nil && inv.Project().MainCurrency() != "" {
-		homeCurrency = inv.Project().MainCurrency()
+	if inv.HomeCurrency() != "" {
+		homeCurrency = inv.HomeCurrency()
 	}
 
 	homeAmount := int64(0)
@@ -72,7 +72,7 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 	}
 
 	var contribDTO OwnerDTO
-	if inv.Contributor() != nil {
+	if inv.Contributor().PersonID != uuid.Nil {
 		contribDTO = OwnerDTO{
 			PersonID:    inv.Contributor().PersonID.String(),
 			DisplayName: inv.Contributor().DisplayName,
@@ -87,8 +87,8 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 	}
 
 	var projectID string
-	if inv.Project() != nil {
-		projectID = inv.Project().ID().String()
+	if inv.ProjectID() != uuid.Nil {
+		projectID = inv.ProjectID().String()
 	}
 
 	var hourlyRateVal *int64
@@ -543,7 +543,7 @@ func makeUpdateInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 
 func makeRemoveInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd, ok := request.(projecta.RemoveProjectResourceCommand)
+		cmd, ok := request.(project.RemoveProjectResourceCommand)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}

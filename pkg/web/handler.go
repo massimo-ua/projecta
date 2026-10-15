@@ -12,7 +12,8 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
+	"gitlab.com/massimo-ua/projecta/internal/statement"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"net/http"
 )
@@ -54,8 +55,8 @@ func MakeHTTPHandler(
 	authTokenProvider core.AuthTokenProvider,
 	authService people.AuthService,
 	invitationService people.InvitationService,
-	projectService projecta.ProjectService,
-	statementService projecta.StatementService,
+	projectService project.ProjectService,
+	statementService statement.Service,
 	assetService asset.Service,
 	rateProvider currency.CurrencyRateProvider,
 	investmentService ...investment.Service,

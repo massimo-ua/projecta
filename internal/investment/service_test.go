@@ -10,7 +10,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 type mockDb struct{}
@@ -75,23 +75,23 @@ func (m *mockAssetRepo) FindOne(ctx context.Context, filter asset.Filter) (*asse
 }
 
 type mockProjectRepo struct {
-	project *projecta.Project
+	project *project.Project
 	err     error
 }
 
-func (m *mockProjectRepo) Create(ctx context.Context, p *projecta.Project) error { return nil }
-func (m *mockProjectRepo) Update(ctx context.Context, p *projecta.Project) error { return nil }
-func (m *mockProjectRepo) Remove(ctx context.Context, p *projecta.Project) error { return nil }
-func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
+func (m *mockProjectRepo) Create(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockProjectRepo) Update(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockProjectRepo) Remove(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
 	return m.project, nil
 }
 func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
 	return nil
 }
-func (m *mockProjectRepo) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+func (m *mockProjectRepo) Find(ctx context.Context, filter project.ProjectCollectionFilter) ([]*project.Project, error) {
 	return nil, nil
 }
-func (m *mockProjectRepo) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
+func (m *mockProjectRepo) FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -99,11 +99,11 @@ func (m *mockProjectRepo) FindOne(ctx context.Context, filter projecta.ProjectFi
 }
 
 type mockPeopleService struct {
-	owner *projecta.Owner
+	owner *project.Owner
 	err   error
 }
 
-func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (*projecta.Owner, error) {
+func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (*project.Owner, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -114,9 +114,10 @@ func TestInvestmentService(t *testing.T) {
 	personID := uuid.New()
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, personID)
 
-	owner := &projecta.Owner{PersonID: personID, DisplayName: "Alex"}
-	project, _ := projecta.NewProject(uuid.New(), "Project Alpha", "Description", owner, time.Now(), time.Now())
-	existingAsset := asset.NewAsset(uuid.New(), "Vehicle", "Car", project, money.New(10000, "USD"), time.Now(), owner)
+	owner := &project.Owner{PersonID: personID, DisplayName: "Alex"}
+	ownerRef := asset.OwnerRef{PersonID: personID, DisplayName: "Alex"}
+	project, _ := project.NewProject(uuid.New(), "Project Alpha", "Description", owner, time.Now(), time.Now())
+	existingAsset := asset.NewAsset(uuid.New(), "Vehicle", "Car", project.ID(), money.New(10000, "USD"), time.Now(), ownerRef)
 
 	t.Run("Create success (Money, Time, Goods)", func(t *testing.T) {
 		repo := &mockInvestmentRepo{}
@@ -280,10 +281,11 @@ func TestInvestmentService(t *testing.T) {
 	t.Run("Update and Remove", func(t *testing.T) {
 		inv, err := investment.NewInvestment(
 			uuid.New(),
-			project,
+			project.ID(),
+			"USD",
 			existingAsset.ID(),
 			existingAsset.Name(),
-			owner,
+			investment.ContributorRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
 			investment.ResourceTypeMoney,
 			money.New(100, "USD"),
 			nil, nil, nil, "", "",
@@ -347,7 +349,7 @@ func TestInvestmentService(t *testing.T) {
 	})
 
 	t.Run("MultiAssetInvestment", func(t *testing.T) {
-		asset2 := asset.NewAsset(uuid.New(), "Second Asset", "Car", project, money.New(0, "USD"), time.Now(), owner)
+		asset2 := asset.NewAsset(uuid.New(), "Second Asset", "Car", project.ID(), money.New(0, "USD"), time.Now(), ownerRef)
 		assetsMap := map[uuid.UUID]*asset.Asset{
 			existingAsset.ID(): existingAsset,
 			asset2.ID():        asset2,
