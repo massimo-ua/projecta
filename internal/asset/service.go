@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -22,13 +22,13 @@ const (
 
 // ProjectReader is a consumer-owned interface providing read access to projects.
 type ProjectReader interface {
-	FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error)
+	FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error)
 }
 
 type ServiceImpl struct {
 	db           core.DbConnection
 	assets       Repository
-	people       projecta.PeopleService
+	people       project.PeopleService
 	projects     ProjectReader
 	rateProvider currency.CurrencyRateProvider
 	investments  InvestmentSource
@@ -41,7 +41,7 @@ func (s *ServiceImpl) SetInvestmentSource(is InvestmentSource) {
 func NewService(
 	db core.DbConnection,
 	assets Repository,
-	people projecta.PeopleService,
+	people project.PeopleService,
 	projects ProjectReader,
 	investmentSource InvestmentSource,
 	rateProvider ...currency.CurrencyRateProvider,
@@ -103,8 +103,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
-	if err != nil {
+	if _, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID}); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
@@ -127,10 +126,10 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		uuid.New(),
 		command.Name,
 		command.Description,
-		project,
+		command.ProjectID,
 		price,
 		startDate,
-		owner,
+		OwnerRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
 		status,
 		startDate,
 		command.CompletedDate,
@@ -182,7 +181,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	return anAsset, nil
 }
 
-func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAssetFromPaymentsCommand) (*Asset, error) {
+func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateAssetFromInvestmentsCommand) (*Asset, error) {
 	personID, err := core.AuthGuard(ctx)
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToCreateAsset, err)
@@ -192,8 +191,8 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
-	if len(command.PaymentIDs) == 0 {
-		return nil, exceptions.NewValidationException("at least one payment must be selected", nil)
+	if len(command.InvestmentIDs) == 0 {
+		return nil, exceptions.NewValidationException("at least one investment must be selected", nil)
 	}
 
 	if strings.TrimSpace(command.Name) == "" {
@@ -205,7 +204,7 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
+	project, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
@@ -214,11 +213,11 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		return nil, exceptions.NewInternalException("investment source not configured", nil)
 	}
 
-	invItems, err := s.investments.FindInvestments(ctx, command.ProjectID, command.PaymentIDs)
+	invItems, err := s.investments.FindInvestments(ctx, command.ProjectID, command.InvestmentIDs)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
-	if len(invItems) != len(command.PaymentIDs) {
+	if len(invItems) != len(command.InvestmentIDs) {
 		return nil, exceptions.NewValidationException("one or more investments not found in project", nil)
 	}
 
@@ -295,10 +294,10 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		uuid.New(),
 		command.Name,
 		command.Description,
-		project,
+		command.ProjectID,
 		price,
 		acquiredAt,
-		owner,
+		OwnerRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
 		AssetStatusActive,
 		acquiredAt,
 		nil,
@@ -311,11 +310,24 @@ func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAsse
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	if err = s.investments.AssignToAsset(ctx, anAsset.ID(), command.PaymentIDs); err != nil {
+	if err = s.investments.AssignToAsset(ctx, anAsset.ID(), command.InvestmentIDs); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
 	return anAsset, nil
+}
+
+// Deprecated: Use CreateFromInvestments instead.
+func (s *ServiceImpl) CreateFromPayments(ctx context.Context, command CreateAssetFromPaymentsCommand) (*Asset, error) {
+	return s.CreateFromInvestments(ctx, CreateAssetFromInvestmentsCommand{
+		ProjectID:      command.ProjectID,
+		InvestmentIDs:  command.PaymentIDs,
+		Name:           command.Name,
+		Description:    command.Description,
+		TypeID:         command.TypeID,
+		AcquiredAt:     command.AcquiredAt,
+		TargetCurrency: command.TargetCurrency,
+	})
 }
 
 func (s *ServiceImpl) Remove(ctx context.Context, command RemoveAssetCommand) error {
@@ -338,7 +350,7 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		return exceptions.NewUnauthorizedException(failedToUpdateAsset, err)
 	}
 
-	_, err = s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
+	_, err = s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
 	if err != nil {
 		return exceptions.NewInternalException(failedToUpdateAsset, err)
 	}
@@ -479,8 +491,7 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 		return nil, exceptions.NewInternalException("failed to group assets", err)
 	}
 
-	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
-	if err != nil {
+	if _, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID}); err != nil {
 		return nil, exceptions.NewInternalException("failed to group assets", err)
 	}
 
@@ -502,10 +513,10 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 		parentID,
 		command.Name,
 		command.Description,
-		project,
+		command.ProjectID,
 		money.New(0, "UAH"),
 		now,
-		owner,
+		OwnerRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
 		AssetStatusActive,
 		now,
 		nil,

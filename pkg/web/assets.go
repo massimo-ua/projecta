@@ -15,7 +15,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -61,10 +61,10 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 	if a == nil {
 		return AssetDTO{}
 	}
-	projDTO := toProjectDTO(a.Project())
-	homeCurrency := projDTO.MainCurrency
-	if homeCurrency == "" {
-		homeCurrency = "UAH"
+	homeCurrency := "UAH"
+	projDTO := ProjectDTO{
+		ProjectID:    a.ProjectID().String(),
+		MainCurrency: homeCurrency,
 	}
 
 	priceAmount := int64(0)
@@ -718,7 +718,7 @@ func makeUpdateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 
 func makeRemoveAssetEndpoint(svc asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command, ok := request.(projecta.RemoveProjectResourceCommand)
+		command, ok := request.(project.RemoveProjectResourceCommand)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}

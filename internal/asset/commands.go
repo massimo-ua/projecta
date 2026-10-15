@@ -22,6 +22,17 @@ type CreateAssetCommand struct {
 	Tags          []string
 }
 
+type CreateAssetFromInvestmentsCommand struct {
+	ProjectID      uuid.UUID
+	InvestmentIDs  []uuid.UUID
+	Name           string
+	Description    string
+	TypeID         uuid.UUID
+	AcquiredAt     time.Time
+	TargetCurrency string
+}
+
+// Deprecated: Use CreateAssetFromInvestmentsCommand instead.
 type CreateAssetFromPaymentsCommand struct {
 	ProjectID      uuid.UUID
 	PaymentIDs     []uuid.UUID

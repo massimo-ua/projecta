@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 type projectRecord struct {
@@ -46,7 +46,7 @@ func (r *projectRecord) scanFields() []any {
 	}
 }
 
-func (r *projectRecord) toProject(isShared bool, sharedParticipants []projecta.Participant) (*projecta.Project, error) {
+func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Participant) (*project.Project, error) {
 	pID, err := uuid.Parse(r.projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project id: %w", err)
@@ -61,14 +61,14 @@ func (r *projectRecord) toProject(isShared bool, sharedParticipants []projecta.P
 		dispName = strings.TrimSpace(r.firstName + " " + r.lastName)
 	}
 
-	owner := &projecta.Owner{
+	owner := &project.Owner{
 		PersonID:    oID,
 		DisplayName: dispName,
 	}
 
-	var participants []projecta.Participant
+	var participants []project.Participant
 	if dispName != "" {
-		if op, err := projecta.NewParticipant(dispName); err == nil {
+		if op, err := project.NewParticipant(dispName); err == nil {
 			participants = append(participants, op)
 		}
 	}
@@ -91,7 +91,7 @@ func (r *projectRecord) toProject(isShared bool, sharedParticipants []projecta.P
 		curr = "UAH"
 	}
 
-	return projecta.ReconstituteProject(
+	return project.ReconstituteProject(
 		pID,
 		r.name,
 		r.description,
@@ -115,7 +115,7 @@ func NewPgProjectRepository(db *PgDbConnection) *PgProjectRepository {
 	}
 }
 
-func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error) {
+func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -174,7 +174,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter projecta.Proje
 	return rec.toProject(isShared, sharedParts)
 }
 
-func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.UUID) (*projecta.Project, error) {
+func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
 	if token == uuid.Nil {
 		return nil, exceptions.NewValidationException("invalid share token", nil)
 	}
@@ -220,7 +220,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 	return rec.toProject(false, sharedParts)
 }
 
-func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID uuid.UUID) ([]projecta.Participant, error) {
+func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID uuid.UUID) ([]project.Participant, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_project_shares")
 	qb.Select(
@@ -240,7 +240,7 @@ func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID u
 	}
 	defer rows.Close()
 
-	var participants []projecta.Participant
+	var participants []project.Participant
 	for rows.Next() {
 		var (
 			firstName   string
@@ -258,7 +258,7 @@ func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID u
 		}
 
 		if name != "" {
-			participant, err := projecta.NewParticipant(name)
+			participant, err := project.NewParticipant(name)
 			if err == nil {
 				participants = append(participants, participant)
 			}
@@ -281,7 +281,7 @@ func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID u
 	return err
 }
 
-func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Project) error {
+func (r *PgProjectRepository) Create(ctx context.Context, project *project.Project) error {
 	mainCurrency := project.MainCurrency()
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
@@ -317,7 +317,7 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *projecta.Proj
 	return err
 }
 
-func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Project) error {
+func (r *PgProjectRepository) Update(ctx context.Context, project *project.Project) error {
 	mainCurrency := project.MainCurrency()
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
@@ -343,7 +343,7 @@ func (r *PgProjectRepository) Update(ctx context.Context, project *projecta.Proj
 	return err
 }
 
-func (r *PgProjectRepository) Remove(ctx context.Context, project *projecta.Project) error {
+func (r *PgProjectRepository) Remove(ctx context.Context, project *project.Project) error {
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_projects")
 	qb.Where(qb.Equal("project_id", project.ID().String()))
@@ -356,7 +356,7 @@ func (r *PgProjectRepository) Remove(ctx context.Context, project *projecta.Proj
 	return err
 }
 
-func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectCollectionFilter) ([]*projecta.Project, error) {
+func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCollectionFilter) ([]*project.Project, error) {
 	personID, err := core.AuthGuard(ctx)
 
 	if err != nil {
@@ -399,7 +399,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter projecta.ProjectC
 
 	defer rows.Close()
 
-	var projects []*projecta.Project
+	var projects []*project.Project
 
 	for rows.Next() {
 		var rec projectRecord

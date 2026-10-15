@@ -22,6 +22,54 @@ func NewPgInvitationRepository(db *PgDbConnection) *PgInvitationRepository {
 	}
 }
 
+type invitationRecord struct {
+	id          string
+	email       string
+	codeHash    string
+	expiresAt   time.Time
+	createdBy   string
+	personID    types.NullString
+	status      string
+	createdAt   time.Time
+	completedAt types.NullTime
+}
+
+func (rec *invitationRecord) toInvitation() (*people.Invitation, error) {
+	id, err := uuid.Parse(rec.id)
+	if err != nil {
+		return nil, exceptions.NewInternalException("invalid invitation id", err)
+	}
+
+	createdByID, err := uuid.Parse(rec.createdBy)
+	if err != nil {
+		return nil, exceptions.NewInternalException("invalid created_by id", err)
+	}
+
+	var pID *uuid.UUID
+	if rec.personID.Valid && rec.personID.String != "" {
+		if parsedPID, err := uuid.Parse(rec.personID.String); err == nil {
+			pID = &parsedPID
+		}
+	}
+
+	var compAt *time.Time
+	if rec.completedAt.Valid {
+		compAt = &rec.completedAt.Time
+	}
+
+	return people.ReconstituteInvitation(
+		id,
+		rec.email,
+		rec.codeHash,
+		rec.expiresAt,
+		createdByID,
+		pID,
+		people.InvitationStatus(rec.status),
+		rec.createdAt,
+		compAt,
+	), nil
+}
+
 func (r *PgInvitationRepository) Create(ctx context.Context, inv *people.Invitation) error {
 	var personIDVal *string
 	if inv.PersonID() != nil {
@@ -50,28 +98,18 @@ func (r *PgInvitationRepository) Create(ctx context.Context, inv *people.Invitat
 }
 
 func (r *PgInvitationRepository) scanInvitation(row pgx.Row) (*people.Invitation, error) {
-	var (
-		idStr       string
-		email       string
-		codeHash    string
-		expiresAt   time.Time
-		createdBy   string
-		personID    types.NullString
-		status      string
-		createdAt   time.Time
-		completedAt types.NullTime
-	)
+	var rec invitationRecord
 
 	err := row.Scan(
-		&idStr,
-		&email,
-		&codeHash,
-		&expiresAt,
-		&createdBy,
-		&personID,
-		&status,
-		&createdAt,
-		&completedAt,
+		&rec.id,
+		&rec.email,
+		&rec.codeHash,
+		&rec.expiresAt,
+		&rec.createdBy,
+		&rec.personID,
+		&rec.status,
+		&rec.createdAt,
+		&rec.completedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -80,40 +118,7 @@ func (r *PgInvitationRepository) scanInvitation(row pgx.Row) (*people.Invitation
 		return nil, exceptions.NewInternalException("failed to scan invitation", err)
 	}
 
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, exceptions.NewInternalException("invalid invitation id", err)
-	}
-
-	createdByID, err := uuid.Parse(createdBy)
-	if err != nil {
-		return nil, exceptions.NewInternalException("invalid created_by id", err)
-	}
-
-	var pID *uuid.UUID
-	if personID.Valid && personID.String != "" {
-		parsedPID, err := uuid.Parse(personID.String)
-		if err == nil {
-			pID = &parsedPID
-		}
-	}
-
-	var compAt *time.Time
-	if completedAt.Valid {
-		compAt = &completedAt.Time
-	}
-
-	return people.NewInvitation(
-		id,
-		email,
-		codeHash,
-		expiresAt,
-		createdByID,
-		pID,
-		people.InvitationStatus(status),
-		createdAt,
-		compAt,
-	)
+	return rec.toInvitation()
 }
 
 func (r *PgInvitationRepository) FindByID(ctx context.Context, id uuid.UUID) (*people.Invitation, error) {
@@ -154,64 +159,22 @@ func (r *PgInvitationRepository) FindByCreator(ctx context.Context, creatorID uu
 
 	var list []*people.Invitation
 	for rows.Next() {
-		var (
-			idStr       string
-			email       string
-			codeHash    string
-			expiresAt   time.Time
-			createdBy   string
-			personID    types.NullString
-			status      string
-			createdAt   time.Time
-			completedAt types.NullTime
-		)
-
+		var rec invitationRecord
 		if err := rows.Scan(
-			&idStr,
-			&email,
-			&codeHash,
-			&expiresAt,
-			&createdBy,
-			&personID,
-			&status,
-			&createdAt,
-			&completedAt,
+			&rec.id,
+			&rec.email,
+			&rec.codeHash,
+			&rec.expiresAt,
+			&rec.createdBy,
+			&rec.personID,
+			&rec.status,
+			&rec.createdAt,
+			&rec.completedAt,
 		); err != nil {
 			return nil, exceptions.NewInternalException("failed to scan invitation", err)
 		}
 
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			continue
-		}
-		cByID, err := uuid.Parse(createdBy)
-		if err != nil {
-			continue
-		}
-
-		var pID *uuid.UUID
-		if personID.Valid && personID.String != "" {
-			if parsedPID, err := uuid.Parse(personID.String); err == nil {
-				pID = &parsedPID
-			}
-		}
-
-		var compAt *time.Time
-		if completedAt.Valid {
-			compAt = &completedAt.Time
-		}
-
-		inv, err := people.NewInvitation(
-			id,
-			email,
-			codeHash,
-			expiresAt,
-			cByID,
-			pID,
-			people.InvitationStatus(status),
-			createdAt,
-			compAt,
-		)
+		inv, err := rec.toInvitation()
 		if err == nil {
 			list = append(list, inv)
 		}

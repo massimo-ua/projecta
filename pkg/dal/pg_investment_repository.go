@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 var ErrFailedToSaveInvestment = errors.New("failed to save investment")
@@ -31,7 +30,7 @@ func NewPgInvestmentRepository(conn *PgDbConnection) *PgInvestmentRepository {
 func (r *PgInvestmentRepository) Save(ctx context.Context, inv *investment.Investment) error {
 	_, err := r.FindOne(ctx, investment.Filter{
 		ID:        inv.ID(),
-		ProjectID: inv.Project().ID(),
+		ProjectID: inv.ProjectID(),
 	})
 
 	if err != nil {
@@ -81,7 +80,7 @@ func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Inv
 
 	qb.Values(
 		inv.ID().String(),
-		inv.Project().ID().String(),
+		inv.ProjectID().String(),
 		inv.PrimaryAssetID().String(),
 		inv.Contributor().PersonID.String(),
 		inv.ResourceType().String(),
@@ -142,7 +141,7 @@ func (r *PgInvestmentRepository) update(ctx context.Context, inv *investment.Inv
 		qb.Assign("tags", inv.Tags()),
 	)
 	qb.Where(qb.Equal("investment_id", inv.ID().String()))
-	qb.Where(qb.Equal("project_id", inv.Project().ID().String()))
+	qb.Where(qb.Equal("project_id", inv.ProjectID().String()))
 
 	sql, args := qb.Build()
 	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
@@ -223,7 +222,7 @@ func (r *PgInvestmentRepository) Remove(ctx context.Context, inv *investment.Inv
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_investments")
 	qb.Where(qb.Equal("investment_id", inv.ID().String()))
-	qb.Where(qb.Equal("project_id", inv.Project().ID().String()))
+	qb.Where(qb.Equal("project_id", inv.ProjectID().String()))
 
 	sql, args := qb.Build()
 	res, err := r.db.Exec(ctx, sql, args...)
@@ -269,7 +268,8 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 
 	inv := investment.ReconstituteInvestment(
 		rec.id,
-		rec.project,
+		rec.projectID,
+		rec.homeCurrency,
 		rec.primaryAssetID,
 		rec.primaryAssetName,
 		allocs,
@@ -350,7 +350,8 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 		}
 		inv := investment.ReconstituteInvestment(
 			rec.id,
-			rec.project,
+			rec.projectID,
+			rec.homeCurrency,
 			rec.primaryAssetID,
 			rec.primaryAssetName,
 			allocs,
@@ -406,14 +407,10 @@ func setupInvestmentSelect(qb *sqlbuilder.SelectBuilder) {
 	qb.Select(
 		"projecta_investments.investment_id",
 		"projecta_investments.project_id",
-		"projecta_projects.name",
-		"projecta_projects.description",
 		"projecta_investments.asset_id",
 		"projecta_assets.name",
-		"projecta_assets.description",
 		"projecta_investments.contributor_id",
-		"people.first_name",
-		qb.As("COALESCE(people.display_name, '')", "display_name"),
+		qb.As("COALESCE(people.display_name, people.first_name, '')", "display_name"),
 		"projecta_investments.resource_type",
 		"projecta_investments.amount",
 		"projecta_investments.currency",
@@ -427,7 +424,6 @@ func setupInvestmentSelect(qb *sqlbuilder.SelectBuilder) {
 		"projecta_investments.tags",
 	)
 
-	qb.Join("projecta_projects", "projecta_projects.project_id = projecta_investments.project_id")
 	qb.Join("projecta_assets", "projecta_assets.asset_id = projecta_investments.asset_id")
 	qb.Join("people", "people.person_id = projecta_investments.contributor_id")
 }
@@ -462,10 +458,11 @@ type scannable interface {
 
 type investmentRecord struct {
 	id               uuid.UUID
-	project          *projecta.Project
+	projectID        uuid.UUID
+	homeCurrency     string
 	primaryAssetID   uuid.UUID
 	primaryAssetName string
-	contributor      *projecta.Owner
+	contributor      investment.ContributorRef
 	resourceType     investment.ResourceType
 	amount           *money.Money
 	timeHours        *float64
@@ -482,13 +479,9 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 	var (
 		invID         string
 		projID        string
-		projName      string
-		projDesc      string
 		astID         string
 		astName       string
-		astDesc       string
 		contribID     string
-		contribFirst  string
 		contribDisp   string
 		resType       string
 		amount        int64
@@ -506,13 +499,9 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 	err := s.Scan(
 		&invID,
 		&projID,
-		&projName,
-		&projDesc,
 		&astID,
 		&astName,
-		&astDesc,
 		&contribID,
-		&contribFirst,
 		&contribDisp,
 		&resType,
 		&amount,
@@ -530,22 +519,8 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 		return nil, err
 	}
 
-	proj := projecta.ReconstituteProject(
-		uuid.MustParse(projID),
-		projName,
-		projDesc,
-		nil,
-		time.Time{},
-		time.Time{},
-		uuid.Nil,
-		false,
-		currencyCode,
-		nil,
-	)
-
-	contrib := &projecta.Owner{
+	contrib := investment.ContributorRef{
 		PersonID:    uuid.MustParse(contribID),
-		FirstName:   contribFirst,
 		DisplayName: contribDisp,
 	}
 
@@ -572,7 +547,8 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 
 	return &investmentRecord{
 		id:               uuid.MustParse(invID),
-		project:          proj,
+		projectID:        uuid.MustParse(projID),
+		homeCurrency:     currencyCode,
 		primaryAssetID:   parsedAstID,
 		primaryAssetName: astName,
 		contributor:      contrib,

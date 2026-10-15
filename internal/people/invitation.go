@@ -140,3 +140,27 @@ func NewInvitation(
 		completedAt: completedAt,
 	}, nil
 }
+
+func ReconstituteInvitation(
+	id uuid.UUID,
+	email string,
+	codeHash string,
+	expiresAt time.Time,
+	createdBy uuid.UUID,
+	personID *uuid.UUID,
+	status InvitationStatus,
+	createdAt time.Time,
+	completedAt *time.Time,
+) *Invitation {
+	return &Invitation{
+		id:          id,
+		email:       email,
+		codeHash:    codeHash,
+		expiresAt:   expiresAt,
+		createdBy:   createdBy,
+		personID:    personID,
+		status:      status,
+		createdAt:   createdAt,
+		completedAt: completedAt,
+	}
+}

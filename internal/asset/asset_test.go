@@ -7,19 +7,17 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 func TestAssetGettersAndSetters(t *testing.T) {
 	id := uuid.New()
 	ownerID := uuid.New()
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
+	owner := asset.OwnerRef{PersonID: ownerID, DisplayName: "John Doe"}
 	projectID := uuid.New()
 	now := time.Now()
-	project, _ := projecta.NewProject(projectID, "Test Project", "Desc", owner, now, now)
 	price := money.New(1000, money.USD)
 
-	a := asset.NewAsset(id, "Laptop", "Work Laptop", project, price, now, owner)
+	a := asset.NewAsset(id, "Laptop", "Work Laptop", projectID, price, now, owner)
 
 	if a.ID() != id {
 		t.Errorf("ID mismatch: got %v", a.ID())
@@ -30,8 +28,8 @@ func TestAssetGettersAndSetters(t *testing.T) {
 	if a.Description() != "Work Laptop" {
 		t.Errorf("Description mismatch: got %s", a.Description())
 	}
-	if a.Project() != project {
-		t.Errorf("Project mismatch")
+	if a.ProjectID() != projectID {
+		t.Errorf("ProjectID mismatch")
 	}
 	if a.Price() != price {
 		t.Errorf("Price mismatch")
@@ -44,14 +42,14 @@ func TestAssetGettersAndSetters(t *testing.T) {
 	}
 
 	// Setters
-	newProject, _ := projecta.NewProject(uuid.New(), "New Project", "Desc", owner, now, now)
+	newProjectID := uuid.New()
 	newPrice := money.New(2000, money.USD)
 	newDate := now.Add(time.Hour)
-	newOwner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Jane Doe"}
+	newOwner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "Jane Doe"}
 
 	a.SetName("Desktop")
 	a.SetDescription("Gaming Desktop")
-	a.SetProject(newProject)
+	a.SetProjectID(newProjectID)
 	a.SetPrice(newPrice)
 	a.SetAcquiredAt(newDate)
 	a.SetOwner(newOwner)
@@ -59,7 +57,7 @@ func TestAssetGettersAndSetters(t *testing.T) {
 	if a.Name() != "Desktop" || a.Description() != "Gaming Desktop" {
 		t.Errorf("Updated fields mismatch")
 	}
-	if a.Project() != newProject || a.Price() != newPrice || !a.AcquiredAt().Equal(newDate) || a.Owner() != newOwner {
+	if a.ProjectID() != newProjectID || a.Price() != newPrice || !a.AcquiredAt().Equal(newDate) || a.Owner() != newOwner {
 		t.Errorf("Updated references mismatch")
 	}
 

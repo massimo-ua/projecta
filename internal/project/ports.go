@@ -1,4 +1,4 @@
-package projecta
+package project
 
 import (
 	"context"

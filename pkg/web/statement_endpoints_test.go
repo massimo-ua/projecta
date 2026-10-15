@@ -11,26 +11,26 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
 type mockStatementService struct {
-	res *projecta.StatementParseResult
+	res *statement.StatementParseResult
 	err error
 }
 
-func (m *mockStatementService) ParseStatement(_ context.Context, _ uuid.UUID, _ []byte) (*projecta.StatementParseResult, error) {
+func (m *mockStatementService) ParseStatement(_ context.Context, _ uuid.UUID, _ []byte) (*statement.StatementParseResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	if m.res != nil {
 		return m.res, nil
 	}
-	return &projecta.StatementParseResult{
+	return &statement.StatementParseResult{
 		Account:      "ACC123",
 		Currency:     "PLN",
 		Period:       "01.09.2026 - 30.09.2026",
-		Transactions: []projecta.StatementParseItem{},
+		Transactions: []statement.StatementParseItem{},
 	}, nil
 }
 
@@ -115,7 +115,7 @@ func TestMakeParseStatementEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		stmtRes, ok := res.(*projecta.StatementParseResult)
+		stmtRes, ok := res.(*statement.StatementParseResult)
 		if !ok || stmtRes.Account != "ACC123" {
 			t.Errorf("unexpected result: %v", res)
 		}
