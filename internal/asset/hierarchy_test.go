@@ -7,14 +7,13 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 func makeTestAsset(name string) *asset.Asset {
 	id := uuid.New()
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "User"}
-	project, _ := projecta.NewProject(uuid.New(), "Project", "", owner, time.Now(), time.Now())
-	return asset.NewAsset(id, name, "", project, money.New(0, "UAH"), time.Now(), owner)
+	owner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "User"}
+	projectID := uuid.New()
+	return asset.NewAsset(id, name, "", projectID, money.New(0, "UAH"), time.Now(), owner)
 }
 
 func TestHierarchy_SelfReferenceAndInvalidShare(t *testing.T) {

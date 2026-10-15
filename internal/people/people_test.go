@@ -791,3 +791,36 @@ func TestCustomerService_UpdateDisplayName(t *testing.T) {
 	})
 }
 
+func TestReconstitutePersonAndImmutability(t *testing.T) {
+	id := uuid.New()
+	dn, _ := people.NewDisplayName("Test Display")
+	cred, _ := people.NewCredentials(people.LOCAL, "test@example.com", "test@example.com")
+	roles := []people.Role{people.RoleUser, people.RoleAdministrator}
+
+	p := people.ReconstitutePerson(id, "John", "Doe", dn, []people.Credentials{cred}, roles)
+	if p.ID() != id || p.FirstName() != "John" || p.LastName() != "Doe" || p.DisplayName() != "Test Display" {
+		t.Errorf("reconstitute failed to set basic fields correctly: %+v", p)
+	}
+	if len(p.Roles()) != 2 || !p.IsUser() || !p.IsAdministrator() {
+		t.Errorf("reconstitute failed to set roles: %v", p.Roles())
+	}
+	if len(p.Identities()) != 1 || p.Identities()[0].Identifier() != "test@example.com" {
+		t.Errorf("reconstitute failed to set identities: %v", p.Identities())
+	}
+
+	// Verify Roles slice immutability
+	rSlice := p.Roles()
+	rSlice[0] = "MODIFIED"
+	if p.Roles()[0] == "MODIFIED" {
+		t.Errorf("Roles() returned mutable slice reference")
+	}
+
+	// Verify Identities slice immutability
+	idSlice := p.Identities()
+	idSlice[0] = people.Credentials{}
+	if p.Identities()[0].Identifier() == "" {
+		t.Errorf("Identities() returned mutable slice reference")
+	}
+}
+
+

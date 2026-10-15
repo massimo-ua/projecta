@@ -10,7 +10,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 const (
@@ -26,7 +26,7 @@ type AssetReader interface {
 
 // ProjectReader is a consumer-owned interface providing read access to projects.
 type ProjectReader interface {
-	FindOne(ctx context.Context, filter projecta.ProjectFilter) (*projecta.Project, error)
+	FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error)
 }
 
 type ServiceImpl struct {
@@ -34,7 +34,7 @@ type ServiceImpl struct {
 	investments Repository
 	assets      AssetReader
 	projects    ProjectReader
-	people      projecta.PeopleService
+	people      project.PeopleService
 }
 
 func NewService(
@@ -42,7 +42,7 @@ func NewService(
 	investments Repository,
 	assets AssetReader,
 	projects ProjectReader,
-	people projecta.PeopleService,
+	people project.PeopleService,
 ) *ServiceImpl {
 	return &ServiceImpl{
 		db:          db,
@@ -76,7 +76,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
+	project, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
@@ -93,10 +93,11 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 
 	inv, err := NewInvestment(
 		uuid.New(),
-		project,
+		project.ID(),
+		project.MainCurrency(),
 		primaryID,
 		primaryName,
-		owner,
+		ContributorRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
 		resType,
 		command.Amount,
 		command.TimeHours,
@@ -139,7 +140,7 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, projecta.ProjectFilter{ProjectID: command.ProjectID})
+	project, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
@@ -167,10 +168,11 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 
 			inv, err := NewInvestment(
 				uuid.New(),
-				project,
+				project.ID(),
+				project.MainCurrency(),
 				ast.ID(),
 				ast.Name(),
-				owner,
+				ContributorRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
 				resType,
 				item.Amount,
 				item.TimeHours,

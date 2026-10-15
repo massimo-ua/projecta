@@ -1,21 +1,21 @@
-package projecta_test
+package project_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 func TestProject_NewProject(t *testing.T) {
 	ownerID := uuid.New()
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "Alice"}
+	owner := &project.Owner{PersonID: ownerID, DisplayName: "Alice"}
 	now := time.Now()
 
 	t.Run("creates project successfully with valid parameters", func(t *testing.T) {
 		id := uuid.New()
-		proj, err := projecta.NewProject(id, "Alpha Project", "Alpha Description", owner, now, now.Add(24*time.Hour), "EUR")
+		proj, err := project.NewProject(id, "Alpha Project", "Alpha Description", owner, now, now.Add(24*time.Hour), "EUR")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -46,7 +46,7 @@ func TestProject_NewProject(t *testing.T) {
 	})
 
 	t.Run("defaults currency to UAH when omitted", func(t *testing.T) {
-		proj, err := projecta.NewProject(uuid.New(), "UAH Project", "Desc", owner, now, now)
+		proj, err := project.NewProject(uuid.New(), "UAH Project", "Desc", owner, now, now)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -56,7 +56,7 @@ func TestProject_NewProject(t *testing.T) {
 	})
 
 	t.Run("rejects project name shorter than 3 characters", func(t *testing.T) {
-		_, err := projecta.NewProject(uuid.New(), "ab", "Desc", owner, now, now)
+		_, err := project.NewProject(uuid.New(), "ab", "Desc", owner, now, now)
 		if err == nil {
 			t.Errorf("expected error for short name, got nil")
 		}
@@ -64,21 +64,21 @@ func TestProject_NewProject(t *testing.T) {
 
 	t.Run("rejects project name longer than 100 characters", func(t *testing.T) {
 		longName := string(make([]byte, 101))
-		_, err := projecta.NewProject(uuid.New(), longName, "Desc", owner, now, now)
+		_, err := project.NewProject(uuid.New(), longName, "Desc", owner, now, now)
 		if err == nil {
 			t.Errorf("expected error for long name, got nil")
 		}
 	})
 
 	t.Run("rejects unsupported currency", func(t *testing.T) {
-		_, err := projecta.NewProject(uuid.New(), "Valid Name", "Desc", owner, now, now, "XYZ")
+		_, err := project.NewProject(uuid.New(), "Valid Name", "Desc", owner, now, now, "XYZ")
 		if err == nil {
 			t.Errorf("expected error for unsupported currency, got nil")
 		}
 	})
 
 	t.Run("rejects end date before start date", func(t *testing.T) {
-		_, err := projecta.NewProject(uuid.New(), "Valid Name", "Desc", owner, now, now.Add(-24*time.Hour))
+		_, err := project.NewProject(uuid.New(), "Valid Name", "Desc", owner, now, now.Add(-24*time.Hour))
 		if err == nil {
 			t.Errorf("expected error when end date is before start date, got nil")
 		}
@@ -86,8 +86,8 @@ func TestProject_NewProject(t *testing.T) {
 }
 
 func TestProject_UpdateDetails(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Alice"}
-	proj, err := projecta.NewProject(uuid.New(), "Original Name", "Original Desc", owner, time.Now(), time.Now(), "UAH")
+	owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Alice"}
+	proj, err := project.NewProject(uuid.New(), "Original Name", "Original Desc", owner, time.Now(), time.Now(), "UAH")
 	if err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
@@ -124,8 +124,8 @@ func TestProject_UpdateDetails(t *testing.T) {
 }
 
 func TestProject_SetDates(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Alice"}
-	proj, _ := projecta.NewProject(uuid.New(), "Test Proj", "Desc", owner, time.Now(), time.Now())
+	owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Alice"}
+	proj, _ := project.NewProject(uuid.New(), "Test Proj", "Desc", owner, time.Now(), time.Now())
 
 	start := time.Now()
 	end := start.Add(48 * time.Hour)
@@ -143,14 +143,14 @@ func TestProject_SetDates(t *testing.T) {
 }
 
 func TestProject_ParticipantsAndDefensiveCopy(t *testing.T) {
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Alice"}
-	proj, _ := projecta.NewProject(uuid.New(), "Test Proj", "Desc", owner, time.Now(), time.Now())
+	owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Alice"}
+	proj, _ := project.NewProject(uuid.New(), "Test Proj", "Desc", owner, time.Now(), time.Now())
 
-	p1, _ := projecta.NewParticipant("Bob")
+	p1, _ := project.NewParticipant("Bob")
 	proj.AddParticipant(p1)
 
 	// Add duplicate Bob
-	p1Dup, _ := projecta.NewParticipant("Bob")
+	p1Dup, _ := project.NewParticipant("Bob")
 	proj.AddParticipant(p1Dup)
 
 	participants := proj.Participants()
@@ -159,7 +159,7 @@ func TestProject_ParticipantsAndDefensiveCopy(t *testing.T) {
 	}
 
 	// Verify slice copy defensiveness (mutating returned slice does not alter project state)
-	p2, _ := projecta.NewParticipant("Charlie")
+	p2, _ := project.NewParticipant("Charlie")
 	participants[0] = p2
 
 	fresh := proj.Participants()
@@ -170,8 +170,8 @@ func TestProject_ParticipantsAndDefensiveCopy(t *testing.T) {
 
 func TestProject_ShareTokenAndOwnership(t *testing.T) {
 	ownerID := uuid.New()
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "Alice"}
-	proj, _ := projecta.NewProject(uuid.New(), "Test Proj", "Desc", owner, time.Now(), time.Now())
+	owner := &project.Owner{PersonID: ownerID, DisplayName: "Alice"}
+	proj, _ := project.NewProject(uuid.New(), "Test Proj", "Desc", owner, time.Now(), time.Now())
 
 	initialToken := proj.ShareToken()
 	proj.RegenerateShareToken()
@@ -193,14 +193,14 @@ func TestProject_ShareTokenAndOwnership(t *testing.T) {
 func TestProject_ReconstituteProject(t *testing.T) {
 	id := uuid.New()
 	ownerID := uuid.New()
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "Alice"}
+	owner := &project.Owner{PersonID: ownerID, DisplayName: "Alice"}
 	shareToken := uuid.New()
 	start := time.Now().Add(-24 * time.Hour)
 	end := time.Now()
-	p1, _ := projecta.NewParticipant("Alice")
-	p2, _ := projecta.NewParticipant("Bob")
+	p1, _ := project.NewParticipant("Alice")
+	p2, _ := project.NewParticipant("Bob")
 
-	proj := projecta.ReconstituteProject(
+	proj := project.ReconstituteProject(
 		id,
 		"Hydrated Project",
 		"Hydrated Description",
@@ -210,7 +210,7 @@ func TestProject_ReconstituteProject(t *testing.T) {
 		shareToken,
 		true,
 		"EUR",
-		[]projecta.Participant{p1, p2},
+		[]project.Participant{p1, p2},
 	)
 
 	if proj.ID() != id || proj.ProjectID() != id {

@@ -14,7 +14,8 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
+	"gitlab.com/massimo-ua/projecta/internal/project"
+	"gitlab.com/massimo-ua/projecta/internal/statement"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -36,7 +37,7 @@ type ProjectDTO struct {
 	ShareToken   string                 `json:"share_token,omitempty"`
 	IsShared     bool                   `json:"is_shared,omitempty"`
 	MainCurrency string                 `json:"mainCurrency,omitempty"`
-	Participants []projecta.Participant `json:"participants"`
+	Participants []project.Participant `json:"participants"`
 }
 
 type UpdateProjectDTO struct {
@@ -45,31 +46,31 @@ type UpdateProjectDTO struct {
 	MainCurrency string `json:"mainCurrency,omitempty"`
 }
 
-func toProjectDTO(project *projecta.Project) ProjectDTO {
-	if project == nil {
+func toProjectDTO(p *project.Project) ProjectDTO {
+	if p == nil {
 		return ProjectDTO{}
 	}
-	mainCurrency := project.MainCurrency()
+	mainCurrency := p.MainCurrency()
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
 	}
-	participants := project.Participants()
+	participants := p.Participants()
 	if participants == nil {
-		participants = make([]projecta.Participant, 0)
+		participants = make([]project.Participant, 0)
 	}
 	dto := ProjectDTO{
-		ProjectID:    project.ID().String(),
-		Name:         project.Name(),
-		Description:  project.Description(),
-		ShareToken:   project.ShareToken().String(),
-		IsShared:     project.IsShared(),
+		ProjectID:    p.ID().String(),
+		Name:         p.Name(),
+		Description:  p.Description(),
+		ShareToken:   p.ShareToken().String(),
+		IsShared:     p.IsShared(),
 		MainCurrency: mainCurrency,
 		Participants: participants,
 	}
-	if project.Owner() != nil {
+	if p.Owner() != nil {
 		dto.Owner = OwnerDTO{
-			PersonID:    project.Owner().PersonID.String(),
-			DisplayName: project.Owner().DisplayName,
+			PersonID:    p.Owner().PersonID.String(),
+			DisplayName: p.Owner().DisplayName,
 		}
 	}
 	return dto
@@ -117,16 +118,16 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
-	return projecta.CreateProjectCommand{
+	return project.CreateProjectCommand{
 		PersonID:    personID,
 		Name:        req.Name,
 		Description: req.Description,
 	}, err
 }
 
-func makeCreateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+func makeCreateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.CreateProjectCommand)
+		command := request.(project.CreateProjectCommand)
 
 		project, err := svc.Create(ctx, command)
 
@@ -138,9 +139,9 @@ func makeCreateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 	}
 }
 
-func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+func makeListProjectsEndpoint(svc project.ProjectService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(projecta.ProjectCollectionFilter)
+		filter := request.(project.ProjectCollectionFilter)
 
 		projects, err := svc.Find(ctx, filter)
 
@@ -161,7 +162,7 @@ func makeListProjectsEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 }
 
 func makeShowProjectTotalsEndpoint(
-	projectSvc projecta.ProjectService,
+	projectSvc project.ProjectService,
 	assets asset.Service,
 	rateProvider currency.CurrencyRateProvider,
 	investments ...investment.Service,
@@ -169,7 +170,7 @@ func makeShowProjectTotalsEndpoint(
 	return func(ctx context.Context, request any) (any, error) {
 		projectID := request.(uuid.UUID)
 
-		proj, err := projectSvc.FindOne(ctx, projecta.ProjectFilter{ProjectID: projectID})
+		proj, err := projectSvc.FindOne(ctx, project.ProjectFilter{ProjectID: projectID})
 		if err != nil {
 			return nil, err
 		}
@@ -326,14 +327,14 @@ func DecodeGetProjectRequest(_ context.Context, r *http.Request) (any, error) {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	return projecta.ProjectFilter{
+	return project.ProjectFilter{
 		ProjectID: projectUUID,
 	}, nil
 }
 
-func makeGetProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+func makeGetProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(projecta.ProjectFilter)
+		filter := request.(project.ProjectFilter)
 		project, err := svc.FindOne(ctx, filter)
 		if err != nil {
 			return nil, err
@@ -343,7 +344,7 @@ func makeGetProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 	}
 }
 
-func makeAcceptShareEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+func makeAcceptShareEndpoint(svc project.ProjectService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		cmd := request.(AcceptShareCommand)
 		project, err := svc.AcceptShare(ctx, cmd.ShareToken, cmd.PersonID)
@@ -377,7 +378,7 @@ func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 		return nil, exceptions.NewValidationException("invalid json", err)
 	}
 
-	return projecta.UpdateProjectCommand{
+	return project.UpdateProjectCommand{
 		ProjectID:    projectUUID,
 		PersonID:     personID,
 		Name:         req.Name,
@@ -386,9 +387,9 @@ func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}, nil
 }
 
-func makeUpdateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
+func makeUpdateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command := request.(projecta.UpdateProjectCommand)
+		command := request.(project.UpdateProjectCommand)
 
 		project, err := svc.Update(ctx, command)
 		if err != nil {
@@ -400,8 +401,8 @@ func makeUpdateProjectEndpoint(svc projecta.ProjectService) endpoint.Endpoint {
 }
 
 func MakeProjectEndpoints(
-	projectService projecta.ProjectService,
-	statementService projecta.StatementService,
+	projectService project.ProjectService,
+	statementService statement.Service,
 	assetService asset.Service,
 	rateProvider currency.CurrencyRateProvider,
 	investmentService ...investment.Service,

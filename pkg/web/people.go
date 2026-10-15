@@ -245,7 +245,7 @@ func makeAssignRolesEndpoint(svc people.UserService) endpoint.Endpoint {
 	}
 }
 
-func MakeCustomerEndpoints(s people.UserService, a people.AuthService) (UserEndpoints, error) {
+func MakeUserEndpoints(s people.UserService, a people.AuthService) (UserEndpoints, error) {
 	return UserEndpoints{
 		Register:      makeRegisterEndpoint(s),
 		Login:         makeLoginEndpoint(a),
@@ -255,4 +255,9 @@ func MakeCustomerEndpoints(s people.UserService, a people.AuthService) (UserEndp
 		ListUsers:     makeListUsersEndpoint(s),
 		AssignRoles:   makeAssignRolesEndpoint(s),
 	}, nil
+}
+
+// Deprecated: Use MakeUserEndpoints instead.
+func MakeCustomerEndpoints(s people.UserService, a people.AuthService) (UserEndpoints, error) {
+	return MakeUserEndpoints(s, a)
 }

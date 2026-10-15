@@ -24,6 +24,27 @@ func NewPgPeopleRepository(db *PgDbConnection) *PgPeopleRepository {
 	}
 }
 
+type personRecord struct {
+	id          string
+	firstName   string
+	lastName    string
+	displayName types.NullString
+}
+
+func (r *personRecord) toPerson(roles []people.Role, credentials []people.Credentials) (*people.Person, error) {
+	pID, err := uuid.Parse(r.id)
+	if err != nil {
+		return nil, exceptions.NewInternalException("invalid person id", err)
+	}
+
+	dn, err := people.NewDisplayName(r.displayName.String)
+	if err != nil {
+		return nil, exceptions.NewInternalException("invalid display name", err)
+	}
+
+	return people.ReconstitutePerson(pID, r.firstName, r.lastName, dn, credentials, roles), nil
+}
+
 func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("people")
@@ -112,50 +133,6 @@ func (r *PgPeopleRepository) setCredentials(
 	return nil
 }
 
-func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
-	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	qb.From("people")
-	qb.Select("first_name", "last_name", "display_name")
-	qb.Where(qb.Equal("person_id", personID.String()))
-
-	sql, args := qb.Build()
-
-	var (
-		firstName   string
-		lastName    string
-		displayName types.NullString
-	)
-
-	if err := r.db.QueryRow(
-		ctx,
-		sql,
-		args...,
-	).Scan(
-		&firstName,
-		&lastName,
-		&displayName,
-	); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, exceptions.NewNotFoundException("person not found", err)
-		}
-
-		return nil, err
-	}
-
-	roles, err := r.fetchRoles(ctx, personID)
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to fetch person roles", err)
-	}
-
-	person, err := toPersonFromPg(personID.String(), firstName, lastName, displayName.String, roles...)
-
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to fetch person information", err)
-	}
-
-	return &person, nil
-}
-
 func (r *PgPeopleRepository) fetchRoles(ctx context.Context, personID uuid.UUID) ([]people.Role, error) {
 	rows, err := r.db.Query(ctx, `SELECT role FROM person_roles WHERE person_id = $1`, personID.String())
 	if err != nil {
@@ -174,6 +151,66 @@ func (r *PgPeopleRepository) fetchRoles(ctx context.Context, personID uuid.UUID)
 		}
 	}
 	return roles, nil
+}
+
+func (r *PgPeopleRepository) fetchCredentials(ctx context.Context, personID uuid.UUID) ([]people.Credentials, error) {
+	rows, err := r.db.Query(ctx, `SELECT provider, identity, registration_id FROM credentials WHERE person_id = $1`, personID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var creds []people.Credentials
+	for rows.Next() {
+		var provider, identity, registrationID string
+		if err := rows.Scan(&provider, &identity, &registrationID); err != nil {
+			return nil, err
+		}
+		c, err := people.NewCredentials(provider, registrationID, identity)
+		if err == nil {
+			creds = append(creds, c)
+		}
+	}
+	return creds, nil
+}
+
+func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
+	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	qb.From("people")
+	qb.Select("first_name", "last_name", "display_name")
+	qb.Where(qb.Equal("person_id", personID.String()))
+
+	sql, args := qb.Build()
+
+	rec := personRecord{id: personID.String()}
+
+	if err := r.db.QueryRow(
+		ctx,
+		sql,
+		args...,
+	).Scan(
+		&rec.firstName,
+		&rec.lastName,
+		&rec.displayName,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, exceptions.NewNotFoundException("person not found", err)
+		}
+
+		return nil, err
+	}
+
+	roles, err := r.fetchRoles(ctx, personID)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to fetch person roles", err)
+	}
+
+	creds, err := r.fetchCredentials(ctx, personID)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to fetch person credentials", err)
+	}
+
+	return rec.toPerson(roles, creds)
 }
 
 func (r *PgPeopleRepository) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
@@ -219,15 +256,12 @@ func (r *PgPeopleRepository) FindAll(ctx context.Context, pagination core.Pagina
 
 	var list []*people.Person
 	for rows.Next() {
-		var (
-			personID    string
-			firstName   string
-			lastName    string
-			displayName types.NullString
-		)
-		if err := rows.Scan(&personID, &firstName, &lastName, &displayName); err != nil {
+		var rec personRecord
+		var personID string
+		if err := rows.Scan(&personID, &rec.firstName, &rec.lastName, &rec.displayName); err != nil {
 			return nil, 0, exceptions.NewInternalException("failed to scan person", err)
 		}
+		rec.id = personID
 		pID, err := uuid.Parse(personID)
 		if err != nil {
 			return nil, 0, exceptions.NewInternalException("invalid person id", err)
@@ -236,22 +270,17 @@ func (r *PgPeopleRepository) FindAll(ctx context.Context, pagination core.Pagina
 		if err != nil {
 			return nil, 0, exceptions.NewInternalException("failed to fetch person roles", err)
 		}
-		p, err := toPersonFromPg(personID, firstName, lastName, displayName.String, roles...)
+		creds, err := r.fetchCredentials(ctx, pID)
+		if err != nil {
+			return nil, 0, exceptions.NewInternalException("failed to fetch person credentials", err)
+		}
+		p, err := rec.toPerson(roles, creds)
 		if err != nil {
 			return nil, 0, exceptions.NewInternalException("failed to build person", err)
 		}
-		list = append(list, &p)
+		list = append(list, p)
 	}
 	return list, total, nil
-}
-
-func toPersonFromPg(personID string, personFirstName string, personLastName string, personDisplayName string, roles ...people.Role) (people.Person, error) {
-	p, err := people.NewPerson(uuid.MustParse(personID), personFirstName, personLastName, personDisplayName, nil, roles...)
-
-	if err != nil {
-		return people.Person{}, err
-	}
-	return *p, nil
 }
 
 func (r *PgPeopleRepository) DeletePerson(ctx context.Context, personID uuid.UUID) error {
@@ -285,4 +314,3 @@ func (r *PgPeopleRepository) SaveCredentials(ctx context.Context, personID uuid.
 	)
 	return err
 }
-

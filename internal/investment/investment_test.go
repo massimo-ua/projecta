@@ -7,7 +7,6 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
-	"gitlab.com/massimo-ua/projecta/internal/projecta"
 )
 
 func TestInvestment_NewAndGetters(t *testing.T) {
@@ -16,8 +15,7 @@ func TestInvestment_NewAndGetters(t *testing.T) {
 	assetID := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
-	proj, _ := projecta.NewProject(projID, "Test Project", "Desc", owner, now, now)
+	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
 	invID := uuid.New()
 	amount := money.New(15000, "UAH")
@@ -25,10 +23,11 @@ func TestInvestment_NewAndGetters(t *testing.T) {
 
 	inv, err := investment.NewInvestment(
 		invID,
-		proj,
+		projID,
+		"UAH",
 		assetID,
 		"Rent Jan",
-		owner,
+		contributor,
 		investment.ResourceTypeMoney,
 		amount,
 		nil,
@@ -47,8 +46,8 @@ func TestInvestment_NewAndGetters(t *testing.T) {
 	if inv.ID() != invID {
 		t.Errorf("expected ID %v, got %v", invID, inv.ID())
 	}
-	if inv.Project().ID() != projID {
-		t.Errorf("expected project ID %v, got %v", projID, inv.Project().ID())
+	if inv.ProjectID() != projID {
+		t.Errorf("expected project ID %v, got %v", projID, inv.ProjectID())
 	}
 	if inv.PrimaryAssetID() != assetID {
 		t.Errorf("expected asset ID %v, got %v", assetID, inv.PrimaryAssetID())
@@ -77,8 +76,7 @@ func TestInvestment_SharedAllocations(t *testing.T) {
 	asset2 := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
-	proj, _ := projecta.NewProject(projID, "Shared Project", "Desc", owner, now, now)
+	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
 	allocations := []investment.InvestmentAssetLink{
 		{AssetID: asset1, AssetName: "Asset 1", SharePercentage: 60.0},
@@ -87,10 +85,11 @@ func TestInvestment_SharedAllocations(t *testing.T) {
 
 	inv, err := investment.NewInvestment(
 		uuid.New(),
-		proj,
+		projID,
+		"USD",
 		uuid.Nil,
 		"",
-		owner,
+		contributor,
 		investment.ResourceTypeMoney,
 		money.New(5000, "USD"),
 		nil,
@@ -122,8 +121,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 	asset2 := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
-	proj, _ := projecta.NewProject(projID, "Project", "Desc", owner, now, now)
+	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
 	// 1. Sum != 100%
 	badSum := []investment.InvestmentAssetLink{
@@ -131,7 +129,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 		{AssetID: asset2, SharePercentage: 40.0},
 	}
 	_, err := investment.NewInvestment(
-		uuid.New(), proj, uuid.Nil, "", owner,
+		uuid.New(), projID, "USD", uuid.Nil, "", contributor,
 		investment.ResourceTypeMoney, money.New(100, "USD"),
 		nil, nil, nil, "", "", "Invalid Sum", now, nil,
 		badSum...,
@@ -146,7 +144,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 		{AssetID: asset1, SharePercentage: 50.0},
 	}
 	_, err = investment.NewInvestment(
-		uuid.New(), proj, uuid.Nil, "", owner,
+		uuid.New(), projID, "USD", uuid.Nil, "", contributor,
 		investment.ResourceTypeMoney, money.New(100, "USD"),
 		nil, nil, nil, "", "", "Duplicate Assets", now, nil,
 		duplicates...,
@@ -161,7 +159,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 		{AssetID: asset2, SharePercentage: -10.0},
 	}
 	_, err = investment.NewInvestment(
-		uuid.New(), proj, uuid.Nil, "", owner,
+		uuid.New(), projID, "USD", uuid.Nil, "", contributor,
 		investment.ResourceTypeMoney, money.New(100, "USD"),
 		nil, nil, nil, "", "", "Out of Bounds", now, nil,
 		outOfBounds...,
@@ -177,18 +175,18 @@ func TestInvestment_TimeResourceCalculation(t *testing.T) {
 	assetID := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
-	proj, _ := projecta.NewProject(projID, "Project", "Desc", owner, now, now)
+	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
 	hours := 40.0
 	rate := money.New(50, "USD")
 
 	inv, err := investment.NewInvestment(
 		uuid.New(),
-		proj,
+		projID,
+		"USD",
 		assetID,
 		"Dev Sprint",
-		owner,
+		contributor,
 		investment.ResourceTypeTime,
 		nil, // nil amount, should be calculated: 40 * 50 = 2000 USD
 		&hours,
@@ -216,15 +214,15 @@ func TestInvestment_ReallocateAndUpdate(t *testing.T) {
 	asset2 := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: ownerID, DisplayName: "John Doe"}
-	proj, _ := projecta.NewProject(projID, "Project", "Desc", owner, now, now)
+	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
 	inv, err := investment.NewInvestment(
 		uuid.New(),
-		proj,
+		projID,
+		"UAH",
 		asset1,
 		"Asset 1",
-		owner,
+		contributor,
 		investment.ResourceTypeMoney,
 		money.New(1000, "UAH"),
 		nil, nil, nil, "", "", "Original", now, nil,
@@ -270,16 +268,16 @@ func TestInvestment_Reconstitute(t *testing.T) {
 	assetID := uuid.New()
 	now := time.Now()
 
-	owner := &projecta.Owner{PersonID: uuid.New(), DisplayName: "Jane Doe"}
-	proj, _ := projecta.NewProject(projID, "Project", "", owner, now, now)
+	contributor := investment.ContributorRef{PersonID: uuid.New(), DisplayName: "Jane Doe"}
 
 	inv := investment.ReconstituteInvestment(
 		invID,
-		proj,
+		projID,
+		"USD",
 		assetID,
 		"Asset Name",
 		nil,
-		owner,
+		contributor,
 		investment.ResourceTypeMoney,
 		money.New(500, "USD"),
 		nil, nil, nil, "", "",

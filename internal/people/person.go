@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"sync"
 )
 
 type Role string
@@ -45,8 +44,6 @@ type Person struct {
 	roles       []Role
 }
 
-var lock sync.Mutex
-
 func (p *Person) ID() uuid.UUID     { return p.id }
 func (p *Person) FirstName() string { return p.firstName }
 func (p *Person) LastName() string  { return p.lastName }
@@ -77,11 +74,15 @@ func (p *Person) DisplayNameVO() DisplayName {
 }
 
 func (p *Person) Identities() []Credentials {
-	return p.identities
+	res := make([]Credentials, len(p.identities))
+	copy(res, p.identities)
+	return res
 }
 
 func (p *Person) Roles() []Role {
-	return p.roles
+	res := make([]Role, len(p.roles))
+	copy(res, p.roles)
+	return res
 }
 
 func (p *Person) RoleStrings() []string {
@@ -118,9 +119,6 @@ func (p *Person) CanManageUsers() bool {
 }
 
 func (p *Person) AssignRoles(roles []Role) error {
-	lock.Lock()
-	defer lock.Unlock()
-
 	seen := make(map[Role]bool)
 	unique := make([]Role, 0, len(roles))
 	for _, r := range roles {
@@ -140,8 +138,6 @@ func (p *Person) AddRole(role Role) error {
 	if !role.IsValid() {
 		return fmt.Errorf("invalid role: %s", role)
 	}
-	lock.Lock()
-	defer lock.Unlock()
 	for _, r := range p.roles {
 		if r == role {
 			return nil
@@ -203,9 +199,6 @@ func NewPerson(personID uuid.UUID, firstName string, lastName string, displayNam
 }
 
 func (p *Person) AddOrReplaceIdentity(credentials Credentials) error {
-	lock.Lock()
-	defer lock.Unlock()
-
 	for i, c := range p.identities {
 		if c.Provider() == credentials.Provider() {
 			p.identities[i] = credentials
@@ -218,9 +211,6 @@ func (p *Person) AddOrReplaceIdentity(credentials Credentials) error {
 }
 
 func (p *Person) UpdateDisplayName(displayName DisplayName) {
-	lock.Lock()
-	defer lock.Unlock()
-
 	p.displayName = displayName
 }
 
@@ -236,11 +226,32 @@ func (p *Person) UpdateProfile(firstName string, lastName string, displayName Di
 		return err
 	}
 
-	lock.Lock()
-	defer lock.Unlock()
-
 	p.firstName = firstName
 	p.lastName = lastName
 	p.displayName = displayName
 	return nil
+}
+
+func ReconstitutePerson(
+	id uuid.UUID,
+	firstName string,
+	lastName string,
+	displayName DisplayName,
+	identities []Credentials,
+	roles []Role,
+) *Person {
+	ids := make([]Credentials, len(identities))
+	copy(ids, identities)
+
+	r := make([]Role, len(roles))
+	copy(r, roles)
+
+	return &Person{
+		id:          id,
+		firstName:   firstName,
+		lastName:    lastName,
+		displayName: displayName,
+		identities:  ids,
+		roles:       r,
+	}
 }
