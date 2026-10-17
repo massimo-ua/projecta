@@ -13,6 +13,7 @@ import (
 type customMockStrategy struct {
 	provider people.IdentityProvider
 	personID uuid.UUID
+	claims   *core.AuthTokenClaims
 	err      error
 }
 
@@ -25,6 +26,13 @@ func (s *customMockStrategy) Authenticate(ctx context.Context, creds people.Cred
 		return uuid.Nil, s.err
 	}
 	return s.personID, nil
+}
+
+func (s *customMockStrategy) ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.claims, nil
 }
 
 func TestLocalAuthStrategy(t *testing.T) {

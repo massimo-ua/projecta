@@ -3,7 +3,11 @@ package people
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 type Role string
@@ -229,6 +233,72 @@ func (p *Person) UpdateProfile(firstName string, lastName string, displayName Di
 	p.firstName = firstName
 	p.lastName = lastName
 	p.displayName = displayName
+	return nil
+}
+
+func (p *Person) AcceptInvitation(claims *core.AuthTokenClaims, provider IdentityProvider) error {
+	if claims == nil {
+		return exceptions.NewValidationException("invalid user profile data", errors.New("claims are required"))
+	}
+
+	firstName := claims.FirstName
+	lastName := claims.LastName
+	displayName := claims.DisplayName
+
+	if displayName == "" {
+		if claims.FirstName != "" && claims.LastName != "" {
+			displayName = claims.FirstName + " " + claims.LastName
+		} else if claims.FirstName != "" {
+			displayName = claims.FirstName
+		} else if claims.Email != "" {
+			displayName = strings.Split(claims.Email, "@")[0]
+		}
+	}
+	if firstName == "" {
+		parts := strings.Fields(displayName)
+		if len(parts) >= 2 {
+			firstName = parts[0]
+			lastName = strings.Join(parts[1:], " ")
+		} else if len(parts) == 1 {
+			firstName = parts[0]
+			lastName = "User"
+		} else {
+			firstName = "Google"
+			lastName = "User"
+		}
+	}
+	if lastName == "" {
+		lastName = "User"
+	}
+	if len(firstName) < 2 {
+		firstName = firstName + " "
+	}
+	if len(lastName) < 2 {
+		lastName = lastName + " "
+	}
+
+	dn, err := NewDisplayName(displayName)
+	if err != nil {
+		return exceptions.NewValidationException("invalid user profile data", err)
+	}
+
+	if err := p.UpdateProfile(firstName, lastName, dn); err != nil {
+		return exceptions.NewValidationException("invalid user profile data", err)
+	}
+
+	cred, err := NewCredentials(string(provider), claims.Sub, claims.Sub)
+	if err != nil {
+		return exceptions.NewInternalException("failed to prepare credentials", err)
+	}
+
+	if err := p.AddOrReplaceIdentity(cred); err != nil {
+		return exceptions.NewInternalException("failed to attach credentials", err)
+	}
+
+	if err := p.AddRole(RoleUser); err != nil {
+		return exceptions.NewInternalException("failed to assign role", err)
+	}
+
 	return nil
 }
 

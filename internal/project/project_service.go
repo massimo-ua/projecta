@@ -122,16 +122,6 @@ func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, p
 		return nil, exceptions.NewInternalException("failed to record project share", err)
 	}
 
-	return ReconstituteProject(
-		project.ID(),
-		project.Name(),
-		project.Description(),
-		project.Owner(),
-		project.StartDate(),
-		project.EndDate(),
-		project.ShareToken(),
-		true,
-		project.MainCurrency(),
-		project.Participants(),
-	), nil
+	project.MarkShared()
+	return project, nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 type PersonRegistrar interface {
-	Register(ctx context.Context, person *Person) error
+	Save(ctx context.Context, person *Person) error
 	DeletePerson(ctx context.Context, personID uuid.UUID) error
 }
 
@@ -89,11 +89,11 @@ func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, e
 	}
 
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
-		if err := s.peopleRepo.Register(txCtx, precreatedPerson); err != nil {
+		if err := s.peopleRepo.Save(txCtx, precreatedPerson); err != nil {
 			return nil, err
 		}
 
-		if err := s.invitationRepo.Create(txCtx, invitation); err != nil {
+		if err := s.invitationRepo.Save(txCtx, invitation); err != nil {
 			return nil, err
 		}
 

@@ -67,7 +67,6 @@ func MakeHTTPHandler(
 	invitationEndpoints := MakeInvitationEndpoints(invitationService)
 	projectEndpoints, err := MakeProjectEndpoints(
 		projectService,
-		statementService,
 		assetService,
 		rateProvider,
 		investmentService...,
@@ -76,6 +75,15 @@ func MakeHTTPHandler(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create purchase endpoints: %s", err.Error())
 	}
+
+	assetEndpoints := MakeAssetEndpoints(assetService)
+	statementEndpoints := MakeStatementEndpoints(statementService)
+
+	var invSvc investment.Service
+	if len(investmentService) > 0 {
+		invSvc = investmentService[0]
+	}
+	investmentEndpoints := MakeInvestmentEndpoints(invSvc)
 
 	options := []ht.ServerOption{
 		// TODO: add logging
@@ -204,150 +212,152 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/payments/parse-statement").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.ParseStatement),
-		decodeParseStatementRequest,
-		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
+	if statementEndpoints.ParseStatement != nil {
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/payments/parse-statement").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), statementEndpoints.ParseStatement),
+			decodeParseStatementRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
 
-	r.Methods(http.MethodPost).Path("/projects/{project_id}/statements/parse").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.ParseStatement),
-		decodeParseStatementRequest,
-		encodeJSON(http.StatusOK),
-		withAuth...,
-	))
+		r.Methods(http.MethodPost).Path("/projects/{project_id}/statements/parse").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), statementEndpoints.ParseStatement),
+			decodeParseStatementRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
 
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/from-payments").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.CreateAssetFromPayments),
+		requireRole(string(people.RoleUser), assetEndpoints.CreateAssetFromPayments),
 		decodeCreateAssetFromPaymentsRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.CreateAsset),
+		requireRole(string(people.RoleUser), assetEndpoints.CreateAsset),
 		decodeCreateAssetRequest,
 		encodeJSON(http.StatusCreated),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/assets").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.ListAssets),
+		requireRole(string(people.RoleUser), assetEndpoints.ListAssets),
 		decodeListAssetsRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.RemoveAsset),
+		requireRole(string(people.RoleUser), assetEndpoints.RemoveAsset),
 		decodeProjectResourceRemoveCommand("project_id", "asset_id"),
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodPut).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.UpdateAsset),
+		requireRole(string(people.RoleUser), assetEndpoints.UpdateAsset),
 		decodeUpdateAssetRequest,
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
 
 	r.Methods(http.MethodGet).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
-		requireRole(string(people.RoleUser), projectEndpoints.GetAsset),
+		requireRole(string(people.RoleUser), assetEndpoints.GetAsset),
 		decodeGetAssetRequest,
 		encodeJSON(http.StatusOK),
 		withAuth...,
 	))
 
-	if projectEndpoints.LinkChildAsset != nil {
+	if assetEndpoints.LinkChildAsset != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/{asset_id}/children").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.LinkChildAsset),
+			requireRole(string(people.RoleUser), assetEndpoints.LinkChildAsset),
 			decodeLinkChildAssetRequest,
 			encodeJSON(http.StatusOK),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodDelete).Path("/projects/{project_id}/assets/{asset_id}/children/{child_asset_id}").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.UnlinkChildAsset),
+			requireRole(string(people.RoleUser), assetEndpoints.UnlinkChildAsset),
 			decodeUnlinkChildAssetRequest,
 			encodeJSON(http.StatusNoContent),
 			withAuth...,
 		))
 	}
 
-	if projectEndpoints.AssignInvestments != nil {
+	if assetEndpoints.AssignInvestments != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/{asset_id}/investments").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.AssignInvestments),
+			requireRole(string(people.RoleUser), assetEndpoints.AssignInvestments),
 			decodeAssignInvestmentsRequest,
 			encodeJSON(http.StatusOK),
 			withAuth...,
 		))
 	}
 
-	if projectEndpoints.GroupAssets != nil {
+	if assetEndpoints.GroupAssets != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/group").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.GroupAssets),
+			requireRole(string(people.RoleUser), assetEndpoints.GroupAssets),
 			decodeGroupAssetsRequest,
 			encodeJSON(http.StatusCreated),
 			withAuth...,
 		))
 	}
 
-	if projectEndpoints.LinkChildren != nil {
+	if assetEndpoints.LinkChildren != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/assets/{asset_id}/children/batch").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.LinkChildren),
+			requireRole(string(people.RoleUser), assetEndpoints.LinkChildren),
 			decodeLinkChildrenRequest,
 			encodeJSON(http.StatusOK),
 			withAuth...,
 		))
 	}
 
-	if projectEndpoints.CreateInvestment != nil {
+	if investmentEndpoints.CreateInvestment != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.CreateInvestment),
+			requireRole(string(people.RoleUser), investmentEndpoints.CreateInvestment),
 			decodeCreateInvestmentRequest,
 			encodeJSON(http.StatusCreated),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodGet).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.ListInvestments),
+			requireRole(string(people.RoleUser), investmentEndpoints.ListInvestments),
 			decodeListInvestmentsRequest,
 			encodeJSON(http.StatusOK),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodGet).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.GetInvestment),
+			requireRole(string(people.RoleUser), investmentEndpoints.GetInvestment),
 			decodeGetInvestmentRequest,
 			encodeJSON(http.StatusOK),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodPut).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.UpdateInvestment),
+			requireRole(string(people.RoleUser), investmentEndpoints.UpdateInvestment),
 			decodeUpdateInvestmentRequest,
 			encodeJSON(http.StatusNoContent),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodDelete).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.RemoveInvestment),
+			requireRole(string(people.RoleUser), investmentEndpoints.RemoveInvestment),
 			decodeProjectResourceRemoveCommand("project_id", "investment_id"),
 			encodeJSON(http.StatusNoContent),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments/batch").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.CreateBatchInvestments),
+			requireRole(string(people.RoleUser), investmentEndpoints.CreateBatchInvestments),
 			decodeCreateBatchInvestmentsRequest,
 			encodeJSON(http.StatusCreated),
 			withAuth...,
 		))
 
 		r.Methods(http.MethodGet).Path("/projects/{project_id}/tags").Handler(ht.NewServer(
-			requireRole(string(people.RoleUser), projectEndpoints.ListTags),
+			requireRole(string(people.RoleUser), investmentEndpoints.ListTags),
 			decodeListTagsRequest,
 			encodeJSON(http.StatusOK),
 			withAuth...,

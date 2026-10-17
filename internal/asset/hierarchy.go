@@ -50,19 +50,25 @@ func (h *AssetHierarchy) GetAsset(id uuid.UUID) (*Asset, bool) {
 	return a, ok
 }
 
-func (h *AssetHierarchy) AddEdge(parentID, childID uuid.UUID, sharePercentage float64) error {
+// ValidateEdge enforces DAG edge invariants: no self-reference, valid share percentage (0, 100], and no circular dependency.
+func ValidateEdge(parentID, childID uuid.UUID, sharePercentage float64, ancestors []uuid.UUID) error {
 	if parentID == childID {
 		return ErrSelfReference
 	}
 	if sharePercentage <= 0 || sharePercentage > 100 {
 		return ErrInvalidShare
 	}
-
-	ancestors := h.Ancestors(parentID)
 	for _, aID := range ancestors {
 		if aID == childID {
 			return ErrCircularDependency
 		}
+	}
+	return nil
+}
+
+func (h *AssetHierarchy) AddEdge(parentID, childID uuid.UUID, sharePercentage float64) error {
+	if err := ValidateEdge(parentID, childID, sharePercentage, h.Ancestors(parentID)); err != nil {
+		return err
 	}
 
 	h.childrenMap[parentID] = append(h.childrenMap[parentID], ChildEdge{

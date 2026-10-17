@@ -2,9 +2,11 @@ package people
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 type InvitationStatus string
@@ -77,6 +79,22 @@ func (i *Invitation) IsPending() bool {
 
 func (i *Invitation) IsCompleted() bool {
 	return i.status == InvitationStatusCompleted
+}
+
+func (i *Invitation) ValidateForRedemption(email string) (uuid.UUID, error) {
+	if i.IsExpired() {
+		return uuid.Nil, exceptions.NewValidationException("invitation has expired", nil)
+	}
+	if i.IsCompleted() {
+		return uuid.Nil, exceptions.NewValidationException("invitation has already been completed", nil)
+	}
+	if email != "" && !strings.EqualFold(email, i.email) {
+		return uuid.Nil, exceptions.NewValidationException("google account email does not match invitation email", nil)
+	}
+	if i.personID == nil {
+		return uuid.Nil, exceptions.NewInternalException("invitation has no associated user record", nil)
+	}
+	return *i.personID, nil
 }
 
 func (i *Invitation) Complete() error {

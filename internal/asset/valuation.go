@@ -76,6 +76,12 @@ type ProjectTotals struct {
 	TotalInvested  int64
 	TotalValuation int64
 	Currency       string
+	HasActivity    bool
+}
+
+// Balance returns the remaining unallocated project balance (TotalInvested - TotalValuation).
+func (t ProjectTotals) Balance() int64 {
+	return t.TotalInvested - t.TotalValuation
 }
 
 // CalculateProjectTotals aggregates raw investments and root assets into project totals.

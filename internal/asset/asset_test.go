@@ -41,24 +41,27 @@ func TestAssetGettersAndSetters(t *testing.T) {
 		t.Errorf("Owner mismatch")
 	}
 
-	// Setters
-	newProjectID := uuid.New()
+	// Domain behavior methods
 	newPrice := money.New(2000, money.USD)
 	newDate := now.Add(time.Hour)
-	newOwner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "Jane Doe"}
 
-	a.SetName("Desktop")
-	a.SetDescription("Gaming Desktop")
-	a.SetProjectID(newProjectID)
-	a.SetPrice(newPrice)
-	a.SetAcquiredAt(newDate)
-	a.SetOwner(newOwner)
+	a.UpdateDetails("Desktop", "Gaming Desktop", newPrice, []string{"hardware"})
+	a.Reschedule(newDate)
+	a.TransitionStatus(asset.AssetStatusCompleted, &newDate)
 
 	if a.Name() != "Desktop" || a.Description() != "Gaming Desktop" {
 		t.Errorf("Updated fields mismatch")
 	}
-	if a.ProjectID() != newProjectID || a.Price() != newPrice || !a.AcquiredAt().Equal(newDate) || a.Owner() != newOwner {
+	if a.TargetPrice() != newPrice || !a.AcquiredAt().Equal(newDate) || a.Status() != asset.AssetStatusCompleted {
 		t.Errorf("Updated references mismatch")
+	}
+	if len(a.Tags()) != 1 || a.Tags()[0] != "hardware" {
+		t.Errorf("Updated tags mismatch")
+	}
+
+	a.Reopen()
+	if a.Status() != asset.AssetStatusActive || a.CompletedDate() != nil {
+		t.Errorf("Expected asset to reopen")
 	}
 
 	col := asset.NewCollection(5)

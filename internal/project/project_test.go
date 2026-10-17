@@ -188,6 +188,11 @@ func TestProject_ShareTokenAndOwnership(t *testing.T) {
 	if proj.IsOwnedByPerson(uuid.New()) {
 		t.Errorf("expected IsOwnedByPerson false for other person")
 	}
+
+	proj.MarkShared()
+	if !proj.IsShared() {
+		t.Errorf("expected IsShared true after MarkShared")
+	}
 }
 
 func TestProject_ReconstituteProject(t *testing.T) {

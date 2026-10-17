@@ -77,7 +77,7 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 	}
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
-		if err = s.peopleRepository.Register(ctx, person); err != nil {
+		if err = s.peopleRepository.Save(ctx, person); err != nil {
 			return nil, err
 		}
 
@@ -106,7 +106,7 @@ func (s *ServiceImpl) AssignRoles(ctx context.Context, command AssignRolesComman
 	}
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
-		if err := s.peopleRepository.SaveRoles(ctx, person.ID(), person.Roles()); err != nil {
+		if err := s.peopleRepository.Save(ctx, person); err != nil {
 			return nil, err
 		}
 		return nil, nil
@@ -128,7 +128,7 @@ func (s *ServiceImpl) UpdateDisplayName(ctx context.Context, command UpdateDispl
 	person.UpdateDisplayName(command.DisplayName)
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
-		if err := s.peopleRepository.UpdateProfile(ctx, person.ID(), person.FirstName(), person.LastName(), person.DisplayNameVO().String()); err != nil {
+		if err := s.peopleRepository.Save(ctx, person); err != nil {
 			return nil, err
 		}
 		return nil, nil

@@ -16,8 +16,40 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/project"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
+
+type AssetEndpoints struct {
+	CreateAsset             endpoint.Endpoint
+	CreateAssetFromPayments endpoint.Endpoint
+	RemoveAsset             endpoint.Endpoint
+	ListAssets              endpoint.Endpoint
+	UpdateAsset             endpoint.Endpoint
+	GetAsset                endpoint.Endpoint
+	LinkChildAsset          endpoint.Endpoint
+	UnlinkChildAsset        endpoint.Endpoint
+	AssignInvestments       endpoint.Endpoint
+	GroupAssets             endpoint.Endpoint
+	LinkChildren            endpoint.Endpoint
+}
+
+func MakeAssetEndpoints(assetService asset.Service) AssetEndpoints {
+	if assetService == nil {
+		return AssetEndpoints{}
+	}
+	return AssetEndpoints{
+		CreateAsset:             makeCreateAssetEndpoint(assetService),
+		CreateAssetFromPayments: makeCreateAssetFromPaymentsEndpoint(assetService),
+		RemoveAsset:             makeRemoveAssetEndpoint(assetService),
+		ListAssets:              makeListAssetsEndpoint(assetService),
+		UpdateAsset:             makeUpdateAssetEndpoint(assetService),
+		GetAsset:                makeGetAssetEndpoint(assetService),
+		LinkChildAsset:          makeLinkChildAssetEndpoint(assetService),
+		UnlinkChildAsset:        makeUnlinkChildAssetEndpoint(assetService),
+		AssignInvestments:       makeAssignInvestmentsEndpoint(assetService),
+		GroupAssets:             makeGroupAssetsEndpoint(assetService),
+		LinkChildren:            makeLinkChildrenEndpoint(assetService),
+	}
+}
 
 type ChildAssetDTO struct {
 	ChildID         string  `json:"child_id"`
@@ -57,11 +89,11 @@ type AssetDTO struct {
 	Tags               []string         `json:"tags"`
 }
 
-func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) AssetDTO {
+func toAssetDTO(a *asset.Asset) AssetDTO {
 	if a == nil {
 		return AssetDTO{}
 	}
-	homeCurrency := "UAH"
+	homeCurrency := a.HomeCurrency()
 	projDTO := ProjectDTO{
 		ProjectID:    a.ProjectID().String(),
 		MainCurrency: homeCurrency,
@@ -74,33 +106,16 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		priceCurrency = a.Price().Currency().Code
 	}
 
-	homeAmount := priceAmount
-	if rateProvider != nil && priceCurrency != homeCurrency && priceAmount > 0 {
-		converted, err := rateProvider.Convert(
-			currency.NewCurrency(priceAmount, priceCurrency),
-			currency.NewCurrency(0, homeCurrency),
-		)
-		if err == nil {
-			homeAmount = converted.Amount
-		}
-	}
-
 	var directCostVal int64
 	if a.DirectCost() != nil {
 		directCostVal = a.DirectCost().Amount()
 	}
 
 	var totalCostVal int64
-	var totalCostCurr string
 	if a.TotalCost() != nil {
 		totalCostVal = a.TotalCost().Amount()
-		totalCostCurr = a.TotalCost().Currency().Code
-	} else if a.Price() != nil {
-		totalCostVal = a.Price().Amount()
-		totalCostCurr = a.Price().Currency().Code
 	} else {
 		totalCostVal = priceAmount
-		totalCostCurr = priceCurrency
 	}
 
 	var targetPriceVal *int64
@@ -111,15 +126,6 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		targetPriceVal = &v
 		targetCurrVal = a.TargetPrice().Currency().Code
 	}
-
-	bp := asset.CalculateBudgetProgress(
-		money.New(totalCostVal, totalCostCurr),
-		a.TargetPrice(),
-		homeCurrency,
-		rateProvider,
-	)
-	targetHomeAmountVal := bp.TargetHomeAmount
-	progressPercentageVal := bp.ProgressPercentage
 
 	var completedDateStr *string
 	if a.CompletedDate() != nil {
@@ -132,7 +138,7 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		DisplayName: a.Owner().DisplayName,
 	}
 
-	childrenDTO := make([]ChildAssetDTO, 0)
+	childrenDTO := make([]ChildAssetDTO, 0, len(a.Children()))
 	for _, c := range a.Children() {
 		var cCost int64
 		if c.TotalCost != nil {
@@ -146,7 +152,7 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 		})
 	}
 
-	parentsDTO := make([]ParentAssetDTO, 0)
+	parentsDTO := make([]ParentAssetDTO, 0, len(a.Parents()))
 	for _, p := range a.Parents() {
 		parentsDTO = append(parentsDTO, ParentAssetDTO{
 			ParentID:        p.ParentID.String(),
@@ -156,28 +162,28 @@ func toAssetDTO(a *asset.Asset, rateProvider currency.CurrencyRateProvider) Asse
 	}
 
 	return AssetDTO{
-		AssetID:        a.ID().String(),
-		Name:           a.Name(),
-		Description:    a.Description(),
-		Status:         a.Status().String(),
-		StartDate:      a.StartDate().Format(time.RFC3339),
-		CompletedDate:  completedDateStr,
+		AssetID:            a.ID().String(),
+		Name:               a.Name(),
+		Description:        a.Description(),
+		Status:             a.Status().String(),
+		StartDate:          a.StartDate().Format(time.RFC3339),
+		CompletedDate:      completedDateStr,
 		TargetPrice:        targetPriceVal,
 		TargetCurrency:     targetCurrVal,
-		TargetHomeAmount:   targetHomeAmountVal,
-		ProgressPercentage: progressPercentageVal,
+		TargetHomeAmount:   a.TargetHomeAmount(),
+		ProgressPercentage: a.ProgressPercentage(),
 		DirectCost:         directCostVal,
-		TotalCost:      totalCostVal,
-		Price:          totalCostVal,
-		Currency:       priceCurrency,
-		HomeAmount:     homeAmount,
-		HomeCurrency:   homeCurrency,
-		AcquiredAt:     a.AcquiredAt().Format(time.RFC3339),
-		Owner:          owner,
-		Project:        projDTO,
-		Children:       childrenDTO,
-		Parents:        parentsDTO,
-		Tags:           a.Tags(),
+		TotalCost:          totalCostVal,
+		Price:              totalCostVal,
+		Currency:           priceCurrency,
+		HomeAmount:         a.HomeAmount(),
+		HomeCurrency:       homeCurrency,
+		AcquiredAt:         a.AcquiredAt().Format(time.RFC3339),
+		Owner:              owner,
+		Project:            projDTO,
+		Children:           childrenDTO,
+		Parents:            parentsDTO,
+		Tags:               a.Tags(),
 	}
 }
 
@@ -675,36 +681,36 @@ func decodeUnlinkChildAssetRequest(_ context.Context, r *http.Request) (interfac
 	}, nil
 }
 
-func makeGetAssetEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeGetAssetEndpoint(s asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(asset.Filter)
 		a, err := s.FindOne(ctx, filter)
 		if err != nil {
 			return nil, err
 		}
-		return toAssetDTO(a, rateProvider), nil
+		return toAssetDTO(a), nil
 	}
 }
 
-func makeCreateAssetEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		cmd := request.(asset.CreateAssetCommand)
 		a, err := s.Create(ctx, cmd)
 		if err != nil {
 			return nil, err
 		}
-		return toAssetDTO(a, rateProvider), nil
+		return toAssetDTO(a), nil
 	}
 }
 
-func makeCreateAssetFromPaymentsEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeCreateAssetFromPaymentsEndpoint(s asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		cmd := request.(asset.CreateAssetFromPaymentsCommand)
 		a, err := s.CreateFromPayments(ctx, cmd)
 		if err != nil {
 			return nil, err
 		}
-		return toAssetDTO(a, rateProvider), nil
+		return toAssetDTO(a), nil
 	}
 }
 
@@ -730,7 +736,7 @@ func makeRemoveAssetEndpoint(svc asset.Service) endpoint.Endpoint {
 	}
 }
 
-func makeListAssetsEndpoint(svc asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(asset.CollectionFilter)
 		collection, err := svc.Find(ctx, filter)
@@ -740,7 +746,7 @@ func makeListAssetsEndpoint(svc asset.Service, rateProvider currency.CurrencyRat
 
 		var list []AssetDTO = make([]AssetDTO, 0)
 		for _, e := range collection.Elements() {
-			list = append(list, toAssetDTO(e, rateProvider))
+			list = append(list, toAssetDTO(e))
 		}
 
 		return ListAssetsResponse{
@@ -868,14 +874,14 @@ func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, 
 	}, nil
 }
 
-func makeGroupAssetsEndpoint(s asset.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeGroupAssetsEndpoint(s asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		cmd := request.(asset.GroupAssetsCommand)
 		a, err := s.Group(ctx, cmd)
 		if err != nil {
 			return nil, err
 		}
-		return toAssetDTO(a, rateProvider), nil
+		return toAssetDTO(a), nil
 	}
 }
 

@@ -277,9 +277,13 @@ func TestLoginWithInvitation(t *testing.T) {
 		if precreatedPerson.FirstName() != "Jane" || precreatedPerson.LastName() != "Doe" {
 			t.Errorf("person profile was not updated from Google claims: got %s %s", precreatedPerson.FirstName(), precreatedPerson.LastName())
 		}
+		if !validInv.IsCompleted() {
+			t.Errorf("expected invitation to be marked completed in domain")
+		}
 	})
 
 	t.Run("LoginWithInvitation fails on email mismatch", func(t *testing.T) {
+		pendingInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(7*24*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
 		mismatchedGoogle := &mockThirdPartyAuth{
 			claims: &core.AuthTokenClaims{
 				AuthTokenPayload: core.AuthTokenPayload{
@@ -288,7 +292,7 @@ func TestLoginWithInvitation(t *testing.T) {
 				},
 			},
 		}
-		svcMismatch := people.NewAuthService(&mockDb{}, peopleRepo, tokenProvider, hasher, mismatchedGoogle, invRepo)
+		svcMismatch := people.NewAuthService(&mockDb{}, peopleRepo, tokenProvider, hasher, mismatchedGoogle, &mockInvitationRepo{inv: pendingInv})
 		_, err := svcMismatch.LoginWithInvitation(context.Background(), "token", people.GOOGLE, rawCode)
 		if err == nil || !strings.Contains(err.Error(), "does not match") {
 			t.Errorf("expected email mismatch error, got: %v", err)

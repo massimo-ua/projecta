@@ -10,6 +10,7 @@ type Service interface {
 	Create(ctx context.Context, command CreateInvestmentCommand) (*Investment, error)
 	CreateBatch(ctx context.Context, command CreateBatchInvestmentsCommand) ([]*Investment, error)
 	Update(ctx context.Context, command UpdateInvestmentCommand) error
+	AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error
 	Remove(ctx context.Context, command RemoveInvestmentCommand) error
 	FindOne(ctx context.Context, filter Filter) (*Investment, error)
 	Find(ctx context.Context, filter CollectionFilter) (*Collection, error)
