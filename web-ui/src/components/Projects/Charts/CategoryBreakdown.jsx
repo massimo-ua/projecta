@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { Tag } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { getPaymentHomeAmount } from '../../../hooks/useProjectAnalytics';
 import { ChartTooltip } from './ChartTooltip';
 import { CHART_COLORS } from './colors';
 
@@ -24,7 +25,7 @@ export function CategoryBreakdown({ payments = [], currency = '', content = {} }
         : (p.category ? p.category.split(',').map((s) => s.trim()).filter(Boolean) : [uncategorizedLabel]);
 
       const effectiveTags = tagList.length > 0 ? tagList : [uncategorizedLabel];
-      const amount = parseFloat(p.homeAmount) || (p.rawHomeAmount ? p.rawHomeAmount / 100 : 0) || 0;
+      const amount = getPaymentHomeAmount(p);
       total += amount;
 
       const sharePerTag = amount / effectiveTags.length;

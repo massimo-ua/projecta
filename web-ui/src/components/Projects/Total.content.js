@@ -43,6 +43,22 @@ const totalContent = {
           en: 'Investment timeline in project currency',
           uk: 'Хронологія інвестицій у валюті проєкту',
         }),
+        monthlyMode: t({
+          en: 'Monthly',
+          uk: 'Помісячно',
+        }),
+        cumulativeMode: t({
+          en: 'Cumulative',
+          uk: 'Накопичувально',
+        }),
+        avgBurnLine: t({
+          en: 'Avg. Monthly',
+          uk: 'Сер. за місяць',
+        }),
+        targetBudgetLine: t({
+          en: 'Target Budget',
+          uk: 'Цільовий бюджет',
+        }),
       },
       byCategory: {
         title: t({
@@ -56,12 +72,20 @@ const totalContent = {
       },
       paymentKinds: {
         title: t({
-          en: 'Resource Breakdown',
-          uk: 'Розподіл за видами ресурсів',
+          en: 'Resource & Team Breakdown',
+          uk: 'Розподіл за ресурсами та учасниками',
         }),
         description: t({
-          en: 'Capital, labor hours, and goods investments',
-          uk: 'Капітал, праця (години) та товари й матеріали',
+          en: 'Capital, labor hours, goods, and contributor shares',
+          uk: 'Капітал, години праці, матеріали та внесок учасників',
+        }),
+        byResource: t({
+          en: 'By Resource',
+          uk: 'За ресурсами',
+        }),
+        byContributor: t({
+          en: 'By Contributor',
+          uk: 'За учасниками',
         }),
       },
       topTypes: {
@@ -73,15 +97,43 @@ const totalContent = {
           en: 'Assets with highest resource allocation',
           uk: 'Активи з найбільшим обсягом інвестицій',
         }),
+        rootGroups: t({
+          en: 'Root Groups',
+          uk: 'Групи активів',
+        }),
+        directAssets: t({
+          en: 'Direct Assets',
+          uk: 'Окремі активи',
+        }),
       },
       paymentsVsAssets: {
         title: t({
-          en: 'Investments vs. Assets',
-          uk: 'Інвестиції та активи',
+          en: 'Budget vs. Actual',
+          uk: 'Бюджет проти факту',
         }),
         description: t({
-          en: 'Direct resource allocations versus asset valuations',
-          uk: 'Прямі інвестиції проти оцінки активів',
+          en: 'Planned target budgets compared to actual investments',
+          uk: 'Плановий цільовий бюджет порівняно з фактичними інвестиціями',
+        }),
+        fallbackDescription: t({
+          en: 'Active vs. completed asset value allocation',
+          uk: 'Розподіл вартості між активними та завершеними активами',
+        }),
+        targetLabel: t({
+          en: 'Target Budget',
+          uk: 'Цільовий бюджет',
+        }),
+        actualLabel: t({
+          en: 'Actual Invested',
+          uk: 'Фактично інвестовано',
+        }),
+        remainingLabel: t({
+          en: 'Remaining Budget',
+          uk: 'Залишок бюджету',
+        }),
+        overBudgetLabel: t({
+          en: 'Over Budget',
+          uk: 'Перевищення бюджету',
         }),
       },
     },
@@ -93,6 +145,50 @@ const totalContent = {
       projectBalance: t({
         en: 'Project Balance',
         uk: 'Баланс проекту',
+      }),
+      targetBudget: t({
+        en: 'Target Budget',
+        uk: 'Цільовий бюджет',
+      }),
+      assetsProgress: t({
+        en: 'Assets Progress',
+        uk: 'Прогрес активів',
+      }),
+      avgMonthlyBurn: t({
+        en: 'Avg. Monthly Burn',
+        uk: 'Середні витрати / міс.',
+      }),
+      investmentsCount: t({
+        en: 'investments',
+        uk: 'інвестицій',
+      }),
+      laborHours: t({
+        en: 'hrs labor',
+        uk: 'год праці',
+      }),
+      utilized: t({
+        en: 'utilized',
+        uk: 'використано',
+      }),
+      noBudgetSet: t({
+        en: 'No target budgets set',
+        uk: 'Цільовий бюджет не задано',
+      }),
+      overBudgetAssets: t({
+        en: 'over budget',
+        uk: 'понад бюджет',
+      }),
+      completed: t({
+        en: 'completed',
+        uk: 'завершено',
+      }),
+      active: t({
+        en: 'active',
+        uk: 'активних',
+      }),
+      activeMonths: t({
+        en: 'active months',
+        uk: 'активних міс.',
       }),
     },
     kinds: {
@@ -138,6 +234,14 @@ const totalContent = {
         en: 'Total Assets',
         uk: 'Всього активів',
       }),
+      hoursUnit: t({
+        en: 'hrs',
+        uk: 'год',
+      }),
+      unassignedContributor: t({
+        en: 'Project Owner',
+        uk: 'Власник проєкту',
+      }),
       other: t({
         en: 'Other',
         uk: 'Інше',
@@ -167,3 +271,4 @@ const totalContent = {
 };
 
 export default totalContent;
+
