@@ -9,13 +9,54 @@ import {
   isAfter,
   subMonths,
   startOfYear,
+  startOfMonth,
+  eachMonthOfInterval,
 } from 'date-fns';
 import { investmentRepository, assetRepository, projectsRepository } from '../api';
+
+export function getPaymentHomeAmount(p) {
+  if (!p) return 0;
+  if (typeof p.rawHomeAmount === 'number') {
+    return p.rawHomeAmount / 100;
+  }
+  return parseFloat(String(p.homeAmount || p.amount || '0').replace(/,/g, '')) || 0;
+}
+
+export function getAssetHomeAmount(a) {
+  if (!a) return 0;
+  if (typeof a.rawTotalCost === 'number' && (!a.homeCurrency || a.currency === a.homeCurrency)) {
+    return a.rawTotalCost / 100;
+  }
+  const parsedHome = parseFloat(String(a.homeAmount || '').replace(/,/g, ''));
+  if (!Number.isNaN(parsedHome) && parsedHome > 0) {
+    return parsedHome;
+  }
+  if (typeof a.rawTotalCost === 'number') {
+    return a.rawTotalCost / 100;
+  }
+  return parseFloat(String(a.totalCost || a.price || '0').replace(/,/g, '')) || 0;
+}
+
+export function getAssetTargetHomeAmount(a) {
+  if (!a) return 0;
+  if (typeof a.rawTargetHomeAmount === 'number' && a.rawTargetHomeAmount > 0) {
+    return a.rawTargetHomeAmount / 100;
+  }
+  const parsedTargetHome = parseFloat(String(a.targetHomeAmount || '').replace(/,/g, ''));
+  if (!Number.isNaN(parsedTargetHome) && parsedTargetHome > 0) {
+    return parsedTargetHome;
+  }
+  if (typeof a.rawTargetPrice === 'number' && a.rawTargetPrice > 0) {
+    return a.rawTargetPrice / 100;
+  }
+  return parseFloat(String(a.targetPrice || '0').replace(/,/g, '')) || 0;
+}
 
 export function useProjectAnalytics(projectId) {
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState([]);
   const [assets, setAssets] = useState([]);
+  const [project, setProject] = useState(null);
   const [currency, setCurrency] = useState('UAH');
   const [timeframe, setTimeframe] = useState('all');
 
@@ -34,6 +75,7 @@ export function useProjectAnalytics(projectId) {
 
       setPayments(Array.isArray(loadedInvestments) ? loadedInvestments : []);
       setAssets(Array.isArray(loadedAssets) ? loadedAssets : []);
+      setProject(projectRes);
       if (projectRes?.mainCurrency) {
         setCurrency(projectRes.mainCurrency);
       } else if (loadedInvestments?.[0]?.homeCurrency) {
@@ -74,12 +116,127 @@ export function useProjectAnalytics(projectId) {
     };
 
     const filteredPayments = payments.filter((p) => isWithinTimeframe(p.rawDate));
-    const filteredAssets = assets.filter((a) => isWithinTimeframe(a.rawAcquiredAt));
+
+    const activeAssetIdsInPeriod = new Set();
+    filteredPayments.forEach((p) => {
+      if (p.assetId) activeAssetIdsInPeriod.add(p.assetId);
+      if (Array.isArray(p.assetAllocations)) {
+        p.assetAllocations.forEach((alloc) => {
+          if (alloc.assetId) activeAssetIdsInPeriod.add(alloc.assetId);
+        });
+      }
+    });
+
+    const filteredAssets = timeframe === 'all'
+      ? assets
+      : assets.filter(
+          (a) =>
+            isWithinTimeframe(a.rawAcquiredAt) ||
+            isWithinTimeframe(a.rawCompletedDate) ||
+            activeAssetIdsInPeriod.has(a.id),
+        );
+
+    const totalInvested = Math.round(
+      filteredPayments.reduce((sum, p) => sum + getPaymentHomeAmount(p), 0) * 100,
+    ) / 100;
+
+    const totalLaborHours = Math.round(
+      filteredPayments.reduce((sum, p) => {
+        if (p.resourceType === 'TIME' && p.timeHours) {
+          return sum + (Number(p.timeHours) || 0);
+        }
+        return sum;
+      }, 0) * 10,
+    ) / 10;
+
+    // Calculate target budget without double-counting parent/child hierarchies
+    const assetById = new Map(assets.map((a) => [a.id, a]));
+    let totalTargetBudget = 0;
+    let budgetedActualCost = 0;
+    let overBudgetCount = 0;
+    let budgetedAssetsCount = 0;
+
+    filteredAssets.forEach((a) => {
+      const targetAmt = getAssetTargetHomeAmount(a);
+      const actualAmt = getAssetHomeAmount(a);
+      if (targetAmt > 0) {
+        // Check if any parent also has a target budget to avoid double-counting in total
+        const parentHasTarget = Array.isArray(a.parents) && a.parents.some((pLink) => {
+          const parentAsset = assetById.get(pLink.parentId);
+          return parentAsset && getAssetTargetHomeAmount(parentAsset) > 0;
+        });
+
+        budgetedAssetsCount += 1;
+        if (actualAmt > targetAmt) {
+          overBudgetCount += 1;
+        }
+        if (!parentHasTarget) {
+          totalTargetBudget += targetAmt;
+          budgetedActualCost += actualAmt;
+        }
+      }
+    });
+
+    totalTargetBudget = Math.round(totalTargetBudget * 100) / 100;
+    budgetedActualCost = Math.round(budgetedActualCost * 100) / 100;
+    const budgetUtilization = totalTargetBudget > 0
+      ? Math.round((budgetedActualCost / totalTargetBudget) * 100)
+      : null;
+    const budgetVariance = Math.round((totalTargetBudget - budgetedActualCost) * 100) / 100;
+
+    const completedAssetsCount = filteredAssets.filter((a) => a.isCompleted).length;
+    const activeAssetsCount = filteredAssets.filter((a) => a.isActive).length;
+    const totalAssetsCount = filteredAssets.length;
+
+    // Calculate active months span and average monthly burn rate
+    let minDate = null;
+    let maxDate = null;
+    filteredPayments.forEach((p) => {
+      if (!p.rawDate) return;
+      try {
+        const d = parseISO(p.rawDate);
+        if (Number.isNaN(d.getTime())) return;
+        if (!minDate || d < minDate) minDate = d;
+        if (!maxDate || d > maxDate) maxDate = d;
+      } catch {
+        // ignore invalid date
+      }
+    });
+
+    let activeMonthsCount = 0;
+    if (minDate && maxDate) {
+      const months = eachMonthOfInterval({
+        start: startOfMonth(minDate),
+        end: startOfMonth(maxDate),
+      });
+      activeMonthsCount = Math.max(1, months.length);
+    }
+
+    const avgMonthlyBurn = activeMonthsCount > 0
+      ? Math.round((totalInvested / activeMonthsCount) * 100) / 100
+      : 0;
 
     return {
       payments: filteredPayments,
       assets: filteredAssets,
+      allAssets: assets,
       hasData: filteredPayments.length > 0 || filteredAssets.length > 0,
+      kpis: {
+        totalInvested,
+        investmentCount: filteredPayments.length,
+        totalLaborHours,
+        totalTargetBudget,
+        budgetedActualCost,
+        budgetUtilization,
+        budgetVariance,
+        overBudgetCount,
+        budgetedAssetsCount,
+        totalAssetsCount,
+        completedAssetsCount,
+        activeAssetsCount,
+        avgMonthlyBurn,
+        activeMonthsCount,
+      },
     };
   }, [payments, assets, timeframe]);
 
@@ -88,11 +245,15 @@ export function useProjectAnalytics(projectId) {
     timeframe,
     setTimeframe,
     currency,
+    project,
     payments: filteredData.payments,
     assets: filteredData.assets,
+    allAssets: filteredData.allAssets,
+    kpis: filteredData.kpis,
     hasData: filteredData.hasData,
     reload: fetchData,
   };
 }
 
 export default useProjectAnalytics;
+
