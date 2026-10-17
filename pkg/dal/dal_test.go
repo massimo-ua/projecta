@@ -290,23 +290,23 @@ func TestPgPeopleRepository(t *testing.T) {
 	cred, _ := people.NewCredentials("LOCAL", "john@example.com", "secret")
 	person, _ := people.NewPerson(pID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
-	t.Run("Register success and errors", func(t *testing.T) {
+	t.Run("Save success and errors", func(t *testing.T) {
 		mockDb := &mockPgDb{}
 		ctx := withMockDb(context.Background(), mockDb)
 
-		err := repo.Register(ctx, person)
+		err := repo.Save(ctx, person)
 		if err != nil {
-			t.Errorf("unexpected Register error: %v", err)
+			t.Errorf("unexpected Save error: %v", err)
 		}
 
 		personNoCreds, _ := people.NewPerson(uuid.New(), "Jane", "Doe", "J.D.", nil, people.RoleUser)
-		if err := repo.Register(ctx, personNoCreds); err != nil {
-			t.Errorf("unexpected Register without credentials error: %v", err)
+		if err := repo.Save(ctx, personNoCreds); err != nil {
+			t.Errorf("unexpected Save without credentials error: %v", err)
 		}
 
 		mockDbErr := &mockPgDb{execErr: errors.New("exec error")}
 		ctxErr := withMockDb(context.Background(), mockDbErr)
-		err = repo.Register(ctxErr, person)
+		err = repo.Save(ctxErr, person)
 		if err == nil {
 			t.Errorf("expected exec error")
 		}
@@ -373,23 +373,25 @@ func TestPgPeopleRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("SaveRoles success and errors", func(t *testing.T) {
+	t.Run("Save roles via aggregate Save", func(t *testing.T) {
 		mockDb := &mockPgDb{}
 		ctx := withMockDb(context.Background(), mockDb)
 
-		err := repo.SaveRoles(ctx, pID, []people.Role{people.RoleUser, people.RoleAdministrator})
+		_ = person.AssignRoles([]people.Role{people.RoleUser, people.RoleAdministrator})
+		err := repo.Save(ctx, person)
 		if err != nil {
-			t.Errorf("unexpected SaveRoles error: %v", err)
+			t.Errorf("unexpected Save error: %v", err)
 		}
 
-		err = repo.SaveRoles(ctx, pID, []people.Role{})
+		_ = person.AssignRoles([]people.Role{})
+		err = repo.Save(ctx, person)
 		if err != nil {
-			t.Errorf("unexpected SaveRoles with empty roles error: %v", err)
+			t.Errorf("unexpected Save with empty roles error: %v", err)
 		}
 
 		mockDbErr := &mockPgDb{execErr: errors.New("delete failure")}
 		ctxErr := withMockDb(context.Background(), mockDbErr)
-		err = repo.SaveRoles(ctxErr, pID, []people.Role{people.RoleUser})
+		err = repo.Save(ctxErr, person)
 		if err == nil {
 			t.Errorf("expected error on delete failure")
 		}
@@ -835,7 +837,7 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 	now := time.Now()
 	codeHash := "sha256_hash_value_123"
 
-	t.Run("DeletePerson, UpdateProfile, SaveCredentials", func(t *testing.T) {
+	t.Run("DeletePerson and Save", func(t *testing.T) {
 		mockDb := &mockPgDb{}
 		ctx := withMockDb(context.Background(), mockDb)
 
@@ -844,19 +846,15 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 			t.Errorf("DeletePerson error: %v", err)
 		}
 
-		err = peopleRepo.UpdateProfile(ctx, pID, "Alice", "Smith", "Alice Smith")
-		if err != nil {
-			t.Errorf("UpdateProfile error: %v", err)
-		}
-
 		cred, _ := people.NewCredentials(people.GOOGLE, "sub_123", "sub_123")
-		err = peopleRepo.SaveCredentials(ctx, pID, cred)
+		alice, _ := people.NewPerson(pID, "Alice", "Smith", "Alice Smith", []people.Credentials{cred}, people.RoleUser)
+		err = peopleRepo.Save(ctx, alice)
 		if err != nil {
-			t.Errorf("SaveCredentials error: %v", err)
+			t.Errorf("Save error: %v", err)
 		}
 	})
 
-	t.Run("PgInvitationRepository Create, FindByID, FindByCodeHash, FindByCreator, Complete, Delete, EmailExists", func(t *testing.T) {
+	t.Run("PgInvitationRepository Save, FindByID, FindByCodeHash, FindByCreator, Delete, EmailExists", func(t *testing.T) {
 		inv, _ := people.NewInvitation(
 			invID,
 			"user@example.com",
@@ -895,10 +893,10 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 		}
 		ctx := withMockDb(context.Background(), mockDb)
 
-		// Create
-		err := invRepo.Create(ctx, inv)
+		// Save (insert)
+		err := invRepo.Save(ctx, inv)
 		if err != nil {
-			t.Errorf("Create invitation error: %v", err)
+			t.Errorf("Save invitation error: %v", err)
 		}
 
 		// FindByID
@@ -919,10 +917,11 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 			t.Errorf("FindByCreator error: %v", err)
 		}
 
-		// Complete
-		err = invRepo.Complete(ctx, invID)
+		// Complete + Save (update)
+		_ = inv.Complete()
+		err = invRepo.Save(ctx, inv)
 		if err != nil {
-			t.Errorf("Complete error: %v", err)
+			t.Errorf("Save completed invitation error: %v", err)
 		}
 
 		// Delete

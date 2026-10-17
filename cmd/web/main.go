@@ -20,8 +20,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 func createErrorHandler(logger core.Logger) func(err error) {
@@ -71,21 +69,22 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	})
 
 	investmentRepository := dal.NewPgInvestmentRepository(db)
-	assetService := asset.NewService(
-		db,
-		assetRepository,
-		peopleService,
-		projectRepository,
-		investmentRepository,
-		rateProvider,
-	)
-
 	investmentService := investment.NewService(
 		db,
 		investmentRepository,
 		assetRepository,
 		projectRepository,
 		peopleService,
+		rateProvider,
+	)
+
+	assetService := asset.NewService(
+		db,
+		assetRepository,
+		peopleService,
+		projectRepository,
+		&investmentSourceAdapter{svc: investmentService},
+		rateProvider,
 	)
 
 	statementService := statement.NewService(
@@ -104,38 +103,6 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		rateProvider,
 		investmentService,
 	)
-}
-
-type projectValidator struct {
-	svc project.ProjectService
-}
-
-func (v *projectValidator) ValidateProject(ctx context.Context, projectID uuid.UUID) error {
-	_, err := v.svc.FindOne(ctx, project.ProjectFilter{ProjectID: projectID})
-	return err
-}
-
-type investmentTransactionFinder struct {
-	svc investment.Service
-}
-
-func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID uuid.UUID) ([]statement.ExistingTransaction, error) {
-	col, err := f.svc.Find(ctx, investment.CollectionFilter{
-		ProjectID: projectID,
-		Pagination: core.Pagination{Limit: 1000},
-	})
-	if err != nil {
-		return nil, err
-	}
-	res := make([]statement.ExistingTransaction, 0, len(col.Elements()))
-	for _, inv := range col.Elements() {
-		res = append(res, statement.ExistingTransaction{
-			Date:        inv.Date(),
-			Amount:      inv.Amount().Amount(),
-			Description: inv.Description(),
-		})
-	}
-	return res, nil
 }
 
 func main() {

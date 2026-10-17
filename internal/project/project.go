@@ -106,6 +106,10 @@ func (p *Project) RegenerateShareToken() {
 	p.shareToken = uuid.New()
 }
 
+func (p *Project) MarkShared() {
+	p.isShared = true
+}
+
 func NewProject(id uuid.UUID, name string, description string, owner *Owner, startDate time.Time, endDate time.Time, mainCurrency ...string) (*Project, error) {
 	if id == uuid.Nil {
 		id = uuid.New()

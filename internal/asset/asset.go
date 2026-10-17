@@ -1,11 +1,15 @@
 package asset
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type AssetStatus string
@@ -27,40 +31,44 @@ func ToAssetStatus(status string) AssetStatus {
 }
 
 type ChildAssetLink struct {
-	ChildID         uuid.UUID    `json:"child_id"`
-	ChildName       string       `json:"child_name"`
-	SharePercentage float64      `json:"share_percentage"`
-	TotalCost       *money.Money `json:"total_cost,omitempty"`
+	ChildID         uuid.UUID
+	ChildName       string
+	SharePercentage float64
+	TotalCost       *money.Money
 }
 
 type ParentAssetLink struct {
-	ParentID        uuid.UUID `json:"parent_id"`
-	ParentName      string    `json:"parent_name"`
-	SharePercentage float64   `json:"share_percentage"`
+	ParentID        uuid.UUID
+	ParentName      string
+	SharePercentage float64
 }
 
 type OwnerRef struct {
-	PersonID    uuid.UUID `json:"person_id"`
-	DisplayName string    `json:"display_name"`
+	PersonID    uuid.UUID
+	DisplayName string
 }
 
 type Asset struct {
-	id            uuid.UUID
-	name          string
-	description   string
-	projectID     uuid.UUID
-	price         *money.Money
-	acquiredAt    time.Time
-	owner         OwnerRef
-	status        AssetStatus
-	startDate     time.Time
-	completedDate *time.Time
-	targetPrice   *money.Money
-	directCost    *money.Money
-	totalCost     *money.Money
-	children      []ChildAssetLink
-	parents       []ParentAssetLink
-	tags          []string
+	id                 uuid.UUID
+	name               string
+	description        string
+	projectID          uuid.UUID
+	price              *money.Money
+	acquiredAt         time.Time
+	owner              OwnerRef
+	status             AssetStatus
+	startDate          time.Time
+	completedDate      *time.Time
+	targetPrice        *money.Money
+	directCost         *money.Money
+	totalCost          *money.Money
+	homeCurrency       string
+	homeAmount         int64
+	targetHomeAmount   *int64
+	progressPercentage *float64
+	children           []ChildAssetLink
+	parents            []ParentAssetLink
+	tags               []string
 }
 
 func NewAsset(
@@ -76,7 +84,7 @@ func NewAsset(
 	if start.IsZero() {
 		start = time.Now()
 	}
-	return &Asset{
+	a := &Asset{
 		id:          id,
 		name:        name,
 		description: description,
@@ -91,6 +99,196 @@ func NewAsset(
 		parents:     make([]ParentAssetLink, 0),
 		tags:        make([]string, 0),
 	}
+	a.EvaluateValuation("UAH", nil)
+	return a
+}
+
+// CreateAsset validates business invariants and constructs a new Asset entity.
+func CreateAsset(
+	id uuid.UUID,
+	name string,
+	description string,
+	projectID uuid.UUID,
+	price *money.Money,
+	startDate time.Time,
+	owner OwnerRef,
+	status AssetStatus,
+	completedDate *time.Time,
+	tags []string,
+) (*Asset, error) {
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	if projectID == uuid.Nil {
+		return nil, exceptions.NewValidationException("project id is required", nil)
+	}
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+	if startDate.IsZero() {
+		startDate = time.Now()
+	}
+	if status == "" {
+		status = AssetStatusActive
+	}
+	if tags == nil {
+		tags = make([]string, 0)
+	}
+	a := &Asset{
+		id:            id,
+		name:          name,
+		description:   description,
+		projectID:     projectID,
+		price:         price,
+		acquiredAt:    startDate,
+		owner:         owner,
+		status:        status,
+		startDate:     startDate,
+		completedDate: completedDate,
+		targetPrice:   price,
+		children:      make([]ChildAssetLink, 0),
+		parents:       make([]ParentAssetLink, 0),
+		tags:          tags,
+	}
+	a.EvaluateValuation("UAH", nil)
+	return a, nil
+}
+
+// CreateAssetFromInvestments creates a new Asset by aggregating and converting existing investments.
+func CreateAssetFromInvestments(
+	id uuid.UUID,
+	name string,
+	description string,
+	projectID uuid.UUID,
+	mainCurrency string,
+	requestedTargetCurrency string,
+	acquiredAt time.Time,
+	owner OwnerRef,
+	invItems []InvestmentItem,
+	converter CurrencyConverter,
+) (*Asset, error) {
+	if projectID == uuid.Nil {
+		return nil, exceptions.NewValidationException("project id is required", nil)
+	}
+	if len(invItems) == 0 {
+		return nil, exceptions.NewValidationException("at least one investment must be selected", nil)
+	}
+	if strings.TrimSpace(name) == "" {
+		return nil, exceptions.NewValidationException("name is required", nil)
+	}
+
+	if acquiredAt.IsZero() {
+		for _, inv := range invItems {
+			if inv.Date.After(acquiredAt) {
+				acquiredAt = inv.Date
+			}
+		}
+		if acquiredAt.IsZero() {
+			acquiredAt = time.Now()
+		}
+	}
+
+	targetCurrency := strings.ToUpper(strings.TrimSpace(requestedTargetCurrency))
+	if targetCurrency == "" {
+		firstCurr := invItems[0].Amount.Currency().Code
+		allSameCurr := true
+		for _, inv := range invItems[1:] {
+			if inv.Amount.Currency().Code != firstCurr {
+				allSameCurr = false
+				break
+			}
+		}
+		if allSameCurr {
+			targetCurrency = firstCurr
+		} else {
+			targetCurrency = mainCurrency
+			if targetCurrency == "" {
+				targetCurrency = "UAH"
+			}
+		}
+	}
+
+	var totalAmount int64
+	tagSet := make(map[string]struct{})
+	for _, inv := range invItems {
+		currCode := inv.Amount.Currency().Code
+		if currCode == targetCurrency {
+			totalAmount += inv.Amount.Amount()
+		} else {
+			if converter == nil {
+				return nil, exceptions.NewValidationException(fmt.Sprintf("currency rate provider not available to convert %s to %s", currCode, targetCurrency), nil)
+			}
+			converted, err := converter.Convert(
+				currency.NewCurrency(inv.Amount.Amount(), currCode),
+				currency.NewCurrency(0, targetCurrency),
+			)
+			if err != nil {
+				return nil, exceptions.NewValidationException(fmt.Sprintf("failed to convert currency %s to %s: %s", currCode, targetCurrency, err.Error()), err)
+			}
+			totalAmount += converted.Amount
+		}
+
+		for _, t := range inv.Tags {
+			if t != "" {
+				tagSet[t] = struct{}{}
+			}
+		}
+	}
+
+	var tags []string
+	for t := range tagSet {
+		tags = append(tags, t)
+	}
+
+	if totalAmount <= 0 {
+		return nil, exceptions.NewValidationException("total asset price must be greater than 0", nil)
+	}
+
+	price := money.New(totalAmount, targetCurrency)
+	anAsset, err := CreateAsset(
+		id,
+		name,
+		description,
+		projectID,
+		price,
+		acquiredAt,
+		owner,
+		AssetStatusActive,
+		nil,
+		tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	anAsset.AssignValuation(price, price, nil, nil)
+	anAsset.EvaluateValuation(mainCurrency, converter)
+	return anAsset, nil
+}
+
+// CreateAssetGroup constructs a parent group Asset to aggregate child assets.
+func CreateAssetGroup(
+	id uuid.UUID,
+	name string,
+	description string,
+	projectID uuid.UUID,
+	owner OwnerRef,
+	tags []string,
+) (*Asset, error) {
+	now := time.Now()
+	zeroPrice := money.New(0, "UAH")
+	return CreateAsset(
+		id,
+		name,
+		description,
+		projectID,
+		zeroPrice,
+		now,
+		owner,
+		AssetStatusActive,
+		nil,
+		tags,
+	)
 }
 
 func (a *Asset) ID() uuid.UUID {
@@ -166,6 +364,31 @@ func (a *Asset) TotalCost() *money.Money {
 	return a.price
 }
 
+func (a *Asset) HomeCurrency() string {
+	if a.homeCurrency == "" {
+		return "UAH"
+	}
+	return a.homeCurrency
+}
+
+func (a *Asset) HomeAmount() int64 {
+	if a.homeAmount != 0 {
+		return a.homeAmount
+	}
+	if a.Price() != nil {
+		return a.Price().Amount()
+	}
+	return 0
+}
+
+func (a *Asset) TargetHomeAmount() *int64 {
+	return a.targetHomeAmount
+}
+
+func (a *Asset) ProgressPercentage() *float64 {
+	return a.progressPercentage
+}
+
 func (a *Asset) Children() []ChildAssetLink {
 	return a.children
 }
@@ -181,70 +404,54 @@ func (a *Asset) Tags() []string {
 	return a.tags
 }
 
-func (a *Asset) SetName(name string) {
-	a.name = name
-}
-
-func (a *Asset) SetDescription(description string) {
-	a.description = description
-}
-
-func (a *Asset) SetProjectID(projectID uuid.UUID) {
-	a.projectID = projectID
-}
-
-func (a *Asset) SetPrice(price *money.Money) {
-	a.price = price
-	a.targetPrice = price
-}
-
-func (a *Asset) SetAcquiredAt(acquiredAt time.Time) {
-	a.acquiredAt = acquiredAt
-	a.startDate = acquiredAt
-}
-
-func (a *Asset) SetOwner(owner OwnerRef) {
-	a.owner = owner
-}
-
-func (a *Asset) SetStatus(status AssetStatus) {
-	a.status = status
-}
-
-func (a *Asset) SetStartDate(startDate time.Time) {
-	a.startDate = startDate
-}
-
-func (a *Asset) SetCompletedDate(completedDate *time.Time) {
-	a.completedDate = completedDate
-}
-
-func (a *Asset) SetTargetPrice(targetPrice *money.Money) {
-	a.targetPrice = targetPrice
-}
-
-func (a *Asset) SetDirectCost(directCost *money.Money) {
-	a.directCost = directCost
-}
-
-func (a *Asset) SetTotalCost(totalCost *money.Money) {
-	a.totalCost = totalCost
-}
-
-func (a *Asset) SetChildren(children []ChildAssetLink) {
-	a.children = children
-}
-
-func (a *Asset) SetParents(parents []ParentAssetLink) {
-	a.parents = parents
-}
-
-func (a *Asset) SetTags(tags []string) {
-	if tags == nil {
-		a.tags = make([]string, 0)
-	} else {
-		a.tags = tags
+// EvaluateValuation computes and stores the home-currency valuation and budget progress on the asset.
+func (a *Asset) EvaluateValuation(homeCurrency string, converter CurrencyConverter) {
+	if homeCurrency == "" {
+		if a.homeCurrency != "" {
+			homeCurrency = a.homeCurrency
+		} else {
+			homeCurrency = "UAH"
+		}
 	}
+	a.homeCurrency = homeCurrency
+
+	priceAmount := int64(0)
+	priceCurrency := homeCurrency
+	if a.Price() != nil {
+		priceAmount = a.Price().Amount()
+		priceCurrency = a.Price().Currency().Code
+	}
+
+	homeAmount := priceAmount
+	if converter != nil && priceCurrency != homeCurrency && priceAmount > 0 {
+		converted, err := converter.Convert(
+			currency.NewCurrency(priceAmount, priceCurrency),
+			currency.NewCurrency(0, homeCurrency),
+		)
+		if err == nil {
+			homeAmount = converted.Amount
+		}
+	}
+	a.homeAmount = homeAmount
+
+	var totalCostVal int64
+	var totalCostCurr string
+	if a.TotalCost() != nil {
+		totalCostVal = a.TotalCost().Amount()
+		totalCostCurr = a.TotalCost().Currency().Code
+	} else {
+		totalCostVal = priceAmount
+		totalCostCurr = priceCurrency
+	}
+
+	bp := CalculateBudgetProgress(
+		money.New(totalCostVal, totalCostCurr),
+		a.TargetPrice(),
+		homeCurrency,
+		converter,
+	)
+	a.targetHomeAmount = bp.TargetHomeAmount
+	a.progressPercentage = bp.ProgressPercentage
 }
 
 // AssignValuation assigns computed financial metrics and composition links to the asset.
@@ -261,6 +468,7 @@ func (a *Asset) AssignValuation(directCost, totalCost *money.Money, children []C
 	} else {
 		a.parents = parents
 	}
+	a.EvaluateValuation(a.homeCurrency, nil)
 }
 
 // UpdateDetails updates the descriptive information, target budget, and tags of the asset.
@@ -272,6 +480,26 @@ func (a *Asset) UpdateDetails(name, description string, targetPrice *money.Money
 	a.targetPrice = targetPrice
 	if tags != nil {
 		a.tags = tags
+	}
+	a.EvaluateValuation(a.homeCurrency, nil)
+}
+
+// Reschedule updates the start/acquisition date of the asset.
+func (a *Asset) Reschedule(startDate time.Time) {
+	if !startDate.IsZero() {
+		a.startDate = startDate
+		a.acquiredAt = startDate
+	}
+}
+
+// TransitionStatus applies lifecycle status transitions (Complete, Reopen, or explicit status).
+func (a *Asset) TransitionStatus(status AssetStatus, completedDate *time.Time) {
+	if completedDate != nil {
+		a.Complete(*completedDate)
+	} else if status == AssetStatusActive {
+		a.Reopen()
+	} else if status != "" {
+		a.status = status
 	}
 }
 
@@ -315,7 +543,7 @@ func ReconstituteAsset(
 	if status == "" {
 		status = AssetStatusActive
 	}
-	return &Asset{
+	a := &Asset{
 		id:            id,
 		name:          name,
 		description:   description,
@@ -331,6 +559,8 @@ func ReconstituteAsset(
 		parents:       make([]ParentAssetLink, 0),
 		tags:          tags,
 	}
+	a.EvaluateValuation("UAH", nil)
+	return a
 }
 
 type Collection = core.PaginatedCollection[*Asset]

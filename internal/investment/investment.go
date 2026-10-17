@@ -10,7 +10,12 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
+
+type CurrencyConverter interface {
+	Convert(source, target currency.Currency) (currency.Currency, error)
+}
 
 type ResourceType string
 
@@ -38,20 +43,28 @@ func ToResourceType(val string) (ResourceType, error) {
 }
 
 type InvestmentAssetLink struct {
-	AssetID         uuid.UUID `json:"asset_id"`
-	AssetName       string    `json:"asset_name,omitempty"`
-	SharePercentage float64   `json:"share_percentage"`
+	AssetID         uuid.UUID
+	AssetName       string
+	SharePercentage float64
+}
+
+func (l InvestmentAssetLink) AllocatedAmount(total *money.Money) int64 {
+	if total == nil {
+		return 0
+	}
+	return int64(float64(total.Amount()) * (l.SharePercentage / 100.0))
 }
 
 type ContributorRef struct {
-	PersonID    uuid.UUID `json:"person_id"`
-	DisplayName string    `json:"display_name"`
+	PersonID    uuid.UUID
+	DisplayName string
 }
 
 type Investment struct {
 	id               uuid.UUID
 	projectID        uuid.UUID
 	homeCurrency     string
+	homeAmount       int64
 	primaryAssetID   uuid.UUID
 	primaryAssetName string
 	assetAllocations []InvestmentAssetLink
@@ -317,16 +330,49 @@ func ReconstituteInvestment(
 	}
 }
 
+// EvaluateHomeAmount computes and stores the home-currency valuation for this investment.
+func (i *Investment) EvaluateHomeAmount(converter CurrencyConverter) {
+	homeCurr := i.HomeCurrency()
+	if i.amount == nil {
+		i.homeAmount = 0
+		return
+	}
+	i.homeAmount = i.amount.Amount()
+	if converter != nil && i.amount.Currency() != nil && i.amount.Currency().Code != homeCurr {
+		converted, err := converter.Convert(
+			currency.NewCurrency(i.amount.Amount(), i.amount.Currency().Code),
+			currency.NewCurrency(0, homeCurr),
+		)
+		if err == nil {
+			i.homeAmount = converted.Amount
+		}
+	}
+}
+
 // Getters
-func (i *Investment) ID() uuid.UUID                               { return i.id }
-func (i *Investment) ProjectID() uuid.UUID                        { return i.projectID }
-func (i *Investment) HomeCurrency() string                        { return i.homeCurrency }
-func (i *Investment) PrimaryAssetID() uuid.UUID                  { return i.primaryAssetID }
-func (i *Investment) PrimaryAssetName() string                   { return i.primaryAssetName }
-func (i *Investment) AssetAllocations() []InvestmentAssetLink     { return i.assetAllocations }
-func (i *Investment) Contributor() ContributorRef                 { return i.contributor }
-func (i *Investment) ResourceType() ResourceType                 { return i.resourceType }
-func (i *Investment) Amount() *money.Money                       { return i.amount }
+func (i *Investment) ID() uuid.UUID           { return i.id }
+func (i *Investment) ProjectID() uuid.UUID    { return i.projectID }
+func (i *Investment) HomeCurrency() string {
+	if i.homeCurrency == "" {
+		return "UAH"
+	}
+	return i.homeCurrency
+}
+func (i *Investment) HomeAmount() int64 {
+	if i.homeAmount != 0 {
+		return i.homeAmount
+	}
+	if i.amount != nil {
+		return i.amount.Amount()
+	}
+	return 0
+}
+func (i *Investment) PrimaryAssetID() uuid.UUID              { return i.primaryAssetID }
+func (i *Investment) PrimaryAssetName() string               { return i.primaryAssetName }
+func (i *Investment) AssetAllocations() []InvestmentAssetLink { return i.assetAllocations }
+func (i *Investment) Contributor() ContributorRef             { return i.contributor }
+func (i *Investment) ResourceType() ResourceType             { return i.resourceType }
+func (i *Investment) Amount() *money.Money                   { return i.amount }
 func (i *Investment) TimeHours() *float64                        { return i.timeHours }
 func (i *Investment) TimeHourlyRate() *money.Money               { return i.timeHourlyRate }
 func (i *Investment) GoodsQuantity() *float64                    { return i.goodsQuantity }

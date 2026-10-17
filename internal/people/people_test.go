@@ -59,8 +59,19 @@ func (m *mockPeopleRepo) FindAll(ctx context.Context, pagination core.Pagination
 	}
 	return m.peopleList, m.total, nil
 }
-func (m *mockPeopleRepo) Register(ctx context.Context, p *people.Person) error {
-	return m.registerErr
+func (m *mockPeopleRepo) Save(ctx context.Context, p *people.Person) error {
+	if m.registerErr != nil {
+		return m.registerErr
+	}
+	if m.saveRolesErr != nil {
+		return m.saveRolesErr
+	}
+	if m.updateProfileErr != nil {
+		return m.updateProfileErr
+	}
+	m.savedRoles = p.Roles()
+	m.updatedDisplayName = p.DisplayNameVO().String()
+	return nil
 }
 func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.IdentityProvider, regID string) (uuid.UUID, string, error) {
 	if m.findCredErr != nil {
@@ -68,21 +79,7 @@ func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.Id
 	}
 	return m.credPersonID, m.credHash, nil
 }
-func (m *mockPeopleRepo) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
-	m.savedRoles = roles
-	return m.saveRolesErr
-}
 func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID uuid.UUID) error {
-	return nil
-}
-func (m *mockPeopleRepo) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName, lastName, displayName string) error {
-	if m.updateProfileErr != nil {
-		return m.updateProfileErr
-	}
-	m.updatedDisplayName = displayName
-	return nil
-}
-func (m *mockPeopleRepo) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
 	return nil
 }
 
@@ -97,8 +94,11 @@ type mockInvitationRepo struct {
 	existsErr   error
 }
 
-func (m *mockInvitationRepo) Create(ctx context.Context, inv *people.Invitation) error {
-	return m.createErr
+func (m *mockInvitationRepo) Save(ctx context.Context, inv *people.Invitation) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	return m.completeErr
 }
 func (m *mockInvitationRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Invitation, error) {
 	if m.findByIDErr != nil {
@@ -117,9 +117,6 @@ func (m *mockInvitationRepo) FindByCreator(ctx context.Context, creatorID uuid.U
 }
 func (m *mockInvitationRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return m.deleteErr
-}
-func (m *mockInvitationRepo) Complete(ctx context.Context, id uuid.UUID) error {
-	return m.completeErr
 }
 func (m *mockInvitationRepo) EmailExists(ctx context.Context, email string) (bool, error) {
 	return m.emailExists, m.existsErr

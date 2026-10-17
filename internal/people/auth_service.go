@@ -3,8 +3,6 @@ package people
 import (
 	"context"
 	"errors"
-	"log"
-	"strings"
 
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -16,7 +14,6 @@ type AuthServiceImpl struct {
 	peopleRepository Repository
 	tokenProvider    core.AuthTokenProvider
 	hasher           core.Hasher
-	google           core.ThirdPartyAuth
 	invitationRepo   InvitationRepository
 	strategies       map[IdentityProvider]IdentityProviderStrategy
 }
@@ -47,7 +44,6 @@ func NewAuthService(
 		peopleRepository: peopleRepository,
 		tokenProvider:    tokenProvider,
 		hasher:           hasher,
-		google:           google,
 		invitationRepo:   invitationRepo,
 		strategies:       strategyMap,
 	}
@@ -77,14 +73,15 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 	if err != nil {
 		return nil, err
 	}
-	if provider != GOOGLE {
+
+	strategy, ok := s.strategies[provider]
+	if !ok {
 		return nil, exceptions.NewValidationException("unsupported identity provider for invitation", nil)
 	}
 
-	claims, err := s.google.ValidateToken(token)
+	claims, err := strategy.ResolveInvitationClaims(ctx, token)
 	if err != nil {
-		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
-		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+		return nil, err
 	}
 
 	if s.invitationRepo == nil {
@@ -96,92 +93,30 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 		return nil, exceptions.NewNotFoundException("invitation not found", err)
 	}
 
-	if invitation.IsExpired() {
-		return nil, exceptions.NewValidationException("invitation has expired", nil)
+	personID, err := invitation.ValidateForRedemption(claims.Email)
+	if err != nil {
+		return nil, err
 	}
 
-	if invitation.IsCompleted() {
-		return nil, exceptions.NewValidationException("invitation has already been completed", nil)
-	}
-
-	if claims.Email != "" && !strings.EqualFold(claims.Email, invitation.Email()) {
-		return nil, exceptions.NewValidationException("google account email does not match invitation email", nil)
-	}
-
-	if invitation.PersonID() == nil {
-		return nil, exceptions.NewInternalException("invitation has no associated user record", nil)
-	}
-
-	personID := *invitation.PersonID()
 	person, err := s.peopleRepository.FindByID(ctx, personID)
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to find invited user", err)
 	}
 
-	firstName := claims.FirstName
-	lastName := claims.LastName
-	displayName := claims.DisplayName
-
-	if displayName == "" {
-		if claims.FirstName != "" && claims.LastName != "" {
-			displayName = claims.FirstName + " " + claims.LastName
-		} else if claims.FirstName != "" {
-			displayName = claims.FirstName
-		} else if claims.Email != "" {
-			displayName = strings.Split(claims.Email, "@")[0]
-		}
-	}
-	if firstName == "" {
-		parts := strings.Fields(displayName)
-		if len(parts) >= 2 {
-			firstName = parts[0]
-			lastName = strings.Join(parts[1:], " ")
-		} else if len(parts) == 1 {
-			firstName = parts[0]
-			lastName = "User"
-		} else {
-			firstName = "Google"
-			lastName = "User"
-		}
-	}
-	if lastName == "" {
-		lastName = "User"
-	}
-	if len(firstName) < 2 {
-		firstName = firstName + " "
-	}
-	if len(lastName) < 2 {
-		lastName = lastName + " "
+	if err := person.AcceptInvitation(claims, provider); err != nil {
+		return nil, err
 	}
 
-	dn, err := NewDisplayName(displayName)
-	if err != nil {
-		return nil, exceptions.NewValidationException("invalid user profile data", err)
-	}
-
-	if err := person.UpdateProfile(firstName, lastName, dn); err != nil {
-		return nil, exceptions.NewValidationException("invalid user profile data", err)
-	}
-
-	cred, err := NewCredentials(GOOGLE, claims.Sub, claims.Sub)
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to prepare credentials", err)
+	if err := invitation.Complete(); err != nil {
+		return nil, exceptions.NewValidationException(err.Error(), err)
 	}
 
 	updateFn := func(txCtx context.Context) (any, error) {
-		if err := s.peopleRepository.UpdateProfile(txCtx, person.ID(), person.FirstName(), person.LastName(), person.DisplayName()); err != nil {
+		if err := s.peopleRepository.Save(txCtx, person); err != nil {
 			return nil, err
 		}
 
-		if err := s.peopleRepository.SaveCredentials(txCtx, person.ID(), cred); err != nil {
-			return nil, err
-		}
-
-		if err := s.peopleRepository.SaveRoles(txCtx, person.ID(), []Role{RoleUser}); err != nil {
-			return nil, err
-		}
-
-		if err := s.invitationRepo.Complete(txCtx, invitation.ID()); err != nil {
+		if err := s.invitationRepo.Save(txCtx, invitation); err != nil {
 			return nil, err
 		}
 

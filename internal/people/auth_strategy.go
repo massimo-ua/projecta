@@ -10,20 +10,26 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
+// CredentialsReader defines the narrow read contract required by authentication strategies.
+type CredentialsReader interface {
+	FindCredentials(ctx context.Context, provider IdentityProvider, registrationID string) (uuid.UUID, string, error)
+}
+
 // IdentityProviderStrategy defines the polymorphic contract for authenticating credentials.
 type IdentityProviderStrategy interface {
 	Provider() IdentityProvider
 	Authenticate(ctx context.Context, credentials Credentials) (uuid.UUID, error)
+	ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error)
 }
 
 // LocalAuthStrategy authenticates users against stored password hashes.
 type LocalAuthStrategy struct {
-	repo   Repository
+	repo   CredentialsReader
 	hasher core.Hasher
 }
 
 // NewLocalAuthStrategy creates a new instance of LocalAuthStrategy.
-func NewLocalAuthStrategy(repo Repository, hasher core.Hasher) *LocalAuthStrategy {
+func NewLocalAuthStrategy(repo CredentialsReader, hasher core.Hasher) *LocalAuthStrategy {
 	return &LocalAuthStrategy{
 		repo:   repo,
 		hasher: hasher,
@@ -51,14 +57,18 @@ func (s *LocalAuthStrategy) Authenticate(ctx context.Context, credentials Creden
 	return personID, nil
 }
 
+func (s *LocalAuthStrategy) ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error) {
+	return nil, exceptions.NewValidationException("unsupported identity provider for invitation", nil)
+}
+
 // GoogleAuthStrategy authenticates users by validating Google ID tokens.
 type GoogleAuthStrategy struct {
-	repo   Repository
+	repo   CredentialsReader
 	google core.ThirdPartyAuth
 }
 
 // NewGoogleAuthStrategy creates a new instance of GoogleAuthStrategy.
-func NewGoogleAuthStrategy(repo Repository, google core.ThirdPartyAuth) *GoogleAuthStrategy {
+func NewGoogleAuthStrategy(repo CredentialsReader, google core.ThirdPartyAuth) *GoogleAuthStrategy {
 	return &GoogleAuthStrategy{
 		repo:   repo,
 		google: google,
@@ -85,4 +95,13 @@ func (s *GoogleAuthStrategy) Authenticate(ctx context.Context, credentials Crede
 	}
 
 	return personID, nil
+}
+
+func (s *GoogleAuthStrategy) ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error) {
+	claims, err := s.google.ValidateToken(token)
+	if err != nil {
+		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
+		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+	}
+	return claims, nil
 }

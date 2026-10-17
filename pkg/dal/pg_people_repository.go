@@ -45,30 +45,31 @@ func (r *personRecord) toPerson(roles []people.Role, credentials []people.Creden
 	return people.ReconstitutePerson(pID, r.firstName, r.lastName, dn, credentials, roles), nil
 }
 
-func (r *PgPeopleRepository) Register(ctx context.Context, person *people.Person) error {
-	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
-	qb.InsertInto("people")
-	qb.Cols("person_id", "first_name", "last_name", "display_name")
-	qb.Values(person.ID().String(), person.FirstName(), person.LastName(), person.DisplayName())
-
-	sql, args := qb.Build()
-
-	if _, err := r.db.Exec(
+func (r *PgPeopleRepository) Save(ctx context.Context, person *people.Person) error {
+	_, err := r.db.Exec(
 		ctx,
-		sql,
-		args...,
-	); err != nil {
+		`INSERT INTO people (person_id, first_name, last_name, display_name)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (person_id) DO UPDATE
+		 SET first_name = EXCLUDED.first_name,
+		     last_name = EXCLUDED.last_name,
+		     display_name = EXCLUDED.display_name,
+		     updated_at = now()`,
+		person.ID().String(),
+		person.FirstName(),
+		person.LastName(),
+		person.DisplayNameVO().String(),
+	)
+	if err != nil {
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
-	if err := r.setCredentials(ctx, person.ID(), person.Identities()); err != nil {
+	if err := r.saveCredentials(ctx, person.ID(), person.Identities()); err != nil {
 		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
-	if len(person.Roles()) > 0 {
-		if err := r.SaveRoles(ctx, person.ID(), person.Roles()); err != nil {
-			return exceptions.NewInternalException(failedToRegisterPersonError, err)
-		}
+	if err := r.saveRoles(ctx, person.ID(), person.Roles()); err != nil {
+		return exceptions.NewInternalException(failedToRegisterPersonError, err)
 	}
 
 	return nil
@@ -107,7 +108,7 @@ func (r *PgPeopleRepository) FindCredentials(
 	return personUUID, identity, nil
 }
 
-func (r *PgPeopleRepository) setCredentials(
+func (r *PgPeopleRepository) saveCredentials(
 	ctx context.Context,
 	personID uuid.UUID,
 	credentials []people.Credentials,
@@ -125,6 +126,7 @@ func (r *PgPeopleRepository) setCredentials(
 	}
 
 	sql, args := qb.Build()
+	sql += ` ON CONFLICT (provider, person_id) DO UPDATE SET identity = EXCLUDED.identity, registration_id = EXCLUDED.registration_id`
 
 	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
 		return err
@@ -213,7 +215,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 	return rec.toPerson(roles, creds)
 }
 
-func (r *PgPeopleRepository) SaveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
+func (r *PgPeopleRepository) saveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
 	if _, err := r.db.Exec(ctx, `DELETE FROM person_roles WHERE person_id = $1`, personID.String()); err != nil {
 		return err
 	}
@@ -285,32 +287,5 @@ func (r *PgPeopleRepository) FindAll(ctx context.Context, pagination core.Pagina
 
 func (r *PgPeopleRepository) DeletePerson(ctx context.Context, personID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM people WHERE person_id = $1`, personID.String())
-	return err
-}
-
-func (r *PgPeopleRepository) UpdateProfile(ctx context.Context, personID uuid.UUID, firstName string, lastName string, displayName string) error {
-	_, err := r.db.Exec(
-		ctx,
-		`UPDATE people SET first_name = $1, last_name = $2, display_name = $3, updated_at = now() WHERE person_id = $4`,
-		firstName,
-		lastName,
-		displayName,
-		personID.String(),
-	)
-	return err
-}
-
-func (r *PgPeopleRepository) SaveCredentials(ctx context.Context, personID uuid.UUID, cred people.Credentials) error {
-	_, err := r.db.Exec(
-		ctx,
-		`INSERT INTO credentials (person_id, provider, identity, registration_id)
-		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (provider, person_id) DO UPDATE
-		 SET identity = EXCLUDED.identity, registration_id = EXCLUDED.registration_id`,
-		personID.String(),
-		cred.Provider(),
-		cred.Identifier(),
-		cred.RegistrationID(),
-	)
 	return err
 }

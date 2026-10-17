@@ -543,7 +543,7 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		now := time.Now()
 		ownerRef := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "John"}
 		mockAst := asset.NewAsset(uuid.New(), "Rent", "", uuid.New(), money.New(0, "UAH"), now, ownerRef)
-		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst}, &mockRateProvider{})
+		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst})
 		_, err = ep(context.Background(), cmd)
 		if err != nil {
 			t.Errorf("unexpected group endpoint error: %v", err)
@@ -749,6 +749,9 @@ func (m *mockInvestmentServiceWithCol) Find(_ context.Context, _ investment.Coll
 func (m *mockInvestmentServiceWithCol) FindTags(context.Context, uuid.UUID) ([]string, error) {
 	return nil, nil
 }
+func (m *mockInvestmentServiceWithCol) AssignToAsset(context.Context, uuid.UUID, []uuid.UUID) error {
+	return nil
+}
 
 type mockRateProvider struct {
 	err error
@@ -906,9 +909,10 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 
 		rateProv := &mockRateProvider{}
 
-		astUSD.SetTotalCost(money.New(200, money.USD))
-		astUSD.SetTargetPrice(money.New(100, money.USD))
-		aDto := toAssetDTO(astUSD, rateProv)
+		astUSD.UpdateDetails(astUSD.Name(), astUSD.Description(), money.New(100, money.USD), nil)
+		astUSD.AssignValuation(nil, money.New(200, money.USD), nil, nil)
+		astUSD.EvaluateValuation("UAH", rateProv)
+		aDto := toAssetDTO(astUSD)
 		if aDto.HomeAmount != 8000 {
 			t.Errorf("expected converted home amount 8000, got %d", aDto.HomeAmount)
 		}
@@ -920,17 +924,17 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		astSvc := &mockAssetService{asset: astUSD}
-		epCreateAst := makeCreateAssetEndpoint(astSvc, rateProv)
+		epCreateAst := makeCreateAssetEndpoint(astSvc)
 		if _, err := epCreateAst(context.Background(), asset.CreateAssetCommand{}); err != nil {
 			t.Errorf("makeCreateAssetEndpoint error: %v", err)
 		}
 
-		epCreateFromPays := makeCreateAssetFromPaymentsEndpoint(astSvc, rateProv)
+		epCreateFromPays := makeCreateAssetFromPaymentsEndpoint(astSvc)
 		if _, err := epCreateFromPays(context.Background(), asset.CreateAssetFromPaymentsCommand{}); err != nil {
 			t.Errorf("makeCreateAssetFromPaymentsEndpoint error: %v", err)
 		}
 
-		epGetAst := makeGetAssetEndpoint(astSvc, rateProv)
+		epGetAst := makeGetAssetEndpoint(astSvc)
 		if _, err := epGetAst(context.Background(), asset.Filter{}); err != nil {
 			t.Errorf("makeGetAssetEndpoint error: %v", err)
 		}
@@ -938,7 +942,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		astCol := asset.NewCollection(1)
 		astCol.Add(astUSD)
 		mAstColSvc := &mockAssetServiceWithCol{col: astCol}
-		epListAst := makeListAssetsEndpoint(mAstColSvc, rateProv)
+		epListAst := makeListAssetsEndpoint(mAstColSvc)
 		if _, err := epListAst(context.Background(), asset.CollectionFilter{}); err != nil {
 			t.Errorf("makeListAssetsEndpoint error: %v", err)
 		}
@@ -955,9 +959,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 
 		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj.ID(), money.New(10000, "UAH"), time.Now(), ownerRef)
 		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj.ID(), money.New(5000, "UAH"), time.Now(), ownerRef)
-		childAsset.SetParents([]asset.ParentAssetLink{{ParentID: parentAsset.ID(), SharePercentage: 100}})
-		parentAsset.SetTotalCost(money.New(15000, "UAH"))
-		parentAsset.SetDirectCost(money.New(10000, "UAH"))
+		childAsset.AssignValuation(nil, nil, nil, []asset.ParentAssetLink{{ParentID: parentAsset.ID(), SharePercentage: 100}})
+		parentAsset.AssignValuation(money.New(10000, "UAH"), money.New(15000, "UAH"), nil, nil)
 
 		colWithHierarchy := asset.NewCollection(2)
 		colWithHierarchy.Add(parentAsset)

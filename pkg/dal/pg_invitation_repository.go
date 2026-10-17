@@ -70,7 +70,7 @@ func (rec *invitationRecord) toInvitation() (*people.Invitation, error) {
 	), nil
 }
 
-func (r *PgInvitationRepository) Create(ctx context.Context, inv *people.Invitation) error {
+func (r *PgInvitationRepository) Save(ctx context.Context, inv *people.Invitation) error {
 	var personIDVal *string
 	if inv.PersonID() != nil {
 		pStr := inv.PersonID().String()
@@ -80,7 +80,14 @@ func (r *PgInvitationRepository) Create(ctx context.Context, inv *people.Invitat
 	_, err := r.db.Exec(
 		ctx,
 		`INSERT INTO invitations (invitation_id, email, code_hash, expires_at, created_by, person_id, status, created_at, completed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 ON CONFLICT (invitation_id) DO UPDATE
+		 SET email = EXCLUDED.email,
+		     code_hash = EXCLUDED.code_hash,
+		     expires_at = EXCLUDED.expires_at,
+		     person_id = EXCLUDED.person_id,
+		     status = EXCLUDED.status,
+		     completed_at = EXCLUDED.completed_at`,
 		inv.ID().String(),
 		inv.Email(),
 		inv.CodeHash(),
@@ -187,19 +194,6 @@ func (r *PgInvitationRepository) Delete(ctx context.Context, id uuid.UUID) error
 	_, err := r.db.Exec(ctx, `DELETE FROM invitations WHERE invitation_id = $1`, id.String())
 	if err != nil {
 		return exceptions.NewInternalException("failed to delete invitation", err)
-	}
-	return nil
-}
-
-func (r *PgInvitationRepository) Complete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.db.Exec(
-		ctx,
-		`UPDATE invitations SET status = $1, completed_at = now() WHERE invitation_id = $2`,
-		string(people.InvitationStatusCompleted),
-		id.String(),
-	)
-	if err != nil {
-		return exceptions.NewInternalException("failed to complete invitation", err)
 	}
 	return nil
 }

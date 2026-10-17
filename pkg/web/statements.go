@@ -12,6 +12,19 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
+type StatementEndpoints struct {
+	ParseStatement endpoint.Endpoint
+}
+
+func MakeStatementEndpoints(svc statement.Service) StatementEndpoints {
+	if svc == nil {
+		return StatementEndpoints{}
+	}
+	return StatementEndpoints{
+		ParseStatement: makeParseStatementEndpoint(svc),
+	}
+}
+
 type ParseStatementRequest struct {
 	ProjectID uuid.UUID
 	FileData  []byte

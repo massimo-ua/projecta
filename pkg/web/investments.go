@@ -15,8 +15,32 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/project"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
+
+type InvestmentEndpoints struct {
+	CreateInvestment       endpoint.Endpoint
+	ListInvestments        endpoint.Endpoint
+	GetInvestment          endpoint.Endpoint
+	UpdateInvestment       endpoint.Endpoint
+	RemoveInvestment       endpoint.Endpoint
+	CreateBatchInvestments endpoint.Endpoint
+	ListTags               endpoint.Endpoint
+}
+
+func MakeInvestmentEndpoints(invSvc investment.Service) InvestmentEndpoints {
+	if invSvc == nil {
+		return InvestmentEndpoints{}
+	}
+	return InvestmentEndpoints{
+		CreateInvestment:       makeCreateInvestmentEndpoint(invSvc),
+		ListInvestments:        makeListInvestmentsEndpoint(invSvc),
+		GetInvestment:          makeGetInvestmentEndpoint(invSvc),
+		UpdateInvestment:       makeUpdateInvestmentEndpoint(invSvc),
+		RemoveInvestment:       makeRemoveInvestmentEndpoint(invSvc),
+		CreateBatchInvestments: makeCreateBatchInvestmentsEndpoint(invSvc),
+		ListTags:               makeListTagsEndpoint(invSvc),
+	}
+}
 
 type InvestmentAssetDTO struct {
 	AssetID         string  `json:"asset_id"`
@@ -47,28 +71,9 @@ type InvestmentDTO struct {
 	Tags             []string             `json:"tags"`
 }
 
-func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyRateProvider) InvestmentDTO {
+func toInvestmentDTO(inv *investment.Investment) InvestmentDTO {
 	if inv == nil {
 		return InvestmentDTO{}
-	}
-
-	homeCurrency := "UAH"
-	if inv.HomeCurrency() != "" {
-		homeCurrency = inv.HomeCurrency()
-	}
-
-	homeAmount := int64(0)
-	if inv.Amount() != nil {
-		homeAmount = inv.Amount().Amount()
-		if rateProvider != nil && inv.Amount().Currency().Code != homeCurrency {
-			converted, err := rateProvider.Convert(
-				currency.NewCurrency(inv.Amount().Amount(), inv.Amount().Currency().Code),
-				currency.NewCurrency(0, homeCurrency),
-			)
-			if err == nil {
-				homeAmount = converted.Amount
-			}
-		}
 	}
 
 	var contribDTO OwnerDTO
@@ -97,18 +102,13 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 		hourlyRateVal = &v
 	}
 
-	allocationsDTO := make([]InvestmentAssetDTO, 0)
-	totalAmount := int64(0)
-	if inv.Amount() != nil {
-		totalAmount = inv.Amount().Amount()
-	}
+	allocationsDTO := make([]InvestmentAssetDTO, 0, len(inv.AssetAllocations()))
 	for _, a := range inv.AssetAllocations() {
-		allocatedAmount := int64(float64(totalAmount) * (a.SharePercentage / 100.0))
 		allocationsDTO = append(allocationsDTO, InvestmentAssetDTO{
 			AssetID:         a.AssetID.String(),
 			AssetName:       a.AssetName,
 			SharePercentage: a.SharePercentage,
-			Amount:          allocatedAmount,
+			Amount:          a.AllocatedAmount(inv.Amount()),
 		})
 	}
 
@@ -131,8 +131,8 @@ func toInvestmentDTO(inv *investment.Investment, rateProvider currency.CurrencyR
 		ResourceType:     inv.ResourceType().String(),
 		Amount:           amountVal,
 		Currency:         currVal,
-		HomeAmount:       homeAmount,
-		HomeCurrency:     homeCurrency,
+		HomeAmount:       inv.HomeAmount(),
+		HomeCurrency:     inv.HomeCurrency(),
 		TimeHours:        inv.TimeHours(),
 		TimeHourlyRate:   hourlyRateVal,
 		GoodsQuantity:    inv.GoodsQuantity(),
@@ -523,14 +523,14 @@ func decodeListTagsRequest(_ context.Context, r *http.Request) (interface{}, err
 	return projectID, nil
 }
 
-func makeCreateInvestmentEndpoint(svc investment.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeCreateInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		cmd := request.(investment.CreateInvestmentCommand)
 		inv, err := svc.Create(ctx, cmd)
 		if err != nil {
 			return nil, err
 		}
-		return toInvestmentDTO(inv, rateProvider), nil
+		return toInvestmentDTO(inv), nil
 	}
 }
 
@@ -554,18 +554,18 @@ func makeRemoveInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	}
 }
 
-func makeGetInvestmentEndpoint(svc investment.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeGetInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(investment.Filter)
 		inv, err := svc.FindOne(ctx, filter)
 		if err != nil {
 			return nil, err
 		}
-		return toInvestmentDTO(inv, rateProvider), nil
+		return toInvestmentDTO(inv), nil
 	}
 }
 
-func makeListInvestmentsEndpoint(svc investment.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeListInvestmentsEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		filter := request.(investment.CollectionFilter)
 		col, err := svc.Find(ctx, filter)
@@ -575,7 +575,7 @@ func makeListInvestmentsEndpoint(svc investment.Service, rateProvider currency.C
 
 		dtos := make([]InvestmentDTO, 0)
 		for _, e := range col.Elements() {
-			dtos = append(dtos, toInvestmentDTO(e, rateProvider))
+			dtos = append(dtos, toInvestmentDTO(e))
 		}
 
 		return ListInvestmentsResponse{
@@ -589,7 +589,7 @@ func makeListInvestmentsEndpoint(svc investment.Service, rateProvider currency.C
 	}
 }
 
-func makeCreateBatchInvestmentsEndpoint(svc investment.Service, rateProvider currency.CurrencyRateProvider) endpoint.Endpoint {
+func makeCreateBatchInvestmentsEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		cmd := request.(investment.CreateBatchInvestmentsCommand)
 		created, err := svc.CreateBatch(ctx, cmd)
@@ -598,7 +598,7 @@ func makeCreateBatchInvestmentsEndpoint(svc investment.Service, rateProvider cur
 		}
 		dtos := make([]InvestmentDTO, 0)
 		for _, inv := range created {
-			dtos = append(dtos, toInvestmentDTO(inv, rateProvider))
+			dtos = append(dtos, toInvestmentDTO(inv))
 		}
 		return dtos, nil
 	}

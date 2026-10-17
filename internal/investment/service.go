@@ -30,11 +30,12 @@ type ProjectReader interface {
 }
 
 type ServiceImpl struct {
-	db          core.DbConnection
-	investments Repository
-	assets      AssetReader
-	projects    ProjectReader
-	people      project.PeopleService
+	db           core.DbConnection
+	investments  Repository
+	assets       AssetReader
+	projects     ProjectReader
+	people       project.PeopleService
+	rateProvider CurrencyConverter
 }
 
 func NewService(
@@ -43,13 +44,19 @@ func NewService(
 	assets AssetReader,
 	projects ProjectReader,
 	people project.PeopleService,
+	rateProvider ...CurrencyConverter,
 ) *ServiceImpl {
+	var rp CurrencyConverter
+	if len(rateProvider) > 0 {
+		rp = rateProvider[0]
+	}
 	return &ServiceImpl{
-		db:          db,
-		investments: investments,
-		assets:      assets,
-		projects:    projects,
-		people:      people,
+		db:           db,
+		investments:  investments,
+		assets:       assets,
+		projects:     projects,
+		people:       people,
+		rateProvider: rp,
 	}
 }
 
@@ -113,6 +120,8 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 	if err != nil {
 		return nil, err
 	}
+
+	inv.EvaluateHomeAmount(s.rateProvider)
 
 	if err := s.investments.Save(ctx, inv); err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
@@ -187,6 +196,7 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 			if err != nil {
 				return nil, err
 			}
+			inv.EvaluateHomeAmount(s.rateProvider)
 
 			if err := s.investments.Save(txCtx, inv); err != nil {
 				return nil, err
@@ -238,6 +248,38 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 	return s.investments.Save(ctx, inv)
 }
 
+func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error {
+	if len(investmentIDs) == 0 {
+		return nil
+	}
+
+	ast, err := s.assets.FindOne(ctx, asset.Filter{ID: assetID})
+	if err != nil {
+		return err
+	}
+
+	for _, invID := range investmentIDs {
+		inv, err := s.investments.FindOne(ctx, Filter{ID: invID})
+		if err != nil {
+			return err
+		}
+		if err := inv.Allocate([]InvestmentAssetLink{
+			{
+				AssetID:         ast.ID(),
+				AssetName:       ast.Name(),
+				SharePercentage: 100.0,
+			},
+		}); err != nil {
+			return err
+		}
+		if err := s.investments.Save(ctx, inv); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentCommand) error {
 	_, err := core.AuthGuard(ctx)
 	if err != nil {
@@ -264,7 +306,14 @@ func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Investment, 
 		return nil, exceptions.NewUnauthorizedException(failedToFindInvestment, err)
 	}
 
-	return s.investments.FindOne(ctx, filter)
+	inv, err := s.investments.FindOne(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if inv != nil {
+		inv.EvaluateHomeAmount(s.rateProvider)
+	}
+	return inv, nil
 }
 
 func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Collection, error) {
@@ -273,7 +322,18 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 		return nil, exceptions.NewUnauthorizedException(failedToFindInvestment, err)
 	}
 
-	return s.investments.Find(ctx, filter)
+	col, err := s.investments.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if col != nil {
+		for _, inv := range col.Elements() {
+			if inv != nil {
+				inv.EvaluateHomeAmount(s.rateProvider)
+			}
+		}
+	}
+	return col, nil
 }
 
 func (s *ServiceImpl) FindTags(ctx context.Context, projectID uuid.UUID) ([]string, error) {
