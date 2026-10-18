@@ -27,6 +27,7 @@ import './Total.css';
 function KpiCard({
   title,
   value,
+  exactValue = null,
   currency,
   icon: Icon,
   iconTone = 'primary',
@@ -43,8 +44,11 @@ function KpiCard({
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:border-primary/40 flex flex-col justify-between gap-3">
       <div>
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <span
+            className="text-xs font-semibold text-muted-foreground uppercase tracking-wider line-clamp-2 leading-tight"
+            title={title}
+          >
             {title}
           </span>
           <div
@@ -57,11 +61,19 @@ function KpiCard({
           </div>
         </div>
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground font-mono">
+          <span
+            className={cn(
+              'font-extrabold tracking-tight text-foreground tabular-nums truncate',
+              typeof value === 'string' && value.length > 9
+                ? 'text-xl sm:text-2xl'
+                : 'text-2xl sm:text-3xl',
+            )}
+            title={exactValue ? `${exactValue} ${currency || ''}`.trim() : value}
+          >
             {value}
           </span>
           {currency && (
-            <Badge variant="outline" className="font-mono text-xs font-semibold border-border/80 bg-muted/30">
+            <Badge variant="outline" className="text-xs font-semibold border-border/80 bg-muted/30 shrink-0">
               {currency}
             </Badge>
           )}
@@ -92,6 +104,7 @@ function KpiCard({
 KpiCard.propTypes = {
   title: PropTypes.string.isRequired,
   value: PropTypes.string.isRequired,
+  exactValue: PropTypes.string,
   currency: PropTypes.string,
   icon: PropTypes.elementType.isRequired,
   iconTone: PropTypes.string,
@@ -125,7 +138,12 @@ export default function Total() {
     { key: '6m', label: String(content.timeframe.last6m) },
   ];
 
-  const fmt = (num) => new Intl.NumberFormat().format(num || 0);
+  const fmt = (num) => new Intl.NumberFormat().format(Math.round(num || 0));
+  const fmtExact = (num) =>
+    new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num || 0);
 
   const investedBadges = [
     {
@@ -233,6 +251,7 @@ export default function Total() {
             <KpiCard
               title={String(content.cards?.totalPayments || 'Total Invested')}
               value={fmt(kpis?.totalInvested)}
+              exactValue={fmtExact(kpis?.totalInvested)}
               currency={currency}
               icon={Wallet}
               iconTone="primary"
@@ -241,6 +260,7 @@ export default function Total() {
             <KpiCard
               title={String(content.cards?.targetBudget || 'Target Budget')}
               value={kpis?.totalTargetBudget > 0 ? fmt(kpis.totalTargetBudget) : '—'}
+              exactValue={kpis?.totalTargetBudget > 0 ? fmtExact(kpis.totalTargetBudget) : undefined}
               currency={kpis?.totalTargetBudget > 0 ? currency : ''}
               icon={Target}
               iconTone={kpis?.budgetUtilization > 100 ? 'rose' : 'emerald'}
@@ -256,6 +276,7 @@ export default function Total() {
             <KpiCard
               title={String(content.cards?.avgMonthlyBurn || 'Avg. Monthly Burn')}
               value={fmt(kpis?.avgMonthlyBurn)}
+              exactValue={fmtExact(kpis?.avgMonthlyBurn)}
               currency={currency}
               icon={Flame}
               iconTone="amber"
