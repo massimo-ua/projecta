@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
@@ -110,18 +110,6 @@ func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.
 	return m.shareErr
 }
 
-type mockPeopleRepo struct {
-	person *people.Person
-	err    error
-}
-
-func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Person, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.person, nil
-}
-
 func TestProjectService(t *testing.T) {
 	ownerID := uuid.New()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "John", CanHaveProjects: true}
@@ -132,14 +120,26 @@ func TestProjectService(t *testing.T) {
 
 	svc := project.NewProjectService(projRepo, peopleSvc)
 
+	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
+
+	// FindOne unauthenticated error
+	if _, err := svc.FindOne(context.Background(), project.ProjectFilter{}); err == nil {
+		t.Fatalf("expected unauthenticated error on FindOne")
+	}
+
+	// Find unauthenticated error
+	if _, err := svc.Find(context.Background(), project.ProjectCollectionFilter{}); err == nil {
+		t.Fatalf("expected unauthenticated error on Find")
+	}
+
 	// FindOne
-	p, err := svc.FindOne(context.Background(), project.ProjectFilter{})
+	p, err := svc.FindOne(authedCtx, project.ProjectFilter{})
 	if err != nil || p == nil {
 		t.Fatalf("FindOne error: %v", err)
 	}
 
 	// Find
-	list, err := svc.Find(context.Background(), project.ProjectCollectionFilter{})
+	list, err := svc.Find(authedCtx, project.ProjectCollectionFilter{})
 	if err != nil || len(list) != 1 {
 		t.Fatalf("Find error: %v", err)
 	}
@@ -177,6 +177,12 @@ func TestProjectService(t *testing.T) {
 		t.Errorf("expected error when repo FindOne returns unknown error")
 	}
 
+	// Create with invalid domain data returns domain validation error directly
+	_, err = svcNew.Create(context.Background(), project.CreateProjectCommand{PersonID: owner.PersonID, Name: "A"})
+	if err == nil {
+		t.Errorf("expected validation error for short project name")
+	}
+
 	// Update project
 	pUpdated, err := svc.Update(context.Background(), project.UpdateProjectCommand{
 		PersonID:     owner.PersonID,
@@ -202,16 +208,128 @@ func TestProjectService(t *testing.T) {
 	}
 }
 
-func TestUnimplementedPanics(t *testing.T) {
-	svc := project.NewProjectService(&mockProjectRepo{}, &mockPeopleService{})
+type mockTotalsCalculator struct {
+	totals project.ProjectTotals
+	err    error
+}
 
-	t.Run("ProjectService Remove panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic")
-			}
-		}()
-		_ = svc.Remove(context.Background(), project.RemoveProjectCommand{})
+func (m *mockTotalsCalculator) CalculateTotals(ctx context.Context, projectID uuid.UUID, homeCurrency string) (project.ProjectTotals, error) {
+	if m.err != nil {
+		return project.ProjectTotals{}, m.err
+	}
+	return m.totals, nil
+}
+
+func TestProjectService_Remove(t *testing.T) {
+	ownerID := uuid.New()
+	otherPersonID := uuid.New()
+	owner := &project.Owner{PersonID: ownerID, DisplayName: "Owner"}
+	proj, _ := project.NewProject(uuid.New(), "Project to Remove", "Desc", owner, time.Now(), time.Now())
+
+	t.Run("success when owner removes project", func(t *testing.T) {
+		repo := &mockProjectRepo{project: proj}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
+		err := svc.Remove(context.Background(), project.RemoveProjectCommand{
+			ProjectID: proj.ID(),
+			PersonID:  ownerID,
+		})
+		if err != nil {
+			t.Fatalf("expected nil error on owner remove, got: %v", err)
+		}
+	})
+
+	t.Run("forbidden when non-owner attempts remove", func(t *testing.T) {
+		repo := &mockProjectRepo{project: proj}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
+		err := svc.Remove(context.Background(), project.RemoveProjectCommand{
+			ProjectID: proj.ID(),
+			PersonID:  otherPersonID,
+		})
+		if err == nil {
+			t.Fatal("expected forbidden error, got nil")
+		}
+		var exc exceptions.Exception
+		if !errors.As(err, &exc) || exc.Code != exceptions.Forbidden {
+			t.Errorf("expected Forbidden error type, got: %v", err)
+		}
+	})
+
+	t.Run("not found when project does not exist", func(t *testing.T) {
+		repo := &mockProjectRepo{findErr: exceptions.NotFoundError}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
+		err := svc.Remove(context.Background(), project.RemoveProjectCommand{
+			ProjectID: uuid.New(),
+			PersonID:  ownerID,
+		})
+		if err == nil {
+			t.Fatal("expected not found error, got nil")
+		}
+		var exc exceptions.Exception
+		if !errors.As(err, &exc) || exc.Code != exceptions.NotFound {
+			t.Errorf("expected NotFound error type, got: %v", err)
+		}
+	})
+}
+
+func TestProjectService_GetTotals(t *testing.T) {
+	ownerID := uuid.New()
+	owner := &project.Owner{PersonID: ownerID, DisplayName: "Owner"}
+	proj, _ := project.NewProject(uuid.New(), "Project Totals", "Desc", owner, time.Now(), time.Now(), "USD")
+	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
+
+	t.Run("unauthenticated error", func(t *testing.T) {
+		repo := &mockProjectRepo{project: proj}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
+		if _, err := svc.GetTotals(context.Background(), proj.ID()); err == nil {
+			t.Fatal("expected unauthenticated error")
+		}
+	})
+
+	t.Run("delegates to totals calculator", func(t *testing.T) {
+		repo := &mockProjectRepo{project: proj}
+		expectedTotals := project.ProjectTotals{
+			TotalInvested: 50000,
+			Balance:       30000,
+			HasActivity:   true,
+			Currency:      "USD",
+		}
+		calc := &mockTotalsCalculator{totals: expectedTotals}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner}, calc)
+
+		totals, err := svc.GetTotals(authedCtx, proj.ID())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if totals != expectedTotals {
+			t.Errorf("expected %+v, got %+v", expectedTotals, totals)
+		}
+	})
+
+	t.Run("returns empty totals with currency when calculator is nil", func(t *testing.T) {
+		repo := &mockProjectRepo{project: proj}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
+
+		totals, err := svc.GetTotals(authedCtx, proj.ID())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if totals.Currency != "USD" || totals.TotalInvested != 0 {
+			t.Errorf("unexpected totals: %+v", totals)
+		}
+	})
+
+	t.Run("returns not found when project does not exist", func(t *testing.T) {
+		repo := &mockProjectRepo{findErr: exceptions.NotFoundError}
+		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
+
+		_, err := svc.GetTotals(authedCtx, uuid.New())
+		if err == nil {
+			t.Fatal("expected not found error")
+		}
+		var exc exceptions.Exception
+		if !errors.As(err, &exc) || exc.Code != exceptions.NotFound {
+			t.Errorf("expected NotFound error type, got: %v", err)
+		}
 	})
 }
 
@@ -244,26 +362,5 @@ func TestProjectSharing(t *testing.T) {
 	_, err = svcErr.AcceptShare(context.Background(), uuid.New(), recipientID)
 	if err == nil {
 		t.Errorf("expected error when share token not found")
-	}
-}
-
-func TestPeopleService(t *testing.T) {
-	pID := uuid.New()
-	cred, _ := people.NewCredentials("LOCAL", "user@example.com", "secret")
-	p, _ := people.NewPerson(pID, "John", "Doe", "J.D.", []people.Credentials{cred})
-
-	svc := project.NewPeopleService(&mockPeopleRepo{person: p})
-	owner, err := svc.FindOwner(context.Background(), pID)
-	if err != nil || owner == nil {
-		t.Fatalf("FindOwner error: %v", err)
-	}
-	if owner.PersonID != pID || owner.DisplayName != "J.D." {
-		t.Errorf("owner fields mismatch")
-	}
-
-	svcErr := project.NewPeopleService(&mockPeopleRepo{err: errors.New("err")})
-	_, err = svcErr.FindOwner(context.Background(), pID)
-	if err == nil {
-		t.Errorf("expected error when FindByID fails")
 	}
 }

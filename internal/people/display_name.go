@@ -1,7 +1,6 @@
 package people
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"unicode/utf8"
@@ -31,19 +30,3 @@ func (d DisplayName) Equals(other DisplayName) bool {
 	return d.value == other.value
 }
 
-func (d *DisplayName) UnmarshalJSON(b []byte) error {
-	var raw string
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-	dn, err := NewDisplayName(raw)
-	if err != nil {
-		return err
-	}
-	*d = dn
-	return nil
-}
-
-func (d DisplayName) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.value)
-}

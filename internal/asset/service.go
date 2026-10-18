@@ -2,14 +2,13 @@ package asset
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/project"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 const (
@@ -18,33 +17,24 @@ const (
 	failedToUpdateAsset = "failed to update asset"
 )
 
-// ProjectReader is a consumer-owned interface providing read access to projects.
-type ProjectReader interface {
-	FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error)
-}
-
 type ServiceImpl struct {
 	db           core.DbConnection
 	assets       Repository
-	people       project.PeopleService
+	people       OwnerReader
 	projects     ProjectReader
-	rateProvider currency.CurrencyRateProvider
+	rateProvider CurrencyConverter
 	investments  InvestmentSource
-}
-
-func (s *ServiceImpl) SetInvestmentSource(is InvestmentSource) {
-	s.investments = is
 }
 
 func NewService(
 	db core.DbConnection,
 	assets Repository,
-	people project.PeopleService,
+	people OwnerReader,
 	projects ProjectReader,
 	investmentSource InvestmentSource,
-	rateProvider ...currency.CurrencyRateProvider,
+	rateProvider ...CurrencyConverter,
 ) *ServiceImpl {
-	var rp currency.CurrencyRateProvider
+	var rp CurrencyConverter
 	if len(rateProvider) > 0 {
 		rp = rateProvider[0]
 	}
@@ -60,8 +50,8 @@ func NewService(
 
 func (s *ServiceImpl) resolveProjectCurrency(ctx context.Context, projectID uuid.UUID) string {
 	if s.projects != nil && projectID != uuid.Nil {
-		if proj, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: projectID}); err == nil && proj != nil && proj.MainCurrency() != "" {
-			return proj.MainCurrency()
+		if proj, err := s.projects.FindProject(ctx, projectID); err == nil && proj.MainCurrency != "" {
+			return proj.MainCurrency
 		}
 	}
 	return "UAH"
@@ -102,7 +92,13 @@ func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Asset, error
 
 	anAsset, err := s.assets.FindOne(ctx, filter)
 	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("asset not found", err)
+		}
 		return nil, exceptions.NewInternalException(failedToFindAsset, err)
+	}
+	if anAsset == nil {
+		return nil, exceptions.NewNotFoundException("asset not found", nil)
 	}
 
 	if anAsset != nil {
@@ -127,7 +123,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	proj, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
@@ -149,7 +145,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		command.ProjectID,
 		price,
 		startDate,
-		OwnerRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
+		owner,
 		command.Status,
 		command.CompletedDate,
 		command.Tags,
@@ -159,8 +155,8 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	}
 
 	homeCurrency := "UAH"
-	if proj != nil && proj.MainCurrency() != "" {
-		homeCurrency = proj.MainCurrency()
+	if proj.MainCurrency != "" {
+		homeCurrency = proj.MainCurrency
 	}
 	anAsset.EvaluateValuation(homeCurrency, s.rateProvider)
 
@@ -231,7 +227,7 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
 	}
@@ -249,8 +245,8 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 	}
 
 	mainCurrency := "UAH"
-	if project != nil && project.MainCurrency() != "" {
-		mainCurrency = project.MainCurrency()
+	if proj.MainCurrency != "" {
+		mainCurrency = proj.MainCurrency
 	}
 
 	anAsset, err := CreateAssetFromInvestments(
@@ -261,7 +257,7 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 		mainCurrency,
 		command.TargetCurrency,
 		command.AcquiredAt,
-		OwnerRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
+		owner,
 		invItems,
 		s.rateProvider,
 	)
@@ -269,12 +265,19 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 		return nil, err
 	}
 
-	if err = s.assets.Save(ctx, anAsset); err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
-	}
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		if err = s.assets.Save(txCtx, anAsset); err != nil {
+			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		}
 
-	if err = s.investments.AssignToAsset(ctx, anAsset.ID(), command.InvestmentIDs); err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		if err = s.investments.AssignToAsset(txCtx, anAsset.ID(), command.InvestmentIDs); err != nil {
+			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		}
+
+		return nil, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return anAsset, nil
@@ -304,7 +307,13 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveAssetCommand) er
 		return exceptions.NewInternalException(failedToFindAsset, err)
 	}
 
-	return s.assets.Remove(ctx, anAsset)
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		if err := s.assets.Remove(txCtx, anAsset); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	return err
 }
 
 func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) error {
@@ -313,7 +322,7 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		return exceptions.NewUnauthorizedException(failedToUpdateAsset, err)
 	}
 
-	_, err = s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
+	_, err = s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
 		return exceptions.NewInternalException(failedToUpdateAsset, err)
 	}
@@ -328,7 +337,9 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		price = command.Price
 	}
 
-	anAsset.UpdateDetails(command.Name, command.Description, price, command.Tags)
+	if err := anAsset.UpdateDetails(command.Name, command.Description, price, command.Tags); err != nil {
+		return err
+	}
 	anAsset.TransitionStatus(command.Status, command.CompletedDate)
 
 	if !command.StartDate.IsZero() {
@@ -442,7 +453,7 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 		return nil, exceptions.NewInternalException("failed to group assets", err)
 	}
 
-	proj, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to group assets", err)
 	}
@@ -461,7 +472,7 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 		command.Name,
 		command.Description,
 		command.ProjectID,
-		OwnerRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
+		owner,
 		command.Tags,
 	)
 	if err != nil {
@@ -492,8 +503,8 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 	}
 	if res != nil {
 		homeCurrency := "UAH"
-		if proj != nil && proj.MainCurrency() != "" {
-			homeCurrency = proj.MainCurrency()
+		if proj.MainCurrency != "" {
+			homeCurrency = proj.MainCurrency
 		}
 		res.EvaluateValuation(homeCurrency, s.rateProvider)
 	}
@@ -501,17 +512,20 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 }
 
 func (s *ServiceImpl) LinkChildren(ctx context.Context, command LinkChildrenCommand) error {
-	for _, childID := range command.ChildAssetIDs {
-		if err := s.LinkChild(ctx, LinkChildCommand{
-			ParentID:        command.ParentID,
-			ChildID:         childID,
-			ProjectID:       command.ProjectID,
-			SharePercentage: 100.0,
-		}); err != nil {
-			return err
+	_, err := s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		for _, childID := range command.ChildAssetIDs {
+			if err := s.LinkChild(txCtx, LinkChildCommand{
+				ParentID:        command.ParentID,
+				ChildID:         childID,
+				ProjectID:       command.ProjectID,
+				SharePercentage: 100.0,
+			}); err != nil {
+				return nil, err
+			}
 		}
-	}
-	return nil
+		return nil, nil
+	})
+	return err
 }
 
 

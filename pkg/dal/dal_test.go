@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 )
@@ -437,27 +438,23 @@ func TestPgProjectRepository(t *testing.T) {
 
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
 
-	t.Run("FindOne unauthenticated", func(t *testing.T) {
-		_, err := repo.FindOne(context.Background(), project.ProjectFilter{})
-		if err == nil {
-			t.Errorf("expected unauthenticated error")
-		}
-	})
-
 	t.Run("FindOne success and errors", func(t *testing.T) {
 		mockDb := &mockPgDb{rowVal: []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", uuid.New().String(), "UAH"}}
 		ctx := withMockDb(authedCtx, mockDb)
 
-		p, err := repo.FindOne(ctx, project.ProjectFilter{ProjectID: pID, Name: "Project A"})
+		p, err := repo.FindOne(ctx, project.ProjectFilter{ProjectID: pID, Name: "Project A", RequesterID: ownerID})
 		if err != nil || p == nil {
 			t.Errorf("FindOne error: %v", err)
+		}
+		if p.IsShared() {
+			t.Errorf("expected project to not be shared for owner")
 		}
 
 		// Shared project (different requester)
 		sharedPersonID := uuid.New()
 		sharedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, sharedPersonID)
 		ctxShared := withMockDb(sharedCtx, mockDb)
-		pShared, err := repo.FindOne(ctxShared, project.ProjectFilter{ProjectID: pID})
+		pShared, err := repo.FindOne(ctxShared, project.ProjectFilter{ProjectID: pID, RequesterID: sharedPersonID})
 		if err != nil || !pShared.IsShared() {
 			t.Errorf("expected shared project")
 		}
@@ -536,15 +533,9 @@ func TestPgProjectRepository(t *testing.T) {
 		mockDb := &mockPgDb{rowsData: [][]any{{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "J.D.", uuid.New().String(), "UAH"}}}
 		ctx := withMockDb(authedCtx, mockDb)
 
-		projects, err := repo.Find(ctx, project.ProjectCollectionFilter{Name: "Project A", Pagination: core.Pagination{Limit: 10, Offset: 0}})
+		projects, err := repo.Find(ctx, project.ProjectCollectionFilter{Name: "Project A", RequesterID: ownerID, Pagination: core.Pagination{Limit: 10, Offset: 0}})
 		if err != nil || len(projects) != 1 {
 			t.Errorf("Find error: %v", err)
-		}
-
-		// Unauthenticated
-		_, err = repo.Find(context.Background(), project.ProjectCollectionFilter{})
-		if err == nil {
-			t.Errorf("expected unauthenticated error")
 		}
 
 		// Query error
@@ -655,7 +646,7 @@ func TestPgAssetRepository(t *testing.T) {
 	now := time.Now()
 
 	ownerRef := asset.OwnerRef{PersonID: ownerID, DisplayName: "John"}
-	ast := asset.NewAsset(astID, "Laptop", "Desc", pID, money.New(1000, money.USD), now, ownerRef)
+	ast, _ := asset.CreateAsset(astID, "Laptop", "Desc", pID, money.New(1000, money.USD), now, ownerRef, asset.AssetStatusActive, nil, nil)
 
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
 
@@ -681,15 +672,7 @@ func TestPgAssetRepository(t *testing.T) {
 			t.Errorf("Save asset error: %v", err)
 		}
 
-		// Save calling create when ErrAssetNotFound
-		mockDbCreate := &mockPgDb{rowErr: ErrAssetNotFound}
-		ctxCreate := withMockDb(authedCtx, mockDbCreate)
-		err = astRepo.Save(ctxCreate, ast)
-		if err != nil {
-			t.Errorf("Save asset create branch error: %v", err)
-		}
-
-		// Save update failure (exec error)
+		// Save failure (exec error)
 		mockDbUpdErr := &mockPgDb{
 			rowVal: []any{
 				astID.String(), "Laptop", "Desc", pID.String(),
@@ -805,13 +788,13 @@ func TestPgAssetRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("Repository Save row error branches", func(t *testing.T) {
-		mockDbRowErr := &mockPgDb{rowErr: errors.New("query row error")}
-		ctxRowErr := withMockDb(authedCtx, mockDbRowErr)
+	t.Run("Repository Save exec error branches", func(t *testing.T) {
+		mockDbExecErr := &mockPgDb{execErr: errors.New("exec error")}
+		ctxExecErr := withMockDb(authedCtx, mockDbExecErr)
 
-		err := astRepo.Save(ctxRowErr, ast)
+		err := astRepo.Save(ctxExecErr, ast)
 		if err == nil {
-			t.Errorf("expected Save asset row error")
+			t.Errorf("expected Save asset exec error")
 		}
 	})
 
@@ -934,6 +917,138 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 		exists, err := invRepo.EmailExists(ctx, "user@example.com")
 		if err != nil || !exists {
 			t.Errorf("EmailExists error: %v", err)
+		}
+	})
+}
+
+func TestPgInvestmentRepository(t *testing.T) {
+	dbConn := &PgDbConnection{}
+	repo := NewPgInvestmentRepository(dbConn)
+
+	pID := uuid.New()
+	astID := uuid.New()
+	ownerID := uuid.New()
+	invID := uuid.New()
+	now := time.Now()
+
+	inv, err := investment.NewInvestment(
+		invID,
+		pID,
+		"USD",
+		astID,
+		"Laptop",
+		investment.ContributorRef{PersonID: ownerID, DisplayName: "John"},
+		investment.ResourceTypeMoney,
+		money.New(500, "USD"),
+		nil, nil, nil, "", "",
+		"Fuel purchase",
+		now,
+		[]string{"fuel"},
+		investment.InvestmentAssetLink{
+			AssetID:         astID,
+			AssetName:       "Laptop",
+			SharePercentage: 100.0,
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error creating investment: %v", err)
+	}
+
+	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
+
+	t.Run("Save success and exec failure", func(t *testing.T) {
+		mockDb := &mockPgDb{}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		err := repo.Save(ctx, inv)
+		if err != nil {
+			t.Errorf("Save investment error: %v", err)
+		}
+
+		mockDbErr := &mockPgDb{execErr: errors.New("exec error")}
+		ctxErr := withMockDb(authedCtx, mockDbErr)
+		err = repo.Save(ctxErr, inv)
+		if err == nil {
+			t.Errorf("expected exec error on Save")
+		}
+	})
+
+	t.Run("FindOne success and not found", func(t *testing.T) {
+		mockDb := &mockPgDb{
+			rowVal: []any{
+				invID.String(), pID.String(), astID.String(), "Laptop",
+				ownerID.String(), "John", "MONEY", int64(500), "USD",
+				nil, nil, nil, nil, nil, "Fuel purchase", now, []string{"fuel"},
+			},
+			rowsData: [][]any{{
+				invID.String(), astID.String(), "Laptop", float64(100.0),
+			}},
+		}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		found, err := repo.FindOne(ctx, investment.Filter{ID: invID, ProjectID: pID})
+		if err != nil || found == nil {
+			t.Errorf("FindOne investment error: %v", err)
+		}
+
+		mockDbNotFound := &mockPgDb{rowErr: pgx.ErrNoRows}
+		ctxNotFound := withMockDb(authedCtx, mockDbNotFound)
+		_, err = repo.FindOne(ctxNotFound, investment.Filter{ID: invID})
+		if err == nil {
+			t.Errorf("expected not found error")
+		}
+	})
+
+	t.Run("Find collection success and count error", func(t *testing.T) {
+		mockDb := &mockPgDb{
+			rowVal: []any{1},
+			rowsData: [][]any{{
+				invID.String(), pID.String(), astID.String(), "Laptop",
+				ownerID.String(), "John", "MONEY", int64(500), "USD",
+				nil, nil, nil, nil, nil, "Fuel purchase", now, []string{"fuel"},
+			}},
+		}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		col, err := repo.Find(ctx, investment.CollectionFilter{ProjectID: pID})
+		if err != nil || col == nil {
+			t.Errorf("Find investment collection error: %v", err)
+		}
+
+		mockDbCountErr := &mockPgDb{countErr: errors.New("count error")}
+		ctxCountErr := withMockDb(authedCtx, mockDbCountErr)
+		_, err = repo.Find(ctxCountErr, investment.CollectionFilter{ProjectID: pID})
+		if err == nil {
+			t.Errorf("expected count error")
+		}
+	})
+
+	t.Run("FindTags success", func(t *testing.T) {
+		mockDb := &mockPgDb{
+			rowsData: [][]any{{"fuel"}, {"parts"}},
+		}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		tags, err := repo.FindTags(ctx, pID)
+		if err != nil || len(tags) != 2 {
+			t.Errorf("FindTags error: %v", err)
+		}
+	})
+
+	t.Run("Remove success and not found", func(t *testing.T) {
+		mockDb := &mockPgDb{}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		err := repo.Remove(ctx, inv)
+		if err != nil {
+			t.Errorf("Remove investment error: %v", err)
+		}
+
+		mockDbZero := &mockPgDb{execTag: pgconn.NewCommandTag("DELETE 0")}
+		ctxZero := withMockDb(authedCtx, mockDbZero)
+		err = repo.Remove(ctxZero, inv)
+		if err == nil {
+			t.Errorf("expected error when 0 rows deleted")
 		}
 	})
 }

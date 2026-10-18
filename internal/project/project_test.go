@@ -239,4 +239,15 @@ func TestProject_ReconstituteProject(t *testing.T) {
 	if len(proj.Participants()) != 2 {
 		t.Errorf("expected 2 participants, got %d", len(proj.Participants()))
 	}
+
+	t.Run("Owner getter returns defensive copy", func(t *testing.T) {
+		gotOwner := proj.Owner()
+		if gotOwner == nil {
+			t.Fatalf("expected non-nil owner")
+		}
+		gotOwner.DisplayName = "Mutated DisplayName"
+		if proj.Owner().DisplayName == "Mutated DisplayName" {
+			t.Errorf("Project.Owner() leaked internal pointer")
+		}
+	})
 }

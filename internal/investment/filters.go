@@ -16,6 +16,7 @@ type Filter struct {
 type CollectionFilter struct {
 	core.Pagination
 	core.Sorting
+	IDs          []uuid.UUID
 	ProjectID    uuid.UUID
 	AssetID      uuid.UUID
 	OwnerID      uuid.UUID

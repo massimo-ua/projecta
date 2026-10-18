@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
-	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 )
@@ -116,12 +115,6 @@ func NewPgProjectRepository(db *PgDbConnection) *PgProjectRepository {
 }
 
 func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error) {
-	personID, err := core.AuthGuard(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_projects")
 	qb.Select(
@@ -147,7 +140,9 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		qb.Where(qb.Equal("name", filter.Name))
 	}
 
-	qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(personID.String()), qb.Var(personID.String())))
+	if filter.RequesterID != uuid.Nil {
+		qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.RequesterID.String()), qb.Var(filter.RequesterID.String())))
+	}
 
 	sql, args := qb.Build()
 
@@ -170,7 +165,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		return nil, err
 	}
 
-	isShared := (rec.ownerID != personID.String())
+	isShared := (filter.RequesterID != uuid.Nil && rec.ownerID != filter.RequesterID.String())
 	return rec.toProject(isShared, sharedParts)
 }
 
@@ -357,12 +352,6 @@ func (r *PgProjectRepository) Remove(ctx context.Context, project *project.Proje
 }
 
 func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCollectionFilter) ([]*project.Project, error) {
-	personID, err := core.AuthGuard(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_projects")
 	qb.Select(
@@ -384,7 +373,9 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 		qb.Where(qb.Like("name", filter.Name))
 	}
 
-	qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(personID.String()), qb.Var(personID.String())))
+	if filter.RequesterID != uuid.Nil {
+		qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.RequesterID.String()), qb.Var(filter.RequesterID.String())))
+	}
 
 	qb.Limit(filter.Limit)
 	qb.Offset(filter.Offset)
@@ -408,7 +399,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 			return nil, err
 		}
 
-		isShared := (rec.ownerID != personID.String())
+		isShared := (filter.RequesterID != uuid.Nil && rec.ownerID != filter.RequesterID.String())
 		p, err := rec.toProject(isShared, nil)
 		if err != nil {
 			return nil, err

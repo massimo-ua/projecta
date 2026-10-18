@@ -5,9 +5,10 @@ import (
 )
 
 type CreateProjectCommand struct {
-	PersonID    uuid.UUID
-	Name        string
-	Description string
+	PersonID     uuid.UUID
+	Name         string
+	Description  string
+	MainCurrency string
 }
 
 type UpdateProjectCommand struct {

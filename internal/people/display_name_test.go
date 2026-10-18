@@ -1,7 +1,6 @@
 package people_test
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -53,39 +52,6 @@ func TestDisplayName(t *testing.T) {
 		}
 		if dn1.Equals(dn3) {
 			t.Errorf("expected dn1 to not equal dn3")
-		}
-	})
-
-	t.Run("json unmarshal valid", func(t *testing.T) {
-		jsonData := []byte(`"Charlie"`)
-		var dn people.DisplayName
-		err := json.Unmarshal(jsonData, &dn)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if dn.String() != "Charlie" {
-			t.Errorf("expected 'Charlie', got '%s'", dn.String())
-		}
-	})
-
-	t.Run("json unmarshal invalid length", func(t *testing.T) {
-		longName := strings.Repeat("x", 256)
-		jsonData, _ := json.Marshal(longName)
-		var dn people.DisplayName
-		err := json.Unmarshal(jsonData, &dn)
-		if err == nil {
-			t.Errorf("expected error unmarshaling too long display name")
-		}
-	})
-
-	t.Run("json marshal", func(t *testing.T) {
-		dn, _ := people.NewDisplayName("David")
-		b, err := json.Marshal(dn)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if string(b) != `"David"` {
-			t.Errorf(`expected '"David"', got '%s'`, string(b))
 		}
 	})
 }

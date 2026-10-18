@@ -132,6 +132,7 @@ func (m *mockTokenProvider) ValidateRefreshToken(_ uuid.UUID, _ string) bool {
 
 type mockProjectService struct {
 	project *project.Project
+	totals  project.ProjectTotals
 	err     error
 }
 
@@ -167,6 +168,12 @@ func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ uuid.
 		return nil, m.err
 	}
 	return m.project, nil
+}
+func (m *mockProjectService) GetTotals(_ context.Context, _ uuid.UUID) (project.ProjectTotals, error) {
+	if m.err != nil {
+		return project.ProjectTotals{}, m.err
+	}
+	return m.totals, nil
 }
 
 type mockAssetService struct {
@@ -231,7 +238,7 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	owner := &project.Owner{PersonID: personID, DisplayName: "John Doe"}
 	ownerRef := asset.OwnerRef{PersonID: personID, DisplayName: "John Doe"}
 	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
-	ast := asset.NewAsset(uuid.New(), "Laptop", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef)
+	ast, _ := asset.CreateAsset(uuid.New(), "Laptop", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef, asset.AssetStatusActive, nil, nil)
 	cred, _ := people.NewCredentials("LOCAL", "john@example.com", "secret")
 	person, _ := people.NewPerson(personID, "John", "Doe", "J.D.", []people.Credentials{cred})
 

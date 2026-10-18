@@ -6,11 +6,13 @@ import (
 )
 
 type ProjectFilter struct {
-	Name      string
-	ProjectID uuid.UUID
+	Name        string
+	ProjectID   uuid.UUID
+	RequesterID uuid.UUID
 }
 
 type ProjectCollectionFilter struct {
 	core.Pagination
-	Name string
+	Name        string
+	RequesterID uuid.UUID
 }

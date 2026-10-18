@@ -41,7 +41,7 @@ func toUserDTO(p *people.Person) UserDTO {
 }
 
 type UpdateProfileDTO struct {
-	DisplayName people.DisplayName `json:"display_name"`
+	DisplayName string `json:"display_name"`
 }
 
 type UpdateProfileRequest struct {
@@ -81,9 +81,14 @@ func decodeUpdateProfileRequest(ctx context.Context, r *http.Request) (any, erro
 		return nil, exceptions.NewValidationException("invalid request body", err)
 	}
 
+	dn, err := people.NewDisplayName(dto.DisplayName)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid display name", err)
+	}
+
 	return UpdateProfileRequest{
 		PersonID:    requesterID,
-		DisplayName: dto.DisplayName,
+		DisplayName: dn,
 	}, nil
 }
 

@@ -17,7 +17,10 @@ func TestAssetGettersAndSetters(t *testing.T) {
 	now := time.Now()
 	price := money.New(1000, money.USD)
 
-	a := asset.NewAsset(id, "Laptop", "Work Laptop", projectID, price, now, owner)
+	a, err := asset.CreateAsset(id, "Laptop", "Work Laptop", projectID, price, now, owner, asset.AssetStatusActive, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating asset: %v", err)
+	}
 
 	if a.ID() != id {
 		t.Errorf("ID mismatch: got %v", a.ID())
@@ -45,7 +48,9 @@ func TestAssetGettersAndSetters(t *testing.T) {
 	newPrice := money.New(2000, money.USD)
 	newDate := now.Add(time.Hour)
 
-	a.UpdateDetails("Desktop", "Gaming Desktop", newPrice, []string{"hardware"})
+	if err := a.UpdateDetails("Desktop", "Gaming Desktop", newPrice, []string{"hardware"}); err != nil {
+		t.Fatalf("unexpected error updating details: %v", err)
+	}
 	a.Reschedule(newDate)
 	a.TransitionStatus(asset.AssetStatusCompleted, &newDate)
 
@@ -68,4 +73,51 @@ func TestAssetGettersAndSetters(t *testing.T) {
 	if col.Total() != 5 {
 		t.Errorf("Collection total mismatch")
 	}
+
+	t.Run("defensive copying on getters and mutators", func(t *testing.T) {
+		// Tags defensive copy
+		tags := a.Tags()
+		tags[0] = "mutated-tag"
+		if a.Tags()[0] == "mutated-tag" {
+			t.Errorf("Tags getter leaked internal slice pointer")
+		}
+
+		// UpdateDetails tags input defensive copy
+		inputTags := []string{"original"}
+		_ = a.UpdateDetails("Desktop", "Desc", newPrice, inputTags)
+		inputTags[0] = "mutated-input"
+		if a.Tags()[0] == "mutated-input" {
+			t.Errorf("UpdateDetails leaked input tags slice")
+		}
+
+		// Children and Parents defensive copy
+		childID := uuid.New()
+		parentID := uuid.New()
+		a.AssignValuation(newPrice, newPrice, []asset.ChildAssetLink{{ChildID: childID, SharePercentage: 100}}, []asset.ParentAssetLink{{ParentID: parentID, SharePercentage: 100}})
+		children := a.Children()
+		children[0].SharePercentage = 50
+		if a.Children()[0].SharePercentage == 50 {
+			t.Errorf("Children getter leaked internal slice pointer")
+		}
+		parents := a.Parents()
+		parents[0].SharePercentage = 50
+		if a.Parents()[0].SharePercentage == 50 {
+			t.Errorf("Parents getter leaked internal slice pointer")
+		}
+	})
+
+	t.Run("UpdateDetails validation errors", func(t *testing.T) {
+		if err := a.UpdateDetails("", "Desc", newPrice, nil); err == nil {
+			t.Errorf("expected error for empty name")
+		}
+		if err := a.UpdateDetails("  ", "Desc", newPrice, nil); err == nil {
+			t.Errorf("expected error for whitespace name")
+		}
+		if err := a.UpdateDetails("Valid", "Desc", money.New(-100, "USD"), nil); err == nil {
+			t.Errorf("expected error for negative price")
+		}
+		if err := a.UpdateDetails("Valid", "Desc", money.New(0, "USD"), nil); err == nil {
+			t.Errorf("expected error for zero price")
+		}
+	})
 }

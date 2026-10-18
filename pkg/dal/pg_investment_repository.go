@@ -27,42 +27,6 @@ func NewPgInvestmentRepository(conn *PgDbConnection) *PgInvestmentRepository {
 }
 
 func (r *PgInvestmentRepository) Save(ctx context.Context, inv *investment.Investment) error {
-	_, err := r.FindOne(ctx, investment.Filter{
-		ID:        inv.ID(),
-		ProjectID: inv.ProjectID(),
-	})
-
-	if err != nil {
-		if errors.Is(err, ErrInvestmentNotFound) {
-			return r.create(ctx, inv)
-		}
-		return err
-	}
-
-	return r.update(ctx, inv)
-}
-
-func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Investment) error {
-	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
-	qb.InsertInto("projecta_investments")
-	qb.Cols(
-		"investment_id",
-		"project_id",
-		"asset_id",
-		"contributor_id",
-		"resource_type",
-		"amount",
-		"currency",
-		"time_hours",
-		"time_hourly_rate",
-		"goods_quantity",
-		"goods_unit",
-		"goods_item_name",
-		"description",
-		"date",
-		"tags",
-	)
-
 	var hourlyRateVal any
 	if inv.TimeHourlyRate() != nil {
 		hourlyRateVal = inv.TimeHourlyRate().Amount()
@@ -77,7 +41,36 @@ func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Inv
 		}
 	}
 
-	qb.Values(
+	tags := inv.Tags()
+	if tags == nil {
+		tags = []string{}
+	}
+
+	sql := `
+		INSERT INTO projecta_investments (
+			investment_id, project_id, asset_id, contributor_id,
+			resource_type, amount, currency, time_hours,
+			time_hourly_rate, goods_quantity, goods_unit,
+			goods_item_name, description, date, tags
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		ON CONFLICT (investment_id) DO UPDATE SET
+			asset_id = EXCLUDED.asset_id,
+			resource_type = EXCLUDED.resource_type,
+			amount = EXCLUDED.amount,
+			currency = EXCLUDED.currency,
+			time_hours = EXCLUDED.time_hours,
+			time_hourly_rate = EXCLUDED.time_hourly_rate,
+			goods_quantity = EXCLUDED.goods_quantity,
+			goods_unit = EXCLUDED.goods_unit,
+			goods_item_name = EXCLUDED.goods_item_name,
+			description = EXCLUDED.description,
+			date = EXCLUDED.date,
+			tags = EXCLUDED.tags
+	`
+
+	if _, err := r.db.Exec(
+		ctx,
+		sql,
 		inv.ID().String(),
 		inv.ProjectID().String(),
 		inv.PrimaryAssetID().String(),
@@ -92,58 +85,8 @@ func (r *PgInvestmentRepository) create(ctx context.Context, inv *investment.Inv
 		inv.GoodsItemName(),
 		inv.Description(),
 		inv.Date(),
-		inv.Tags(),
-	)
-
-	sql, args := qb.Build()
-	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
-		return errors.Join(ErrFailedToSaveInvestment, err)
-	}
-
-	if err := r.saveAllocations(ctx, inv); err != nil {
-		return errors.Join(ErrFailedToSaveInvestment, err)
-	}
-
-	return nil
-}
-
-func (r *PgInvestmentRepository) update(ctx context.Context, inv *investment.Investment) error {
-	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
-	qb.Update("projecta_investments")
-
-	var hourlyRateVal any
-	if inv.TimeHourlyRate() != nil {
-		hourlyRateVal = inv.TimeHourlyRate().Amount()
-	}
-
-	amountVal := int64(0)
-	currVal := "UAH"
-	if inv.Amount() != nil {
-		amountVal = inv.Amount().Amount()
-		if inv.Amount().Currency() != nil {
-			currVal = inv.Amount().Currency().Code
-		}
-	}
-
-	qb.Set(
-		qb.Assign("asset_id", inv.PrimaryAssetID().String()),
-		qb.Assign("resource_type", inv.ResourceType().String()),
-		qb.Assign("amount", amountVal),
-		qb.Assign("currency", currVal),
-		qb.Assign("time_hours", inv.TimeHours()),
-		qb.Assign("time_hourly_rate", hourlyRateVal),
-		qb.Assign("goods_quantity", inv.GoodsQuantity()),
-		qb.Assign("goods_unit", inv.GoodsUnit()),
-		qb.Assign("goods_item_name", inv.GoodsItemName()),
-		qb.Assign("description", inv.Description()),
-		qb.Assign("date", inv.Date()),
-		qb.Assign("tags", inv.Tags()),
-	)
-	qb.Where(qb.Equal("investment_id", inv.ID().String()))
-	qb.Where(qb.Equal("project_id", inv.ProjectID().String()))
-
-	sql, args := qb.Build()
-	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
+		tags,
+	); err != nil {
 		return errors.Join(ErrFailedToSaveInvestment, err)
 	}
 
@@ -428,6 +371,13 @@ func setupInvestmentSelect(qb *sqlbuilder.SelectBuilder) {
 }
 
 func applyInvestmentFilters(qb *sqlbuilder.SelectBuilder, filter investment.CollectionFilter) {
+	if len(filter.IDs) > 0 {
+		vals := make([]interface{}, len(filter.IDs))
+		for i, id := range filter.IDs {
+			vals[i] = id.String()
+		}
+		qb.Where(qb.In("projecta_investments.investment_id", vals...))
+	}
 	if filter.ProjectID != uuid.Nil {
 		qb.Where(qb.Equal("projecta_investments.project_id", filter.ProjectID.String()))
 	}

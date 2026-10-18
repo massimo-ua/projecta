@@ -1,7 +1,6 @@
 package project
 
 import (
-	"encoding/json"
 	"strings"
 	"unicode/utf8"
 
@@ -35,19 +34,3 @@ func (p Participant) Equals(other Participant) bool {
 	return p.displayName == other.displayName
 }
 
-func (p Participant) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.displayName)
-}
-
-func (p *Participant) UnmarshalJSON(b []byte) error {
-	var raw string
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-	participant, err := NewParticipant(raw)
-	if err != nil {
-		return err
-	}
-	*p = participant
-	return nil
-}

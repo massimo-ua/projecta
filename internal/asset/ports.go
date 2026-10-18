@@ -59,3 +59,18 @@ type InvestmentSource interface {
 	CreateInitialInvestment(ctx context.Context, item InitialInvestment) error
 }
 
+// ProjectDescriptor represents the narrow read view of a project needed by the asset context.
+type ProjectDescriptor struct {
+	ID           uuid.UUID
+	MainCurrency string
+}
+
+// ProjectReader is a consumer-owned interface providing read access to projects.
+type ProjectReader interface {
+	FindProject(ctx context.Context, projectID uuid.UUID) (ProjectDescriptor, error)
+}
+
+// OwnerReader is a consumer-owned interface providing read access to asset owners.
+type OwnerReader interface {
+	FindOwner(ctx context.Context, personID uuid.UUID) (OwnerRef, error)
+}

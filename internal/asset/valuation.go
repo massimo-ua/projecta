@@ -2,12 +2,11 @@ package asset
 
 import (
 	"github.com/Rhymond/go-money"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
-// CurrencyConverter is a narrow domain interface for currency conversions.
+// CurrencyConverter is a narrow domain interface for converting monetary amounts to a target currency code.
 type CurrencyConverter interface {
-	Convert(source, target currency.Currency) (currency.Currency, error)
+	ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error)
 }
 
 // BudgetProgress represents calculated progress toward an asset's target budget.
@@ -33,12 +32,8 @@ func CalculateBudgetProgress(
 	targetHomeVal := targetAmt
 
 	if converter != nil && targetCurr != homeCurrency && targetAmt > 0 {
-		converted, err := converter.Convert(
-			currency.NewCurrency(targetAmt, targetCurr),
-			currency.NewCurrency(0, homeCurrency),
-		)
-		if err == nil {
-			targetHomeVal = converted.Amount
+		if converted, err := converter.ConvertMoney(targetPrice, homeCurrency); err == nil && converted != nil {
+			targetHomeVal = converted.Amount()
 		}
 	}
 
@@ -51,12 +46,8 @@ func CalculateBudgetProgress(
 		totalHomeVal = totalCost.Amount()
 		totalCurr := totalCost.Currency().Code
 		if converter != nil && totalCurr != homeCurrency {
-			converted, err := converter.Convert(
-				currency.NewCurrency(totalHomeVal, totalCurr),
-				currency.NewCurrency(0, homeCurrency),
-			)
-			if err == nil {
-				totalHomeVal = converted.Amount
+			if converted, err := converter.ConvertMoney(totalCost, homeCurrency); err == nil && converted != nil {
+				totalHomeVal = converted.Amount()
 			}
 		}
 	}
@@ -102,14 +93,11 @@ func CalculateProjectTotals(
 		}
 		amt := inv.Amount()
 		if converter != nil && inv.Currency().Code != homeCurrency {
-			converted, err := converter.Convert(
-				currency.NewCurrency(inv.Amount(), inv.Currency().Code),
-				currency.NewCurrency(0, homeCurrency),
-			)
+			converted, err := converter.ConvertMoney(inv, homeCurrency)
 			if err != nil {
 				return ProjectTotals{}, err
 			}
-			amt = converted.Amount
+			amt = converted.Amount()
 		}
 		totalInvested += amt
 	}
@@ -125,14 +113,11 @@ func CalculateProjectTotals(
 		}
 		amt := tc.Amount()
 		if converter != nil && tc.Currency().Code != homeCurrency {
-			converted, err := converter.Convert(
-				currency.NewCurrency(tc.Amount(), tc.Currency().Code),
-				currency.NewCurrency(0, homeCurrency),
-			)
+			converted, err := converter.ConvertMoney(tc, homeCurrency)
 			if err != nil {
 				return ProjectTotals{}, err
 			}
-			amt = converted.Amount
+			amt = converted.Amount()
 		}
 		totalValuation += amt
 	}

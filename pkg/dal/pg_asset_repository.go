@@ -27,39 +27,6 @@ func NewPgAssetRepository(conn *PgDbConnection) *PgAssetRepository {
 }
 
 func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) error {
-	_, err := r.FindOne(ctx, asset.Filter{
-		ID: anAsset.ID(),
-	})
-
-	if err != nil {
-		if errors.Is(err, ErrAssetNotFound) {
-			return r.create(ctx, anAsset)
-		}
-
-		return err
-	}
-
-	return r.update(ctx, anAsset)
-}
-
-func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) error {
-	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
-
-	qb.InsertInto("projecta_assets")
-	qb.Cols(
-		"asset_id",
-		"name",
-		"description",
-		"project_id",
-		"owner_id",
-		"status",
-		"start_date",
-		"completed_date",
-		"target_price",
-		"target_currency",
-		"acquired_at",
-		"tags")
-
 	var targetPriceVal any
 	var targetCurrVal any
 	if anAsset.TargetPrice() != nil {
@@ -75,7 +42,27 @@ func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) er
 		tags = []string{}
 	}
 
-	qb.Values(
+	sql := `
+		INSERT INTO projecta_assets (
+			asset_id, name, description, project_id, owner_id,
+			status, start_date, completed_date, target_price,
+			target_currency, acquired_at, tags
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (asset_id) DO UPDATE SET
+			name = EXCLUDED.name,
+			description = EXCLUDED.description,
+			status = EXCLUDED.status,
+			start_date = EXCLUDED.start_date,
+			completed_date = EXCLUDED.completed_date,
+			target_price = EXCLUDED.target_price,
+			target_currency = EXCLUDED.target_currency,
+			acquired_at = EXCLUDED.acquired_at,
+			tags = EXCLUDED.tags
+	`
+
+	if _, err := r.db.Exec(
+		ctx,
+		sql,
 		anAsset.ID().String(),
 		anAsset.Name(),
 		anAsset.Description(),
@@ -87,53 +74,8 @@ func (r *PgAssetRepository) create(ctx context.Context, anAsset *asset.Asset) er
 		targetPriceVal,
 		targetCurrVal,
 		anAsset.AcquiredAt(),
-		tags)
-
-	sql, args := qb.Build()
-
-	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
-		return errors.Join(ErrFailedToSaveAsset, err)
-	}
-
-	return nil
-}
-
-func (r *PgAssetRepository) update(ctx context.Context, anAsset *asset.Asset) error {
-	qb := sqlbuilder.PostgreSQL.NewUpdateBuilder()
-
-	var targetPriceVal any
-	var targetCurrVal any
-	if anAsset.TargetPrice() != nil {
-		targetPriceVal = anAsset.TargetPrice().Amount()
-		targetCurrVal = anAsset.TargetPrice().Currency().Code
-	} else if anAsset.Price() != nil {
-		targetPriceVal = anAsset.Price().Amount()
-		targetCurrVal = anAsset.Price().Currency().Code
-	}
-
-	tags := anAsset.Tags()
-	if tags == nil {
-		tags = []string{}
-	}
-
-	qb.Update("projecta_assets")
-	qb.Set(
-		qb.Assign("name", anAsset.Name()),
-		qb.Assign("description", anAsset.Description()),
-		qb.Assign("status", anAsset.Status().String()),
-		qb.Assign("start_date", anAsset.StartDate()),
-		qb.Assign("completed_date", anAsset.CompletedDate()),
-		qb.Assign("target_price", targetPriceVal),
-		qb.Assign("target_currency", targetCurrVal),
-		qb.Assign("acquired_at", anAsset.AcquiredAt()),
-		qb.Assign("tags", tags),
-	)
-	qb.Where(qb.Equal("asset_id", anAsset.ID().String()))
-	qb.Where(qb.Equal("owner_id", anAsset.Owner().PersonID.String()))
-
-	sql, args := qb.Build()
-
-	if _, err := r.db.Exec(ctx, sql, args...); err != nil {
+		tags,
+	); err != nil {
 		return errors.Join(ErrFailedToSaveAsset, err)
 	}
 
@@ -144,7 +86,7 @@ func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) erro
 	qb := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 	qb.DeleteFrom("projecta_assets")
 	qb.Where(qb.Equal("asset_id", asset.ID().String()))
-	qb.Where(qb.Equal("owner_id", asset.Owner().PersonID.String()))
+	qb.Where(qb.Equal("project_id", asset.ProjectID().String()))
 
 	sql, args := qb.Build()
 
@@ -275,8 +217,12 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 
 	qb.Where(qb.Equal("projecta_assets.asset_id", filter.ID.String()))
 
+	if filter.ProjectID != uuid.Nil {
+		qb.Where(qb.Equal("projecta_assets.project_id", filter.ProjectID.String()))
+	}
+
 	if filter.OwnerID != uuid.Nil {
-		qb.Where(qb.Equal("projecta_assets.owner_id", filter.OwnerID.String()))
+		qb.Where(fmt.Sprintf("(projecta_assets.owner_id = %s OR projecta_assets.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
 	}
 
 	if filter.Name != "" {

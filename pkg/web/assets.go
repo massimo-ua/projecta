@@ -228,8 +228,8 @@ type UpdateAssetDTO struct {
 }
 
 type LinkChildAssetDTO struct {
-	ChildAssetID    string  `json:"child_asset_id"`
-	SharePercentage float64 `json:"share_percentage"`
+	ChildAssetID    string   `json:"child_asset_id"`
+	SharePercentage *float64 `json:"share_percentage,omitempty"`
 }
 
 type AssignInvestmentsDTO struct {
@@ -632,9 +632,9 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 		return nil, exceptions.NewValidationException("invalid child asset id", err)
 	}
 
-	share := req.SharePercentage
-	if share <= 0 {
-		share = 100.0
+	share := 100.0
+	if req.SharePercentage != nil {
+		share = *req.SharePercentage
 	}
 
 	return asset.LinkChildCommand{

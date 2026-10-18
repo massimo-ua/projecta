@@ -65,12 +65,7 @@ func MakeHTTPHandler(
 	createSwaggerHandler(r)
 	peopleEndpoints, err := MakeUserEndpoints(peopleService, authService)
 	invitationEndpoints := MakeInvitationEndpoints(invitationService)
-	projectEndpoints, err := MakeProjectEndpoints(
-		projectService,
-		assetService,
-		rateProvider,
-		investmentService...,
-	)
+	projectEndpoints, err := MakeProjectEndpoints(projectService)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create purchase endpoints: %s", err.Error())

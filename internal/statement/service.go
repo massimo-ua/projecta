@@ -27,19 +27,19 @@ type ProjectValidator interface {
 }
 
 type StatementParseItem struct {
-	DocNum      string    `json:"doc_num"`
-	Date        time.Time `json:"date"`
-	Amount      int64     `json:"amount"` // in minor units
-	Currency    string    `json:"currency"`
-	Description string    `json:"description"`
-	IsDuplicate bool      `json:"is_duplicate"`
+	DocNum      string
+	Date        time.Time
+	Amount      int64 // in minor units
+	Currency    string
+	Description string
+	IsDuplicate bool
 }
 
 type StatementParseResult struct {
-	Account      string               `json:"account"`
-	Currency     string               `json:"currency"`
-	Period       string               `json:"period"`
-	Transactions []StatementParseItem `json:"transactions"`
+	Account      string
+	Currency     string
+	Period       string
+	Transactions []StatementParseItem
 }
 
 type Service interface {

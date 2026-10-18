@@ -540,9 +540,8 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		}
 
 		// Test makeGroupAssetsEndpoint
-		now := time.Now()
 		ownerRef := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "John"}
-		mockAst := asset.NewAsset(uuid.New(), "Rent", "", uuid.New(), money.New(0, "UAH"), now, ownerRef)
+		mockAst, _ := asset.CreateAssetGroup(uuid.New(), "Rent", "", uuid.New(), ownerRef, nil)
 		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst})
 		_, err = ep(context.Background(), cmd)
 		if err != nil {
@@ -593,10 +592,6 @@ func TestProjectaDecodersValidationErrors(t *testing.T) {
 
 func TestEndpointsErrorBranches(t *testing.T) {
 	errSvc := errors.New("service failure")
-	owner := &project.Owner{PersonID: uuid.New()}
-	ownerRef := asset.OwnerRef{PersonID: owner.PersonID}
-	proj, _ := project.NewProject(uuid.New(), "Project", "Desc", owner, time.Now(), time.Now())
-	ast := asset.NewAsset(uuid.New(), "Asset", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef)
 
 	peopleSvcErr := &mockPeopleService{err: errSvc}
 	authSvcErr := &mockAuthService{err: errSvc}
@@ -681,32 +676,29 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	})
 
 	t.Run("makeShowProjectTotalsEndpoint currency mismatch and service error", func(t *testing.T) {
-		mProjSvc := &mockProjectService{project: proj}
-		// Assets service error
-		epAssetErr := makeShowProjectTotalsEndpoint(mProjSvc, astSvcErr, nil)
-		_, err := epAssetErr(context.Background(), uuid.New())
+		mProjSvcErr := &mockProjectService{err: errors.New("svc error")}
+		epErr := makeShowProjectTotalsEndpoint(mProjSvcErr)
+		_, err := epErr(context.Background(), uuid.New())
 		if err == nil {
-			t.Errorf("expected assets service error")
+			t.Errorf("expected service error")
 		}
 
-		// Investment service error
-		epInvErr := makeShowProjectTotalsEndpoint(mProjSvc, &mockAssetService{asset: ast}, nil, &mockInvestmentServiceWithCol{err: errSvc})
-		_, err = epInvErr(context.Background(), uuid.New())
-		if err == nil {
-			t.Errorf("expected investment service error")
+		mProjSvcSuccess := &mockProjectService{
+			totals: project.ProjectTotals{
+				TotalInvested: 1000,
+				Balance:       500,
+				HasActivity:   true,
+				Currency:      "USD",
+			},
 		}
-
-		// Assets conversion
-		astEUR := asset.NewAsset(uuid.New(), "Asset EUR", "Desc", proj.ID(), money.New(500, money.EUR), time.Now(), ownerRef)
-		astColMismatch := asset.NewCollection(2)
-		astColMismatch.Add(ast, astEUR)
-
-		mAstSvcMismatch := &mockAssetServiceWithCol{col: astColMismatch}
-
-		epAstMismatch := makeShowProjectTotalsEndpoint(mProjSvc, mAstSvcMismatch, nil)
-		_, err = epAstMismatch(context.Background(), uuid.New())
+		epSuccess := makeShowProjectTotalsEndpoint(mProjSvcSuccess)
+		res, err := epSuccess(context.Background(), uuid.New())
 		if err != nil {
-			t.Errorf("unexpected error: %v", err)
+			t.Fatalf("unexpected error: %v", err)
+		}
+		dtoTotals, ok := res.(ProjectTotalsDTO)
+		if !ok || len(dtoTotals.Totals) != 2 {
+			t.Fatalf("expected 2 totals items, got %v", res)
 		}
 	})
 }
@@ -762,6 +754,16 @@ func (m *mockRateProvider) Convert(a currency.Currency, b currency.Currency) (cu
 		return currency.Currency{}, m.err
 	}
 	return currency.Currency{Amount: a.Amount * 40, Code: b.Code}, nil
+}
+
+func (m *mockRateProvider) ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if amount == nil {
+		return money.New(0, targetCurrency), nil
+	}
+	return money.New(amount.Amount()*40, targetCurrency), nil
 }
 
 func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
@@ -902,14 +904,13 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	t.Run("currency conversion endpoints with rateProvider", func(t *testing.T) {
 		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
 		ownerRef := asset.OwnerRef{PersonID: owner.PersonID, DisplayName: "Owner"}
-		contribRef := investment.ContributorRef{PersonID: owner.PersonID, DisplayName: "Owner"}
 		proj, _ := project.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now(), "UAH")
 
-		astUSD := asset.NewAsset(uuid.New(), "Ast USD", "Desc", proj.ID(), money.New(200, money.USD), time.Now(), ownerRef)
+		astUSD, _ := asset.CreateAsset(uuid.New(), "Ast USD", "Desc", proj.ID(), money.New(200, money.USD), time.Now(), ownerRef, asset.AssetStatusActive, nil, nil)
 
 		rateProv := &mockRateProvider{}
 
-		astUSD.UpdateDetails(astUSD.Name(), astUSD.Description(), money.New(100, money.USD), nil)
+		_ = astUSD.UpdateDetails(astUSD.Name(), astUSD.Description(), money.New(100, money.USD), nil)
 		astUSD.AssignValuation(nil, money.New(200, money.USD), nil, nil)
 		astUSD.EvaluateValuation("UAH", rateProv)
 		aDto := toAssetDTO(astUSD)
@@ -947,27 +948,16 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Errorf("makeListAssetsEndpoint error: %v", err)
 		}
 
-		mProjSvc := &mockProjectService{project: proj}
-
-		// Test makeShowProjectTotalsEndpoint with investment service
-		inv1 := investment.ReconstituteInvestment(uuid.New(), proj.ID(), "UAH", uuid.New(), "Asset 1", nil, contribRef, investment.ResourceTypeMoney, money.New(15000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
-		inv2 := investment.ReconstituteInvestment(uuid.New(), proj.ID(), "UAH", uuid.New(), "Asset 2", nil, contribRef, investment.ResourceTypeMoney, money.New(25000, "UAH"), nil, nil, nil, "", "", "", time.Now(), nil)
-		invCol := investment.NewCollection(2)
-		invCol.Add(inv1)
-		invCol.Add(inv2)
-		mInvColSvc := &mockInvestmentServiceWithCol{col: invCol}
-
-		parentAsset := asset.NewAsset(uuid.New(), "Parent Asset", "", proj.ID(), money.New(10000, "UAH"), time.Now(), ownerRef)
-		childAsset := asset.NewAsset(uuid.New(), "Child Asset", "", proj.ID(), money.New(5000, "UAH"), time.Now(), ownerRef)
-		childAsset.AssignValuation(nil, nil, nil, []asset.ParentAssetLink{{ParentID: parentAsset.ID(), SharePercentage: 100}})
-		parentAsset.AssignValuation(money.New(10000, "UAH"), money.New(15000, "UAH"), nil, nil)
-
-		colWithHierarchy := asset.NewCollection(2)
-		colWithHierarchy.Add(parentAsset)
-		colWithHierarchy.Add(childAsset)
-		mAstHierarchySvc := &mockAssetServiceWithCol{col: colWithHierarchy}
-
-		epTotalsInv := makeShowProjectTotalsEndpoint(mProjSvc, mAstHierarchySvc, rateProv, mInvColSvc)
+		// Test makeShowProjectTotalsEndpoint
+		mProjSvcTotals := &mockProjectService{
+			totals: project.ProjectTotals{
+				TotalInvested: 40000,
+				Balance:       25000,
+				HasActivity:   true,
+				Currency:      "UAH",
+			},
+		}
+		epTotalsInv := makeShowProjectTotalsEndpoint(mProjSvcTotals)
 		resInvTotals, err := epTotalsInv(context.Background(), proj.ID())
 		if err != nil {
 			t.Fatalf("unexpected error with inv service: %v", err)
@@ -985,8 +975,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Errorf("expected Project Balance 25000, got %+v", dtoTotals.Totals[1])
 		}
 
-		errRateProv := &mockRateProvider{err: errors.New("rate error")}
-		epTotalsErr := makeShowProjectTotalsEndpoint(mProjSvc, mAstColSvc, errRateProv, mInvColSvc)
+		mProjSvcErrTotals := &mockProjectService{err: errors.New("rate error")}
+		epTotalsErr := makeShowProjectTotalsEndpoint(mProjSvcErrTotals)
 		if _, err := epTotalsErr(context.Background(), proj.ID()); err == nil {
 			t.Error("expected rate error in makeShowProjectTotalsEndpoint")
 		}
@@ -1338,5 +1328,90 @@ func TestUpdateProfileEndpointAndDecoder(t *testing.T) {
 	})
 }
 
+func TestDecodeLinkChildAssetRequest(t *testing.T) {
+	projID := uuid.New()
+	parentID := uuid.New()
+	childID := uuid.New()
 
+	t.Run("omitted share_percentage defaults to 100", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"child_asset_id": "` + childID.String() + `"}`)
+		req := httptest.NewRequest(http.MethodPost, "/projects/"+projID.String()+"/assets/"+parentID.String()+"/children", body)
+		req = mux.SetURLVars(req, map[string]string{
+			"project_id": projID.String(),
+			"asset_id":   parentID.String(),
+		})
 
+		res, err := decodeLinkChildAssetRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd, ok := res.(asset.LinkChildCommand)
+		if !ok {
+			t.Fatalf("expected LinkChildCommand, got %T", res)
+		}
+		if cmd.SharePercentage != 100.0 {
+			t.Errorf("expected default share 100.0, got %f", cmd.SharePercentage)
+		}
+	})
+
+	t.Run("explicit share_percentage retained", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"child_asset_id": "` + childID.String() + `", "share_percentage": 45.5}`)
+		req := httptest.NewRequest(http.MethodPost, "/projects/"+projID.String()+"/assets/"+parentID.String()+"/children", body)
+		req = mux.SetURLVars(req, map[string]string{
+			"project_id": projID.String(),
+			"asset_id":   parentID.String(),
+		})
+
+		res, err := decodeLinkChildAssetRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd := res.(asset.LinkChildCommand)
+		if cmd.SharePercentage != 45.5 {
+			t.Errorf("expected share 45.5, got %f", cmd.SharePercentage)
+		}
+	})
+
+	t.Run("explicit negative share_percentage not overwritten by 100", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"child_asset_id": "` + childID.String() + `", "share_percentage": -10.0}`)
+		req := httptest.NewRequest(http.MethodPost, "/projects/"+projID.String()+"/assets/"+parentID.String()+"/children", body)
+		req = mux.SetURLVars(req, map[string]string{
+			"project_id": projID.String(),
+			"asset_id":   parentID.String(),
+		})
+
+		res, err := decodeLinkChildAssetRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd := res.(asset.LinkChildCommand)
+		if cmd.SharePercentage != -10.0 {
+			t.Errorf("expected explicit share -10.0 to be retained, got %f", cmd.SharePercentage)
+		}
+		// Verify domain validation fails for negative share
+		if err := asset.ValidateEdge(cmd.ParentID, cmd.ChildID, cmd.SharePercentage, nil); err == nil {
+			t.Errorf("expected ValidateEdge to reject negative share")
+		}
+	})
+
+	t.Run("invalid IDs return validation error", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/projects/invalid/assets/"+parentID.String()+"/children", nil)
+		req = mux.SetURLVars(req, map[string]string{"project_id": "invalid", "asset_id": parentID.String()})
+		if _, err := decodeLinkChildAssetRequest(context.Background(), req); err == nil {
+			t.Errorf("expected error for invalid project_id")
+		}
+
+		req2 := httptest.NewRequest(http.MethodPost, "/projects/"+projID.String()+"/assets/invalid/children", nil)
+		req2 = mux.SetURLVars(req2, map[string]string{"project_id": projID.String(), "asset_id": "invalid"})
+		if _, err := decodeLinkChildAssetRequest(context.Background(), req2); err == nil {
+			t.Errorf("expected error for invalid asset_id")
+		}
+
+		body := bytes.NewBufferString(`{"child_asset_id": "invalid"}`)
+		req3 := httptest.NewRequest(http.MethodPost, "/projects/"+projID.String()+"/assets/"+parentID.String()+"/children", body)
+		req3 = mux.SetURLVars(req3, map[string]string{"project_id": projID.String(), "asset_id": parentID.String()})
+		if _, err := decodeLinkChildAssetRequest(context.Background(), req3); err == nil {
+			t.Errorf("expected error for invalid child_asset_id")
+		}
+	})
+}
