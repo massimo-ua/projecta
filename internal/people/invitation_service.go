@@ -12,7 +12,7 @@ import (
 
 type PersonRegistrar interface {
 	Save(ctx context.Context, person *Person) error
-	DeletePerson(ctx context.Context, personID uuid.UUID) error
+	DeletePerson(ctx context.Context, personID core.PersonID) error
 }
 
 type InvitationServiceImpl struct {
@@ -41,8 +41,8 @@ func HashInvitationCode(code string) string {
 	return invCode.Hash()
 }
 
-func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, email string) (*InvitationWithCode, error) {
-	if adminID == uuid.Nil {
+func (s *InvitationServiceImpl) Create(ctx context.Context, adminID core.PersonID, email string) (*InvitationWithCode, error) {
+	if adminID.IsNil() {
 		return nil, exceptions.NewValidationException("admin id is required", nil)
 	}
 
@@ -67,7 +67,7 @@ func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, e
 	codeHash := invCode.Hash()
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	precreatedPerson, err := NewPerson(personID, "Invited", "User", cleanEmail, nil, RoleUser)
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to prepare user record", err)
@@ -110,14 +110,14 @@ func (s *InvitationServiceImpl) Create(ctx context.Context, adminID uuid.UUID, e
 	}, nil
 }
 
-func (s *InvitationServiceImpl) FindAllByCreator(ctx context.Context, adminID uuid.UUID) ([]*Invitation, error) {
-	if adminID == uuid.Nil {
+func (s *InvitationServiceImpl) FindAllByCreator(ctx context.Context, adminID core.PersonID) ([]*Invitation, error) {
+	if adminID.IsNil() {
 		return nil, exceptions.NewValidationException("admin id is required", nil)
 	}
 	return s.invitationRepo.FindByCreator(ctx, adminID)
 }
 
-func (s *InvitationServiceImpl) Delete(ctx context.Context, adminID uuid.UUID, invitationID uuid.UUID) error {
+func (s *InvitationServiceImpl) Delete(ctx context.Context, adminID core.PersonID, invitationID uuid.UUID) error {
 	inv, err := s.invitationRepo.FindByID(ctx, invitationID)
 	if err != nil {
 		return err

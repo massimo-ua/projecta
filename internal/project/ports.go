@@ -4,10 +4,11 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type PeopleService interface {
-	FindOwner(ctx context.Context, personID uuid.UUID) (*Owner, error)
+	FindOwner(ctx context.Context, personID core.PersonID) (*Owner, error)
 }
 
 type ProjectTotals struct {
@@ -18,7 +19,7 @@ type ProjectTotals struct {
 }
 
 type TotalsCalculator interface {
-	CalculateTotals(ctx context.Context, projectID uuid.UUID, homeCurrency string) (ProjectTotals, error)
+	CalculateTotals(ctx context.Context, projectID core.ProjectID, homeCurrency string) (ProjectTotals, error)
 }
 
 type ProjectService interface {
@@ -27,8 +28,8 @@ type ProjectService interface {
 	Create(ctx context.Context, command CreateProjectCommand) (*Project, error)
 	Remove(ctx context.Context, command RemoveProjectCommand) error
 	Update(ctx context.Context, command UpdateProjectCommand) (*Project, error)
-	AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*Project, error)
-	GetTotals(ctx context.Context, projectID uuid.UUID) (ProjectTotals, error)
+	AcceptShare(ctx context.Context, token uuid.UUID, personID core.PersonID) (*Project, error)
+	GetTotals(ctx context.Context, projectID core.ProjectID) (ProjectTotals, error)
 }
 
 type ProjectRepository interface {
@@ -38,5 +39,5 @@ type ProjectRepository interface {
 	Create(ctx context.Context, project *Project) error
 	Update(ctx context.Context, project *Project) error
 	Remove(ctx context.Context, project *Project) error
-	CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error
+	CreateShareRecord(ctx context.Context, projectID core.ProjectID, personID core.PersonID) error
 }

@@ -5,19 +5,19 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 )
 
 func TestInvestment_NewAndGetters(t *testing.T) {
-	projID := uuid.New()
-	ownerID := uuid.New()
-	assetID := uuid.New()
+	projID := core.NewProjectID()
+	ownerID := core.NewPersonID()
+	assetID := core.NewAssetID()
 	now := time.Now()
 
 	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
-	invID := uuid.New()
+	invID := core.NewInvestmentID()
 	amount := money.New(15000, "UAH")
 	tags := []string{"rent", "monthly", " "}
 
@@ -70,10 +70,10 @@ func TestInvestment_NewAndGetters(t *testing.T) {
 }
 
 func TestInvestment_SharedAllocations(t *testing.T) {
-	projID := uuid.New()
-	ownerID := uuid.New()
-	asset1 := uuid.New()
-	asset2 := uuid.New()
+	projID := core.NewProjectID()
+	ownerID := core.NewPersonID()
+	asset1 := core.NewAssetID()
+	asset2 := core.NewAssetID()
 	now := time.Now()
 
 	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
@@ -84,10 +84,10 @@ func TestInvestment_SharedAllocations(t *testing.T) {
 	}
 
 	inv, err := investment.NewInvestment(
-		uuid.New(),
+		core.NewInvestmentID(),
 		projID,
 		"USD",
-		uuid.Nil,
+		core.NilAssetID,
 		"",
 		contributor,
 		investment.ResourceTypeMoney,
@@ -115,10 +115,10 @@ func TestInvestment_SharedAllocations(t *testing.T) {
 }
 
 func TestInvestment_AllocationInvariants(t *testing.T) {
-	projID := uuid.New()
-	ownerID := uuid.New()
-	asset1 := uuid.New()
-	asset2 := uuid.New()
+	projID := core.NewProjectID()
+	ownerID := core.NewPersonID()
+	asset1 := core.NewAssetID()
+	asset2 := core.NewAssetID()
 	now := time.Now()
 
 	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
@@ -129,7 +129,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 		{AssetID: asset2, SharePercentage: 40.0},
 	}
 	_, err := investment.NewInvestment(
-		uuid.New(), projID, "USD", uuid.Nil, "", contributor,
+		core.NewInvestmentID(), projID, "USD", core.NilAssetID, "", contributor,
 		investment.ResourceTypeMoney, money.New(100, "USD"),
 		nil, nil, nil, "", "", "Invalid Sum", now, nil,
 		badSum...,
@@ -144,7 +144,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 		{AssetID: asset1, SharePercentage: 50.0},
 	}
 	_, err = investment.NewInvestment(
-		uuid.New(), projID, "USD", uuid.Nil, "", contributor,
+		core.NewInvestmentID(), projID, "USD", core.NilAssetID, "", contributor,
 		investment.ResourceTypeMoney, money.New(100, "USD"),
 		nil, nil, nil, "", "", "Duplicate Assets", now, nil,
 		duplicates...,
@@ -159,7 +159,7 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 		{AssetID: asset2, SharePercentage: -10.0},
 	}
 	_, err = investment.NewInvestment(
-		uuid.New(), projID, "USD", uuid.Nil, "", contributor,
+		core.NewInvestmentID(), projID, "USD", core.NilAssetID, "", contributor,
 		investment.ResourceTypeMoney, money.New(100, "USD"),
 		nil, nil, nil, "", "", "Out of Bounds", now, nil,
 		outOfBounds...,
@@ -170,9 +170,9 @@ func TestInvestment_AllocationInvariants(t *testing.T) {
 }
 
 func TestInvestment_TimeResourceCalculation(t *testing.T) {
-	projID := uuid.New()
-	ownerID := uuid.New()
-	assetID := uuid.New()
+	projID := core.NewProjectID()
+	ownerID := core.NewPersonID()
+	assetID := core.NewAssetID()
 	now := time.Now()
 
 	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
@@ -181,7 +181,7 @@ func TestInvestment_TimeResourceCalculation(t *testing.T) {
 	rate := money.New(50, "USD")
 
 	inv, err := investment.NewInvestment(
-		uuid.New(),
+		core.NewInvestmentID(),
 		projID,
 		"USD",
 		assetID,
@@ -208,16 +208,16 @@ func TestInvestment_TimeResourceCalculation(t *testing.T) {
 }
 
 func TestInvestment_ReallocateAndUpdate(t *testing.T) {
-	projID := uuid.New()
-	ownerID := uuid.New()
-	asset1 := uuid.New()
-	asset2 := uuid.New()
+	projID := core.NewProjectID()
+	ownerID := core.NewPersonID()
+	asset1 := core.NewAssetID()
+	asset2 := core.NewAssetID()
 	now := time.Now()
 
 	contributor := investment.ContributorRef{PersonID: ownerID, DisplayName: "John Doe"}
 
 	inv, err := investment.NewInvestment(
-		uuid.New(),
+		core.NewInvestmentID(),
 		projID,
 		"UAH",
 		asset1,
@@ -263,12 +263,12 @@ func TestInvestment_ReallocateAndUpdate(t *testing.T) {
 }
 
 func TestInvestment_Reconstitute(t *testing.T) {
-	invID := uuid.New()
-	projID := uuid.New()
-	assetID := uuid.New()
+	invID := core.NewInvestmentID()
+	projID := core.NewProjectID()
+	assetID := core.NewAssetID()
 	now := time.Now()
 
-	contributor := investment.ContributorRef{PersonID: uuid.New(), DisplayName: "Jane Doe"}
+	contributor := investment.ContributorRef{PersonID: core.NewPersonID(), DisplayName: "Jane Doe"}
 
 	inv := investment.ReconstituteInvestment(
 		invID,

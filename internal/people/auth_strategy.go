@@ -5,20 +5,19 @@ import (
 	"errors"
 	"log"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 // CredentialsReader defines the narrow read contract required by authentication strategies.
 type CredentialsReader interface {
-	FindCredentials(ctx context.Context, provider IdentityProvider, registrationID string) (uuid.UUID, string, error)
+	FindCredentials(ctx context.Context, provider IdentityProvider, registrationID string) (core.PersonID, string, error)
 }
 
 // IdentityProviderStrategy defines the polymorphic contract for authenticating credentials.
 type IdentityProviderStrategy interface {
 	Provider() IdentityProvider
-	Authenticate(ctx context.Context, credentials Credentials) (uuid.UUID, error)
+	Authenticate(ctx context.Context, credentials Credentials) (core.PersonID, error)
 	ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error)
 }
 
@@ -40,18 +39,18 @@ func (s *LocalAuthStrategy) Provider() IdentityProvider {
 	return LOCAL
 }
 
-func (s *LocalAuthStrategy) Authenticate(ctx context.Context, credentials Credentials) (uuid.UUID, error) {
+func (s *LocalAuthStrategy) Authenticate(ctx context.Context, credentials Credentials) (core.PersonID, error) {
 	personID, hash, err := s.repo.FindCredentials(
 		ctx,
 		credentials.Provider(),
 		credentials.RegistrationID(),
 	)
 	if err != nil {
-		return uuid.Nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+		return core.NilPersonID, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	if !s.hasher.Compare(credentials.Identifier(), hash) {
-		return uuid.Nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+		return core.NilPersonID, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	return personID, nil
@@ -79,11 +78,11 @@ func (s *GoogleAuthStrategy) Provider() IdentityProvider {
 	return GOOGLE
 }
 
-func (s *GoogleAuthStrategy) Authenticate(ctx context.Context, credentials Credentials) (uuid.UUID, error) {
+func (s *GoogleAuthStrategy) Authenticate(ctx context.Context, credentials Credentials) (core.PersonID, error) {
 	claims, err := s.google.ValidateToken(credentials.Identifier())
 	if err != nil {
 		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
-		return uuid.Nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+		return core.NilPersonID, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	log.Printf("[GOOGLE AUTH] Successfully validated Google token for Sub ID: %s (DisplayName: %s)", claims.Sub, claims.DisplayName)
@@ -91,7 +90,7 @@ func (s *GoogleAuthStrategy) Authenticate(ctx context.Context, credentials Crede
 	personID, _, err := s.repo.FindCredentials(ctx, GOOGLE, claims.Sub)
 	if err != nil {
 		log.Printf("[GOOGLE AUTH ERROR] No user found for Google Sub ID: %s. To map this user, insert credentials with provider='GOOGLE' and registration_id='%s'", claims.Sub, claims.Sub)
-		return uuid.Nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
+		return core.NilPersonID, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
 	return personID, nil

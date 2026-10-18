@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 )
@@ -40,14 +41,14 @@ func (rec *invitationRecord) toInvitation() (*people.Invitation, error) {
 		return nil, exceptions.NewInternalException("invalid invitation id", err)
 	}
 
-	createdByID, err := uuid.Parse(rec.createdBy)
+	createdByID, err := core.ParsePersonID(rec.createdBy)
 	if err != nil {
 		return nil, exceptions.NewInternalException("invalid created_by id", err)
 	}
 
-	var pID *uuid.UUID
+	var pID *core.PersonID
 	if rec.personID.Valid && rec.personID.String != "" {
-		if parsedPID, err := uuid.Parse(rec.personID.String); err == nil {
+		if parsedPID, err := core.ParsePersonID(rec.personID.String); err == nil {
 			pID = &parsedPID
 		}
 	}
@@ -150,7 +151,7 @@ func (r *PgInvitationRepository) FindByCodeHash(ctx context.Context, codeHash st
 	return r.scanInvitation(row)
 }
 
-func (r *PgInvitationRepository) FindByCreator(ctx context.Context, creatorID uuid.UUID) ([]*people.Invitation, error) {
+func (r *PgInvitationRepository) FindByCreator(ctx context.Context, creatorID core.PersonID) ([]*people.Invitation, error) {
 	rows, err := r.db.Query(
 		ctx,
 		`SELECT invitation_id, email, code_hash, expires_at, created_by, person_id, status, created_at, completed_at

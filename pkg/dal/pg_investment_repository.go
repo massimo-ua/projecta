@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 )
 
@@ -104,7 +104,7 @@ func (r *PgInvestmentRepository) saveAllocations(ctx context.Context, inv *inves
 	}
 
 	allocations := inv.AssetAllocations()
-	if len(allocations) == 0 && inv.PrimaryAssetID() != uuid.Nil {
+	if len(allocations) == 0 && !inv.PrimaryAssetID().IsNil() {
 		allocations = []investment.InvestmentAssetLink{
 			{
 				AssetID:         inv.PrimaryAssetID(),
@@ -151,7 +151,7 @@ func (r *PgInvestmentRepository) loadAllocations(ctx context.Context, investment
 		var share float64
 		if err := rows.Scan(&invID, &astID, &astName, &share); err == nil {
 			result[invID] = append(result[invID], investment.InvestmentAssetLink{
-				AssetID:         uuid.MustParse(astID),
+				AssetID:         core.MustParseAssetID(astID),
 				AssetName:       astName,
 				SharePercentage: share,
 			})
@@ -184,10 +184,10 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 	setupInvestmentSelect(qb)
 
 	qb.Where(qb.Equal("projecta_investments.investment_id", filter.ID.String()))
-	if filter.ProjectID != uuid.Nil {
+	if !filter.ProjectID.IsNil() {
 		qb.Where(qb.Equal("projecta_investments.project_id", filter.ProjectID.String()))
 	}
-	if filter.AssetID != uuid.Nil {
+	if !filter.AssetID.IsNil() {
 		qb.Where(fmt.Sprintf("(projecta_investments.asset_id = %s OR projecta_investments.investment_id IN (SELECT investment_id FROM projecta_investment_assets WHERE asset_id = %s))", qb.Var(filter.AssetID.String()), qb.Var(filter.AssetID.String())))
 	}
 
@@ -238,6 +238,7 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 	countQb.Select(countQb.As("COUNT(*)", "total"))
 
 	countSql, countArgs := countQb.Build()
+
 	var total int
 	if err := r.db.QueryRow(ctx, countSql, countArgs...).Scan(&total); err != nil {
 		return nil, err
@@ -315,7 +316,7 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 	return col, nil
 }
 
-func (r *PgInvestmentRepository) FindTags(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+func (r *PgInvestmentRepository) FindTags(ctx context.Context, projectID core.ProjectID) ([]string, error) {
 	sql := `
 		SELECT DISTINCT tag FROM (
 			SELECT unnest(tags) AS tag 
@@ -378,13 +379,13 @@ func applyInvestmentFilters(qb *sqlbuilder.SelectBuilder, filter investment.Coll
 		}
 		qb.Where(qb.In("projecta_investments.investment_id", vals...))
 	}
-	if filter.ProjectID != uuid.Nil {
+	if !filter.ProjectID.IsNil() {
 		qb.Where(qb.Equal("projecta_investments.project_id", filter.ProjectID.String()))
 	}
-	if filter.AssetID != uuid.Nil {
+	if !filter.AssetID.IsNil() {
 		qb.Where(fmt.Sprintf("(projecta_investments.asset_id = %s OR projecta_investments.investment_id IN (SELECT investment_id FROM projecta_investment_assets WHERE asset_id = %s))", qb.Var(filter.AssetID.String()), qb.Var(filter.AssetID.String())))
 	}
-	if filter.OwnerID != uuid.Nil {
+	if !filter.OwnerID.IsNil() {
 		qb.Where(qb.Equal("projecta_investments.contributor_id", filter.OwnerID.String()))
 	}
 	if filter.ResourceType != "" {
@@ -406,10 +407,10 @@ type scannable interface {
 }
 
 type investmentRecord struct {
-	id               uuid.UUID
-	projectID        uuid.UUID
+	id               core.InvestmentID
+	projectID        core.ProjectID
 	homeCurrency     string
-	primaryAssetID   uuid.UUID
+	primaryAssetID   core.AssetID
 	primaryAssetName string
 	contributor      investment.ContributorRef
 	resourceType     investment.ResourceType
@@ -469,7 +470,7 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 	}
 
 	contrib := investment.ContributorRef{
-		PersonID:    uuid.MustParse(contribID),
+		PersonID:    core.MustParsePersonID(contribID),
 		DisplayName: contribDisp,
 	}
 
@@ -489,14 +490,14 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 
 	rType, _ := investment.ToResourceType(resType)
 
-	var parsedAstID uuid.UUID
+	var parsedAstID core.AssetID
 	if astID != "" {
-		parsedAstID = uuid.MustParse(astID)
+		parsedAstID = core.MustParseAssetID(astID)
 	}
 
 	return &investmentRecord{
-		id:               uuid.MustParse(invID),
-		projectID:        uuid.MustParse(projID),
+		id:               core.MustParseInvestmentID(invID),
+		projectID:        core.MustParseProjectID(projID),
 		homeCurrency:     currencyCode,
 		primaryAssetID:   parsedAstID,
 		primaryAssetName: astName,
@@ -513,4 +514,3 @@ func scanInvestmentRecord(s scannable) (*investmentRecord, error) {
 		tags:             tags,
 	}, nil
 }
-

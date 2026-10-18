@@ -3,23 +3,22 @@ package investment
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type Filter struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	AssetID   uuid.UUID
+	ID        core.InvestmentID
+	ProjectID core.ProjectID
+	AssetID   core.AssetID
 }
 
 type CollectionFilter struct {
 	core.Pagination
 	core.Sorting
-	IDs          []uuid.UUID
-	ProjectID    uuid.UUID
-	AssetID      uuid.UUID
-	OwnerID      uuid.UUID
+	IDs          []core.InvestmentID
+	ProjectID    core.ProjectID
+	AssetID      core.AssetID
+	OwnerID      core.PersonID
 	ResourceType ResourceType
 	Tag          string
 	StartDate    *time.Time

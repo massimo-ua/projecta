@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
@@ -15,27 +15,27 @@ var (
 )
 
 type ChildEdge struct {
-	ChildID         uuid.UUID
+	ChildID         core.AssetID
 	SharePercentage float64
 }
 
 type ParentEdge struct {
-	ParentID        uuid.UUID
+	ParentID        core.AssetID
 	SharePercentage float64
 }
 
 // AssetHierarchy encapsulates a Directed Acyclic Graph (DAG) of assets and their composition links.
 type AssetHierarchy struct {
-	assets      map[uuid.UUID]*Asset
-	childrenMap map[uuid.UUID][]ChildEdge
-	parentsMap  map[uuid.UUID][]ParentEdge
+	assets      map[core.AssetID]*Asset
+	childrenMap map[core.AssetID][]ChildEdge
+	parentsMap  map[core.AssetID][]ParentEdge
 }
 
 func NewAssetHierarchy() *AssetHierarchy {
 	return &AssetHierarchy{
-		assets:      make(map[uuid.UUID]*Asset),
-		childrenMap: make(map[uuid.UUID][]ChildEdge),
-		parentsMap:  make(map[uuid.UUID][]ParentEdge),
+		assets:      make(map[core.AssetID]*Asset),
+		childrenMap: make(map[core.AssetID][]ChildEdge),
+		parentsMap:  make(map[core.AssetID][]ParentEdge),
 	}
 }
 
@@ -45,13 +45,13 @@ func (h *AssetHierarchy) AddAsset(a *Asset) {
 	}
 }
 
-func (h *AssetHierarchy) GetAsset(id uuid.UUID) (*Asset, bool) {
+func (h *AssetHierarchy) GetAsset(id core.AssetID) (*Asset, bool) {
 	a, ok := h.assets[id]
 	return a, ok
 }
 
 // ValidateEdge enforces DAG edge invariants: no self-reference, valid share percentage (0, 100], and no circular dependency.
-func ValidateEdge(parentID, childID uuid.UUID, sharePercentage float64, ancestors []uuid.UUID) error {
+func ValidateEdge(parentID, childID core.AssetID, sharePercentage float64, ancestors []core.AssetID) error {
 	if parentID == childID {
 		return ErrSelfReference
 	}
@@ -66,7 +66,7 @@ func ValidateEdge(parentID, childID uuid.UUID, sharePercentage float64, ancestor
 	return nil
 }
 
-func (h *AssetHierarchy) AddEdge(parentID, childID uuid.UUID, sharePercentage float64) error {
+func (h *AssetHierarchy) AddEdge(parentID, childID core.AssetID, sharePercentage float64) error {
 	if err := ValidateEdge(parentID, childID, sharePercentage, h.Ancestors(parentID)); err != nil {
 		return err
 	}
@@ -84,12 +84,12 @@ func (h *AssetHierarchy) AddEdge(parentID, childID uuid.UUID, sharePercentage fl
 }
 
 // Ancestors returns all ancestor asset IDs of the given node ID.
-func (h *AssetHierarchy) Ancestors(nodeID uuid.UUID) []uuid.UUID {
-	visited := make(map[uuid.UUID]bool)
-	var result []uuid.UUID
+func (h *AssetHierarchy) Ancestors(nodeID core.AssetID) []core.AssetID {
+	visited := make(map[core.AssetID]bool)
+	var result []core.AssetID
 
-	var dfs func(curr uuid.UUID)
-	dfs = func(curr uuid.UUID) {
+	var dfs func(curr core.AssetID)
+	dfs = func(curr core.AssetID) {
 		for _, p := range h.parentsMap[curr] {
 			if !visited[p.ParentID] {
 				visited[p.ParentID] = true
@@ -104,16 +104,16 @@ func (h *AssetHierarchy) Ancestors(nodeID uuid.UUID) []uuid.UUID {
 }
 
 // CalculateRollups computes the rolled-up total cost for all assets in the hierarchy using memoized recursion.
-func (h *AssetHierarchy) CalculateRollups(directCosts map[uuid.UUID]*money.Money, defaultCurrency string) map[uuid.UUID]*money.Money {
+func (h *AssetHierarchy) CalculateRollups(directCosts map[core.AssetID]*money.Money, defaultCurrency string) map[core.AssetID]*money.Money {
 	if defaultCurrency == "" {
 		defaultCurrency = "UAH"
 	}
-	totalCosts := make(map[uuid.UUID]*money.Money)
-	memo := make(map[uuid.UUID]*money.Money)
-	visiting := make(map[uuid.UUID]bool)
+	totalCosts := make(map[core.AssetID]*money.Money)
+	memo := make(map[core.AssetID]*money.Money)
+	visiting := make(map[core.AssetID]bool)
 
-	var compute func(id uuid.UUID) *money.Money
-	compute = func(id uuid.UUID) *money.Money {
+	var compute func(id core.AssetID) *money.Money
+	compute = func(id core.AssetID) *money.Money {
 		if val, exists := memo[id]; exists {
 			return val
 		}
@@ -154,7 +154,7 @@ func (h *AssetHierarchy) CalculateRollups(directCosts map[uuid.UUID]*money.Money
 }
 
 // ApplyToAssets updates all assets in the hierarchy with calculated valuations and links.
-func (h *AssetHierarchy) ApplyToAssets(directCosts map[uuid.UUID]*money.Money, defaultCurrency string) {
+func (h *AssetHierarchy) ApplyToAssets(directCosts map[core.AssetID]*money.Money, defaultCurrency string) {
 	totalCosts := h.CalculateRollups(directCosts, defaultCurrency)
 
 	for id, a := range h.assets {

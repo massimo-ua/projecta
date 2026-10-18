@@ -13,12 +13,12 @@ import (
 )
 
 func TestDomainEntities(t *testing.T) {
-	ownerID := uuid.New()
+	ownerID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "John Doe"}
 	now := time.Now()
 
 	// Project
-	projID := uuid.New()
+	projID := core.NewProjectID()
 	proj, err := project.NewProject(projID, "Test Project", "Description", owner, now, now)
 	if err != nil {
 		t.Fatalf("unexpected project error: %v", err)
@@ -26,7 +26,7 @@ func TestDomainEntities(t *testing.T) {
 	if !proj.IsOwnedBy(owner) {
 		t.Errorf("IsOwnedBy mismatch")
 	}
-	otherOwner := &project.Owner{PersonID: uuid.New()}
+	otherOwner := &project.Owner{PersonID: core.NewPersonID()}
 	if proj.IsOwnedBy(otherOwner) {
 		t.Errorf("IsOwnedBy should be false for other owner")
 	}
@@ -44,7 +44,7 @@ type mockPeopleService struct {
 	err   error
 }
 
-func (m *mockPeopleService) FindOwner(ctx context.Context, personID uuid.UUID) (*project.Owner, error) {
+func (m *mockPeopleService) FindOwner(ctx context.Context, personID core.PersonID) (*project.Owner, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -106,16 +106,16 @@ func (m *mockProjectRepo) Remove(ctx context.Context, project *project.Project) 
 	return m.removeErr
 }
 
-func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID core.ProjectID, personID core.PersonID) error {
 	return m.shareErr
 }
 
 func TestProjectService(t *testing.T) {
-	ownerID := uuid.New()
+	ownerID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "John", CanHaveProjects: true}
 	peopleSvc := &mockPeopleService{owner: owner}
 
-	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
+	proj, _ := project.NewProject(core.NewProjectID(), "Project 1", "Desc", owner, time.Now(), time.Now())
 	projRepo := &mockProjectRepo{project: proj}
 
 	svc := project.NewProjectService(projRepo, peopleSvc)
@@ -196,7 +196,7 @@ func TestProjectService(t *testing.T) {
 	}
 
 	// Update error branches
-	_, err = svcNew.Update(context.Background(), project.UpdateProjectCommand{PersonID: owner.PersonID, ProjectID: uuid.New()})
+	_, err = svcNew.Update(context.Background(), project.UpdateProjectCommand{PersonID: owner.PersonID, ProjectID: core.NewProjectID()})
 	if err == nil {
 		t.Errorf("expected error when FindOne returns error")
 	}
@@ -213,7 +213,7 @@ type mockTotalsCalculator struct {
 	err    error
 }
 
-func (m *mockTotalsCalculator) CalculateTotals(ctx context.Context, projectID uuid.UUID, homeCurrency string) (project.ProjectTotals, error) {
+func (m *mockTotalsCalculator) CalculateTotals(ctx context.Context, projectID core.ProjectID, homeCurrency string) (project.ProjectTotals, error) {
 	if m.err != nil {
 		return project.ProjectTotals{}, m.err
 	}
@@ -221,10 +221,10 @@ func (m *mockTotalsCalculator) CalculateTotals(ctx context.Context, projectID uu
 }
 
 func TestProjectService_Remove(t *testing.T) {
-	ownerID := uuid.New()
-	otherPersonID := uuid.New()
+	ownerID := core.NewPersonID()
+	otherPersonID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "Owner"}
-	proj, _ := project.NewProject(uuid.New(), "Project to Remove", "Desc", owner, time.Now(), time.Now())
+	proj, _ := project.NewProject(core.NewProjectID(), "Project to Remove", "Desc", owner, time.Now(), time.Now())
 
 	t.Run("success when owner removes project", func(t *testing.T) {
 		repo := &mockProjectRepo{project: proj}
@@ -258,7 +258,7 @@ func TestProjectService_Remove(t *testing.T) {
 		repo := &mockProjectRepo{findErr: exceptions.NotFoundError}
 		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
 		err := svc.Remove(context.Background(), project.RemoveProjectCommand{
-			ProjectID: uuid.New(),
+			ProjectID: core.NewProjectID(),
 			PersonID:  ownerID,
 		})
 		if err == nil {
@@ -272,9 +272,9 @@ func TestProjectService_Remove(t *testing.T) {
 }
 
 func TestProjectService_GetTotals(t *testing.T) {
-	ownerID := uuid.New()
+	ownerID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "Owner"}
-	proj, _ := project.NewProject(uuid.New(), "Project Totals", "Desc", owner, time.Now(), time.Now(), "USD")
+	proj, _ := project.NewProject(core.NewProjectID(), "Project Totals", "Desc", owner, time.Now(), time.Now(), "USD")
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
 
 	t.Run("unauthenticated error", func(t *testing.T) {
@@ -322,7 +322,7 @@ func TestProjectService_GetTotals(t *testing.T) {
 		repo := &mockProjectRepo{findErr: exceptions.NotFoundError}
 		svc := project.NewProjectService(repo, &mockPeopleService{owner: owner})
 
-		_, err := svc.GetTotals(authedCtx, uuid.New())
+		_, err := svc.GetTotals(authedCtx, core.NewProjectID())
 		if err == nil {
 			t.Fatal("expected not found error")
 		}
@@ -334,9 +334,9 @@ func TestProjectService_GetTotals(t *testing.T) {
 }
 
 func TestProjectSharing(t *testing.T) {
-	ownerID := uuid.New()
+	ownerID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "Owner"}
-	proj, _ := project.NewProject(uuid.New(), "Shared Project", "Desc", owner, time.Now(), time.Now())
+	proj, _ := project.NewProject(core.NewProjectID(), "Shared Project", "Desc", owner, time.Now(), time.Now())
 	projRepo := &mockProjectRepo{project: proj}
 	svc := project.NewProjectService(projRepo, &mockPeopleService{owner: owner})
 
@@ -347,7 +347,7 @@ func TestProjectSharing(t *testing.T) {
 	}
 
 	// AcceptShare by non-owner user
-	recipientID := uuid.New()
+	recipientID := core.NewPersonID()
 	pShared, err := svc.AcceptShare(context.Background(), proj.ShareToken(), recipientID)
 	if err != nil || pShared == nil {
 		t.Fatalf("AcceptShare recipient error: %v", err)

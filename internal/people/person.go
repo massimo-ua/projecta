@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -40,7 +39,7 @@ func ToRole(s string) (Role, error) {
 }
 
 type Person struct {
-	id          uuid.UUID
+	id          core.PersonID
 	firstName   string
 	lastName    string
 	displayName DisplayName
@@ -48,7 +47,7 @@ type Person struct {
 	roles       []Role
 }
 
-func (p *Person) ID() uuid.UUID     { return p.id }
+func (p *Person) ID() core.PersonID { return p.id }
 func (p *Person) FirstName() string { return p.firstName }
 func (p *Person) LastName() string  { return p.lastName }
 func (p *Person) FullName() string {
@@ -151,11 +150,11 @@ func (p *Person) AddRole(role Role) error {
 	return nil
 }
 
-func NewPerson(personID uuid.UUID, firstName string, lastName string, displayName string, identities []Credentials, roles ...Role) (*Person, error) {
+func NewPerson(personID core.PersonID, firstName string, lastName string, displayName string, identities []Credentials, roles ...Role) (*Person, error) {
 	var err error
-	var id uuid.UUID
-	if personID == uuid.Nil {
-		id = uuid.New()
+	var id core.PersonID
+	if personID.IsNil() {
+		id = core.NewPersonID()
 	} else {
 		id = personID
 	}
@@ -303,7 +302,7 @@ func (p *Person) AcceptInvitation(claims *core.AuthTokenClaims, provider Identit
 }
 
 func ReconstitutePerson(
-	id uuid.UUID,
+	id core.PersonID,
 	firstName string,
 	lastName string,
 	displayName DisplayName,

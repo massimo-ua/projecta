@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
@@ -19,7 +19,7 @@ type mockStatementService struct {
 	err error
 }
 
-func (m *mockStatementService) ParseStatement(_ context.Context, _ uuid.UUID, _ []byte) (*statement.StatementParseResult, error) {
+func (m *mockStatementService) ParseStatement(_ context.Context, _ core.ProjectID, _ []byte) (*statement.StatementParseResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -35,7 +35,7 @@ func (m *mockStatementService) ParseStatement(_ context.Context, _ uuid.UUID, _ 
 }
 
 func TestDecodeParseStatementRequest(t *testing.T) {
-	projID := uuid.New()
+	projID := core.NewProjectID()
 
 	t.Run("success", func(t *testing.T) {
 		body := &bytes.Buffer{}
@@ -102,7 +102,7 @@ func TestDecodeParseStatementRequest(t *testing.T) {
 }
 
 func TestMakeParseStatementEndpoint(t *testing.T) {
-	projID := uuid.New()
+	projID := core.NewProjectID()
 
 	t.Run("success", func(t *testing.T) {
 		svc := &mockStatementService{}

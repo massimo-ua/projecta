@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -30,28 +29,28 @@ func ToAssetStatus(status string) AssetStatus {
 }
 
 type ChildAssetLink struct {
-	ChildID         uuid.UUID
+	ChildID         core.AssetID
 	ChildName       string
 	SharePercentage float64
 	TotalCost       *money.Money
 }
 
 type ParentAssetLink struct {
-	ParentID        uuid.UUID
+	ParentID        core.AssetID
 	ParentName      string
 	SharePercentage float64
 }
 
 type OwnerRef struct {
-	PersonID    uuid.UUID
+	PersonID    core.PersonID
 	DisplayName string
 }
 
 type Asset struct {
-	id                 uuid.UUID
+	id                 core.AssetID
 	name               string
 	description        string
-	projectID          uuid.UUID
+	projectID          core.ProjectID
 	price              *money.Money
 	acquiredAt         time.Time
 	owner              OwnerRef
@@ -72,10 +71,10 @@ type Asset struct {
 
 // CreateAsset validates business invariants and constructs a new Asset entity.
 func CreateAsset(
-	id uuid.UUID,
+	id core.AssetID,
 	name string,
 	description string,
-	projectID uuid.UUID,
+	projectID core.ProjectID,
 	price *money.Money,
 	startDate time.Time,
 	owner OwnerRef,
@@ -87,10 +86,10 @@ func CreateAsset(
 }
 
 func createAsset(
-	id uuid.UUID,
+	id core.AssetID,
 	name string,
 	description string,
-	projectID uuid.UUID,
+	projectID core.ProjectID,
 	price *money.Money,
 	startDate time.Time,
 	owner OwnerRef,
@@ -99,10 +98,10 @@ func createAsset(
 	tags []string,
 	isGroup bool,
 ) (*Asset, error) {
-	if id == uuid.Nil {
-		id = uuid.New()
+	if id.IsNil() {
+		id = core.NewAssetID()
 	}
-	if projectID == uuid.Nil {
+	if projectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 	trimmedName := strings.TrimSpace(name)
@@ -149,10 +148,10 @@ func createAsset(
 
 // CreateAssetFromInvestments creates a new Asset by aggregating and converting existing investments.
 func CreateAssetFromInvestments(
-	id uuid.UUID,
+	id core.AssetID,
 	name string,
 	description string,
-	projectID uuid.UUID,
+	projectID core.ProjectID,
 	mainCurrency string,
 	requestedTargetCurrency string,
 	acquiredAt time.Time,
@@ -160,7 +159,7 @@ func CreateAssetFromInvestments(
 	invItems []InvestmentItem,
 	converter CurrencyConverter,
 ) (*Asset, error) {
-	if projectID == uuid.Nil {
+	if projectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 	if len(invItems) == 0 {
@@ -257,10 +256,10 @@ func CreateAssetFromInvestments(
 
 // CreateAssetGroup constructs a parent group Asset to aggregate child assets.
 func CreateAssetGroup(
-	id uuid.UUID,
+	id core.AssetID,
 	name string,
 	description string,
-	projectID uuid.UUID,
+	projectID core.ProjectID,
 	owner OwnerRef,
 	tags []string,
 ) (*Asset, error) {
@@ -281,7 +280,7 @@ func CreateAssetGroup(
 	)
 }
 
-func (a *Asset) ID() uuid.UUID {
+func (a *Asset) ID() core.AssetID {
 	return a.id
 }
 
@@ -293,7 +292,7 @@ func (a *Asset) Description() string {
 	return a.description
 }
 
-func (a *Asset) ProjectID() uuid.UUID {
+func (a *Asset) ProjectID() core.ProjectID {
 	return a.projectID
 }
 
@@ -527,10 +526,10 @@ func (a *Asset) Reopen() {
 
 // ReconstituteAsset reconstructs an Asset entity from persistence data without executing business invariants.
 func ReconstituteAsset(
-	id uuid.UUID,
+	id core.AssetID,
 	name string,
 	description string,
-	projectID uuid.UUID,
+	projectID core.ProjectID,
 	price *money.Money,
 	acquiredAt time.Time,
 	owner OwnerRef,

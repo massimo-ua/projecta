@@ -3,12 +3,12 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+
 	"github.com/go-kit/kit/endpoint"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"net/http"
 )
 
 type RegisterUserDTO struct {
@@ -45,7 +45,7 @@ type UpdateProfileDTO struct {
 }
 
 type UpdateProfileRequest struct {
-	PersonID    uuid.UUID
+	PersonID    core.PersonID
 	DisplayName people.DisplayName
 }
 
@@ -60,20 +60,18 @@ type UserEndpoints struct {
 }
 
 func decodeProfileRequest(ctx context.Context, _ *http.Request) (any, error) {
-	requesterID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to authorize profile request", nil)
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to authorize profile request", err)
 	}
 
-	return requesterID, nil
+	return personID, nil
 }
 
 func decodeUpdateProfileRequest(ctx context.Context, r *http.Request) (any, error) {
-	requesterID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to authorize profile request", nil)
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to authorize profile request", err)
 	}
 
 	var dto UpdateProfileDTO
@@ -87,7 +85,7 @@ func decodeUpdateProfileRequest(ctx context.Context, r *http.Request) (any, erro
 	}
 
 	return UpdateProfileRequest{
-		PersonID:    requesterID,
+		PersonID:    personID,
 		DisplayName: dn,
 	}, nil
 }
@@ -147,7 +145,7 @@ func makeLoginEndpoint(svc people.AuthService) endpoint.Endpoint {
 
 func makeProfileEndpoint(svc people.UserService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		personID := request.(uuid.UUID)
+		personID := request.(core.PersonID)
 
 		person, err := svc.FindByID(ctx, personID)
 

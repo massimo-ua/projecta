@@ -44,7 +44,7 @@ type mockPersonReader struct {
 	err    error
 }
 
-func (m *mockPersonReader) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
+func (m *mockPersonReader) FindByID(ctx context.Context, personID core.PersonID) (*people.Person, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -71,7 +71,7 @@ func (m *mockAdapterProjectRepo) FindByShareToken(ctx context.Context, token uui
 func (m *mockAdapterProjectRepo) Create(ctx context.Context, p *project.Project) error { return nil }
 func (m *mockAdapterProjectRepo) Update(ctx context.Context, p *project.Project) error { return nil }
 func (m *mockAdapterProjectRepo) Remove(ctx context.Context, p *project.Project) error { return nil }
-func (m *mockAdapterProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+func (m *mockAdapterProjectRepo) CreateShareRecord(ctx context.Context, projectID core.ProjectID, personID core.PersonID) error {
 	return nil
 }
 
@@ -91,25 +91,25 @@ func (m *mockAdapterAssetRepo) FindOne(ctx context.Context, filter asset.Filter)
 func (m *mockAdapterAssetRepo) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
 	return nil, nil
 }
-func (m *mockAdapterAssetRepo) AddChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID, sharePercentage float64) error {
+func (m *mockAdapterAssetRepo) AddChild(ctx context.Context, parentID core.AssetID, childID core.AssetID, sharePercentage float64) error {
 	return nil
 }
-func (m *mockAdapterAssetRepo) RemoveChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID) error {
+func (m *mockAdapterAssetRepo) RemoveChild(ctx context.Context, parentID core.AssetID, childID core.AssetID) error {
 	return nil
 }
-func (m *mockAdapterAssetRepo) FindChildren(ctx context.Context, parentID uuid.UUID) ([]asset.ChildAssetLink, error) {
+func (m *mockAdapterAssetRepo) FindChildren(ctx context.Context, parentID core.AssetID) ([]asset.ChildAssetLink, error) {
 	return nil, nil
 }
-func (m *mockAdapterAssetRepo) FindParents(ctx context.Context, childID uuid.UUID) ([]asset.ParentAssetLink, error) {
+func (m *mockAdapterAssetRepo) FindParents(ctx context.Context, childID core.AssetID) ([]asset.ParentAssetLink, error) {
 	return nil, nil
 }
-func (m *mockAdapterAssetRepo) FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
+func (m *mockAdapterAssetRepo) FindAncestors(ctx context.Context, assetID core.AssetID) ([]core.AssetID, error) {
 	return nil, nil
 }
 
 func TestCrossContextAdapters(t *testing.T) {
 	ctx := context.Background()
-	pID := uuid.New()
+	pID := core.NewPersonID()
 	cred, _ := people.NewCredentials("LOCAL", "user@example.com", "secret")
 	person, _ := people.NewPerson(pID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -137,7 +137,7 @@ func TestCrossContextAdapters(t *testing.T) {
 	}
 
 	now := time.Now()
-	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, now, now, "USD")
+	proj, _ := project.NewProject(core.NewProjectID(), "Project 1", "Desc", owner, now, now, "USD")
 	projRepo := &mockAdapterProjectRepo{proj: proj}
 
 	assetProjAdapter := &assetProjectReaderAdapter{projects: projRepo}
@@ -152,7 +152,7 @@ func TestCrossContextAdapters(t *testing.T) {
 		t.Fatalf("unexpected investmentProjectReaderAdapter result: %+v, err: %v", invProjDesc, err)
 	}
 
-	ast, _ := asset.CreateAsset(uuid.New(), "Truck", "Desc", proj.ID(), money.New(1000, "USD"), now, ownerRef, asset.AssetStatusActive, nil, nil)
+	ast, _ := asset.CreateAsset(core.NewAssetID(), "Truck", "Desc", proj.ID(), money.New(1000, "USD"), now, ownerRef, asset.AssetStatusActive, nil, nil)
 	invAssetAdapter := &investmentAssetReaderAdapter{assets: &mockAdapterAssetRepo{ast: ast}}
 	invAssetDesc, err := invAssetAdapter.FindAsset(ctx, proj.ID(), ast.ID())
 	if err != nil || invAssetDesc.ID != ast.ID() || invAssetDesc.Name != "Truck" {
@@ -234,10 +234,10 @@ func (m *mockInvestmentService) Find(ctx context.Context, filter investment.Coll
 	}
 	return investment.NewCollection(0), nil
 }
-func (m *mockInvestmentService) FindTags(context.Context, uuid.UUID) ([]string, error) {
+func (m *mockInvestmentService) FindTags(context.Context, core.ProjectID) ([]string, error) {
 	return nil, m.err
 }
-func (m *mockInvestmentService) AssignToAsset(context.Context, uuid.UUID, []uuid.UUID) error {
+func (m *mockInvestmentService) AssignToAsset(context.Context, core.AssetID, []core.InvestmentID) error {
 	return m.err
 }
 
@@ -317,21 +317,21 @@ func (m *mockProjectServiceForAdapter) Remove(context.Context, project.RemovePro
 func (m *mockProjectServiceForAdapter) Update(context.Context, project.UpdateProjectCommand) (*project.Project, error) {
 	return m.proj, m.err
 }
-func (m *mockProjectServiceForAdapter) AcceptShare(context.Context, uuid.UUID, uuid.UUID) (*project.Project, error) {
+func (m *mockProjectServiceForAdapter) AcceptShare(context.Context, uuid.UUID, core.PersonID) (*project.Project, error) {
 	return m.proj, m.err
 }
-func (m *mockProjectServiceForAdapter) GetTotals(context.Context, uuid.UUID) (project.ProjectTotals, error) {
+func (m *mockProjectServiceForAdapter) GetTotals(context.Context, core.ProjectID) (project.ProjectTotals, error) {
 	return project.ProjectTotals{}, m.err
 }
 
 func TestAdapters_Step7(t *testing.T) {
 	ctx := context.Background()
-	projID := uuid.New()
-	contribRef := investment.ContributorRef{PersonID: uuid.New(), DisplayName: "Contributor"}
+	projID := core.NewProjectID()
+	contribRef := investment.ContributorRef{PersonID: core.NewPersonID(), DisplayName: "Contributor"}
 
 	t.Run("investmentTransactionFinder pagination", func(t *testing.T) {
 		inv := investment.ReconstituteInvestment(
-			uuid.New(), projID, "UAH", uuid.New(), "Asset", nil,
+			core.NewInvestmentID(), projID, "UAH", core.NewAssetID(), "Asset", nil,
 			contribRef, investment.ResourceTypeMoney, money.New(100, "UAH"),
 			nil, nil, nil, "", "", "desc", time.Now(), nil,
 		)
@@ -364,15 +364,15 @@ func TestAdapters_Step7(t *testing.T) {
 	})
 
 	t.Run("investmentSourceAdapter FindInvestments batching", func(t *testing.T) {
-		id1 := uuid.New()
-		id2 := uuid.New()
+		id1 := core.NewInvestmentID()
+		id2 := core.NewInvestmentID()
 		inv1 := investment.ReconstituteInvestment(
-			id1, projID, "UAH", uuid.New(), "Asset 1", nil,
+			id1, projID, "UAH", core.NewAssetID(), "Asset 1", nil,
 			contribRef, investment.ResourceTypeMoney, money.New(200, "UAH"),
 			nil, nil, nil, "", "", "desc1", time.Now(), nil,
 		)
 		inv2 := investment.ReconstituteInvestment(
-			id2, projID, "UAH", uuid.New(), "Asset 2", nil,
+			id2, projID, "UAH", core.NewAssetID(), "Asset 2", nil,
 			contribRef, investment.ResourceTypeMoney, money.New(300, "UAH"),
 			nil, nil, nil, "", "", "desc2", time.Now(), nil,
 		)
@@ -388,7 +388,7 @@ func TestAdapters_Step7(t *testing.T) {
 		}
 
 		adapter := &investmentSourceAdapter{svc: invSvc}
-		items, err := adapter.FindInvestments(ctx, projID, []uuid.UUID{id1, id2})
+		items, err := adapter.FindInvestments(ctx, projID, []core.InvestmentID{id1, id2})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -406,14 +406,14 @@ func TestAdapters_Step7(t *testing.T) {
 		}
 
 		// AssignToAsset
-		if err := adapter.AssignToAsset(ctx, uuid.New(), []uuid.UUID{id1}); err != nil {
+		if err := adapter.AssignToAsset(ctx, core.NewAssetID(), []core.InvestmentID{id1}); err != nil {
 			t.Errorf("unexpected error in AssignToAsset: %v", err)
 		}
 
 		// CreateInitialInvestment
 		if err := adapter.CreateInitialInvestment(ctx, asset.InitialInvestment{
 			ProjectID: projID,
-			AssetID:   uuid.New(),
+			AssetID:   core.NewAssetID(),
 			Amount:    money.New(500, "UAH"),
 		}); err != nil {
 			t.Errorf("unexpected error in CreateInitialInvestment: %v", err)
@@ -422,7 +422,7 @@ func TestAdapters_Step7(t *testing.T) {
 
 	t.Run("projectTotalsCalculatorAdapter", func(t *testing.T) {
 		inv := investment.ReconstituteInvestment(
-			uuid.New(), projID, "UAH", uuid.New(), "Asset", nil,
+			core.NewInvestmentID(), projID, "UAH", core.NewAssetID(), "Asset", nil,
 			contribRef, investment.ResourceTypeMoney, money.New(50000, "UAH"),
 			nil, nil, nil, "", "", "desc", time.Now(), nil,
 		)
@@ -430,9 +430,9 @@ func TestAdapters_Step7(t *testing.T) {
 		invCol.Add(inv)
 		invSvc := &mockInvestmentService{col: invCol}
 
-		ownerRef := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "Owner"}
+		ownerRef := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "Owner"}
 		ast, _ := asset.CreateAsset(
-			uuid.New(), "Root Asset", "desc", projID, money.New(20000, "UAH"),
+			core.NewAssetID(), "Root Asset", "desc", projID, money.New(20000, "UAH"),
 			time.Now(), ownerRef, asset.AssetStatusActive, nil, nil,
 		)
 		astCol := asset.NewCollection(1)

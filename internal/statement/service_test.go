@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
@@ -14,7 +14,7 @@ type mockProjectValidator struct {
 	err error
 }
 
-func (m *mockProjectValidator) ValidateProject(_ context.Context, _ uuid.UUID) error {
+func (m *mockProjectValidator) ValidateProject(_ context.Context, _ core.ProjectID) error {
 	return m.err
 }
 
@@ -23,7 +23,7 @@ type mockFinder struct {
 	err error
 }
 
-func (m *mockFinder) FindExisting(_ context.Context, _ uuid.UUID) ([]statement.ExistingTransaction, error) {
+func (m *mockFinder) FindExisting(_ context.Context, _ core.ProjectID) ([]statement.ExistingTransaction, error) {
 	return m.txs, m.err
 }
 
@@ -38,12 +38,12 @@ func (m *mockParser) Parse(_ []byte) (*statement.ParsedStatement, error) {
 
 func TestStatementService(t *testing.T) {
 	ctx := context.Background()
-	projID := uuid.New()
+	projID := core.NewProjectID()
 	now := time.Now()
 
 	t.Run("Validation: missing project id", func(t *testing.T) {
 		svc := statement.NewService(&mockProjectValidator{}, nil)
-		_, err := svc.ParseStatement(ctx, uuid.Nil, []byte("data"))
+		_, err := svc.ParseStatement(ctx, core.NilProjectID, []byte("data"))
 		if err == nil {
 			t.Errorf("expected validation error for nil project id")
 		}

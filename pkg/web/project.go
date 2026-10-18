@@ -83,16 +83,13 @@ type ProjectEndpoints struct {
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
-	personID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
 
 	var req CreateProjectDTO
-	err := json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -109,7 +106,6 @@ func makeCreateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
 		command := request.(project.CreateProjectCommand)
 
 		project, err := svc.Create(ctx, command)
-
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +121,6 @@ func makeListProjectsEndpoint(svc project.ProjectService) endpoint.Endpoint {
 		projects, err := svc.Find(ctx, filter)
 
 		var list []ProjectDTO = make([]ProjectDTO, 0)
-
 		for _, p := range projects {
 			list = append(list, toProjectDTO(p))
 		}
@@ -144,7 +139,7 @@ func makeShowProjectTotalsEndpoint(
 	projectSvc project.ProjectService,
 ) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		projectID := request.(uuid.UUID)
+		projectID := request.(core.ProjectID)
 
 		calculatedTotals, err := projectSvc.GetTotals(ctx, projectID)
 		if err != nil {
@@ -175,7 +170,7 @@ func makeShowProjectTotalsEndpoint(
 
 type AcceptShareCommand struct {
 	ShareToken uuid.UUID
-	PersonID   uuid.UUID
+	PersonID   core.PersonID
 }
 
 func DecodeAcceptShareRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -190,9 +185,9 @@ func DecodeAcceptShareRequest(ctx context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewValidationException("invalid share token", err)
 	}
 
-	personID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
 
 	return AcceptShareCommand{
@@ -208,7 +203,7 @@ func DecodeGetProjectRequest(_ context.Context, r *http.Request) (any, error) {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -243,9 +238,9 @@ func makeAcceptShareEndpoint(svc project.ProjectService) endpoint.Endpoint {
 }
 
 func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
-	personID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-	if !ok {
-		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
 
 	vars := mux.Vars(r)
@@ -254,7 +249,7 @@ func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}

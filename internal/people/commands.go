@@ -1,6 +1,6 @@
 package people
 
-import "github.com/google/uuid"
+import "gitlab.com/massimo-ua/projecta/internal/core"
 
 type RegisterCommand struct {
     Login            string
@@ -11,12 +11,12 @@ type RegisterCommand struct {
 }
 
 type AssignRolesCommand struct {
-    PersonID uuid.UUID
+    PersonID core.PersonID
     Roles    []Role
 }
 
 type UpdateDisplayNameCommand struct {
-    PersonID    uuid.UUID
+    PersonID    core.PersonID
     DisplayName DisplayName
 }
 

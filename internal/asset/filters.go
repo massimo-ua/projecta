@@ -8,15 +8,15 @@ import (
 type CollectionFilter struct {
 	core.Pagination
 	core.Sorting
-	ProjectID uuid.UUID
+	ProjectID core.ProjectID
 	TypeID    uuid.UUID
-	OwnerID   uuid.UUID
+	OwnerID   core.PersonID
 	Name      string
 }
 
 type Filter struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	OwnerID   uuid.UUID
+	ID        core.AssetID
+	ProjectID core.ProjectID
+	OwnerID   core.PersonID
 	Name      string
 }

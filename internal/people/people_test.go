@@ -39,7 +39,7 @@ type mockPeopleRepo struct {
 	findAllErr  error
 	registerErr error
 	findCredErr error
-	credPersonID uuid.UUID
+	credPersonID core.PersonID
 	credHash    string
 	saveRolesErr error
 	savedRoles   []people.Role
@@ -47,7 +47,7 @@ type mockPeopleRepo struct {
 	updatedDisplayName string
 }
 
-func (m *mockPeopleRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Person, error) {
+func (m *mockPeopleRepo) FindByID(ctx context.Context, id core.PersonID) (*people.Person, error) {
 	if m.findIDErr != nil {
 		return nil, m.findIDErr
 	}
@@ -73,13 +73,13 @@ func (m *mockPeopleRepo) Save(ctx context.Context, p *people.Person) error {
 	m.updatedDisplayName = p.DisplayNameVO().String()
 	return nil
 }
-func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.IdentityProvider, regID string) (uuid.UUID, string, error) {
+func (m *mockPeopleRepo) FindCredentials(ctx context.Context, provider people.IdentityProvider, regID string) (core.PersonID, string, error) {
 	if m.findCredErr != nil {
-		return uuid.Nil, "", m.findCredErr
+		return core.NilPersonID, "", m.findCredErr
 	}
 	return m.credPersonID, m.credHash, nil
 }
-func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID uuid.UUID) error {
+func (m *mockPeopleRepo) DeletePerson(ctx context.Context, personID core.PersonID) error {
 	return nil
 }
 
@@ -112,7 +112,7 @@ func (m *mockInvitationRepo) FindByCodeHash(ctx context.Context, codeHash string
 	}
 	return m.inv, nil
 }
-func (m *mockInvitationRepo) FindByCreator(ctx context.Context, creatorID uuid.UUID) ([]*people.Invitation, error) {
+func (m *mockInvitationRepo) FindByCreator(ctx context.Context, creatorID core.PersonID) ([]*people.Invitation, error) {
 	return m.invList, nil
 }
 func (m *mockInvitationRepo) Delete(ctx context.Context, id uuid.UUID) error {
@@ -232,7 +232,7 @@ func TestCredentials(t *testing.T) {
 
 func TestPerson(t *testing.T) {
 	cred, _ := people.NewCredentials("LOCAL", "user@example.com", "secret")
-	pID := uuid.New()
+	pID := core.NewPersonID()
 	p, err := people.NewPerson(pID, "John", "Doe", "J.D.", []people.Credentials{cred})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -287,24 +287,24 @@ func TestPerson(t *testing.T) {
 	}
 
 	// NewPerson validation errors
-	_, err = people.NewPerson(uuid.Nil, "J", "Doe", "", []people.Credentials{cred}) // short first name
+	_, err = people.NewPerson(core.NilPersonID, "J", "Doe", "", []people.Credentials{cred}) // short first name
 	if err == nil {
 		t.Errorf("expected error for short first name")
 	}
 
-	_, err = people.NewPerson(uuid.Nil, "John", "D", "", []people.Credentials{cred}) // short last name
+	_, err = people.NewPerson(core.NilPersonID, "John", "D", "", []people.Credentials{cred}) // short last name
 	if err == nil {
 		t.Errorf("expected error for short last name")
 	}
 
-	_, err = people.NewPerson(uuid.Nil, "John", "Doe", "", []people.Credentials{}) // empty identities slice
+	_, err = people.NewPerson(core.NilPersonID, "John", "Doe", "", []people.Credentials{}) // empty identities slice
 	if err == nil {
 		t.Errorf("expected error for empty identities")
 	}
 }
 
 func TestUserService(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	cred, _ := people.NewCredentials("LOCAL", "user@example.com", "secret")
 	p, _ := people.NewPerson(personID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -386,7 +386,7 @@ func TestUserService(t *testing.T) {
 }
 
 func TestAuthService(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	cred, _ := people.NewCredentials("LOCAL", "user@example.com", "secret")
 	p, _ := people.NewPerson(personID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -557,7 +557,7 @@ func TestPersonRoles(t *testing.T) {
 
 	// Person entity encapsulation
 	cred, _ := people.NewCredentials(people.LOCAL, "alice@example.com", "pass")
-	p, err := people.NewPerson(uuid.New(), "Alice", "Smith", "Alice", []people.Credentials{cred}, people.RoleUser)
+	p, err := people.NewPerson(core.NewPersonID(), "Alice", "Smith", "Alice", []people.Credentials{cred}, people.RoleUser)
 	if err != nil {
 		t.Fatalf("unexpected NewPerson error: %v", err)
 	}
@@ -644,7 +644,7 @@ func TestRegisterDefaultUserRole(t *testing.T) {
 }
 
 func TestUserService_FindAll_And_AssignRoles(t *testing.T) {
-	pID := uuid.New()
+	pID := core.NewPersonID()
 	cred, _ := people.NewCredentials(people.LOCAL, "bob@example.com", "pass")
 	p, _ := people.NewPerson(pID, "Bob", "Smith", "Bob", []people.Credentials{cred}, people.RoleUser)
 
@@ -686,7 +686,7 @@ func TestUserService_FindAll_And_AssignRoles(t *testing.T) {
 	// AssignRoles person not found
 	svcNotFound := people.NewCustomerService(db, &mockPeopleRepo{findIDErr: errors.New("not found")}, &mockHasher{})
 	err = svcNotFound.AssignRoles(context.Background(), people.AssignRolesCommand{
-		PersonID: uuid.New(),
+		PersonID: core.NewPersonID(),
 		Roles:    []people.Role{people.RoleUser},
 	})
 	if err == nil {
@@ -695,7 +695,7 @@ func TestUserService_FindAll_And_AssignRoles(t *testing.T) {
 }
 
 func TestAuthService_TokenRolesPropagation(t *testing.T) {
-	pID := uuid.New()
+	pID := core.NewPersonID()
 	cred, _ := people.NewCredentials(people.LOCAL, "carol@example.com", "pass")
 	p, _ := people.NewPerson(pID, "Carol", "Danvers", "Captain", []people.Credentials{cred}, people.RoleAdministrator, people.RoleUser)
 
@@ -735,7 +735,7 @@ func TestAuthService_TokenRolesPropagation(t *testing.T) {
 }
 
 func TestCustomerService_UpdateDisplayName(t *testing.T) {
-	pID := uuid.New()
+	pID := core.NewPersonID()
 	cred, _ := people.NewCredentials(people.LOCAL, "john@example.com", "pass")
 	p, _ := people.NewPerson(pID, "John", "Doe", "OldName", []people.Credentials{cred})
 
@@ -789,7 +789,7 @@ func TestCustomerService_UpdateDisplayName(t *testing.T) {
 }
 
 func TestReconstitutePersonAndImmutability(t *testing.T) {
-	id := uuid.New()
+	id := core.NewPersonID()
 	dn, _ := people.NewDisplayName("Test Display")
 	cred, _ := people.NewCredentials(people.LOCAL, "test@example.com", "test@example.com")
 	roles := []people.Role{people.RoleUser, people.RoleAdministrator}

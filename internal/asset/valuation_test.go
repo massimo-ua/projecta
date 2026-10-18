@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type mockConverter struct {
@@ -58,8 +58,8 @@ func TestCalculateProjectTotals(t *testing.T) {
 	inv1 := money.New(1000, "UAH")
 	inv2 := money.New(100, "EUR") // converted: 4000 UAH
 
-	owner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "User"}
-	rootA, _ := asset.CreateAssetGroup(uuid.New(), "RootA", "", uuid.New(), owner, nil)
+	owner := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "User"}
+	rootA, _ := asset.CreateAssetGroup(core.NewAssetID(), "RootA", "", core.NewProjectID(), owner, nil)
 	rootA.AssignValuation(money.New(5000, "UAH"), money.New(5000, "UAH"), nil, nil)
 
 	totals, err := asset.CalculateProjectTotals(

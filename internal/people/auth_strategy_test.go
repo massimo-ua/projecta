@@ -12,7 +12,7 @@ import (
 
 type customMockStrategy struct {
 	provider people.IdentityProvider
-	personID uuid.UUID
+	personID core.PersonID
 	claims   *core.AuthTokenClaims
 	err      error
 }
@@ -21,9 +21,9 @@ func (s *customMockStrategy) Provider() people.IdentityProvider {
 	return s.provider
 }
 
-func (s *customMockStrategy) Authenticate(ctx context.Context, creds people.Credentials) (uuid.UUID, error) {
+func (s *customMockStrategy) Authenticate(ctx context.Context, creds people.Credentials) (core.PersonID, error) {
 	if s.err != nil {
-		return uuid.Nil, s.err
+		return core.NilPersonID, s.err
 	}
 	return s.personID, nil
 }
@@ -36,7 +36,7 @@ func (s *customMockStrategy) ResolveInvitationClaims(ctx context.Context, token 
 }
 
 func TestLocalAuthStrategy(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	cred, err := people.NewCredentials("LOCAL", "user@example.com", "mysecret")
 	if err != nil {
 		t.Fatalf("failed to create credentials: %v", err)
@@ -84,7 +84,7 @@ func TestLocalAuthStrategy(t *testing.T) {
 }
 
 func TestGoogleAuthStrategy(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	cred, err := people.NewCredentials("GOOGLE", "google_id", "google_token")
 	if err != nil {
 		t.Fatalf("failed to create credentials: %v", err)
@@ -143,7 +143,7 @@ func TestGoogleAuthStrategy(t *testing.T) {
 }
 
 func TestAuthService_CustomStrategyInjection(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	cred, err := people.NewCredentials("FACEBOOK", "fb_id", "fb_token")
 	if err != nil {
 		t.Fatalf("failed to create credentials: %v", err)

@@ -136,7 +136,7 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 	return s.authorizePerson(ctx, person.ID())
 }
 
-func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID uuid.UUID) (*core.AuthResponse, error) {
+func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID core.PersonID) (*core.AuthResponse, error) {
 	customer, err := s.peopleRepository.FindByID(ctx, personID)
 
 	if err != nil {
@@ -173,7 +173,7 @@ func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing
 		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
 	}
 
-	personID, err := uuid.Parse(claims.Sub)
+	personID, err := core.ParsePersonID(claims.Sub)
 
 	if err != nil {
 		return nil, errors.Join(core.RefreshTokenIsInvalid, err)

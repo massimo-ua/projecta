@@ -1,7 +1,7 @@
 package people
 
-import "github.com/google/uuid"
+import "gitlab.com/massimo-ua/projecta/internal/core"
 
 type PersonFilter struct {
-    PersonID uuid.UUID
+    PersonID core.PersonID
 }
