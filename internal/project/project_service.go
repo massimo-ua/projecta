@@ -7,29 +7,60 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 type ProjectServiceImpl struct {
-	repository    ProjectRepository
-	peopleService PeopleService
+	repository       ProjectRepository
+	peopleService    PeopleService
+	totalsCalculator TotalsCalculator
 }
 
 func (s *ProjectServiceImpl) FindOne(ctx context.Context, filter ProjectFilter) (*Project, error) {
+	if filter.RequesterID == uuid.Nil {
+		personID, err := core.AuthGuard(ctx)
+		if err != nil {
+			return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+		}
+		filter.RequesterID = personID
+	}
 	return s.repository.FindOne(ctx, filter)
 }
 
 func (s *ProjectServiceImpl) Find(ctx context.Context, filter ProjectCollectionFilter) ([]*Project, error) {
+	if filter.RequesterID == uuid.Nil {
+		personID, err := core.AuthGuard(ctx)
+		if err != nil {
+			return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+		}
+		filter.RequesterID = personID
+	}
 	return s.repository.Find(ctx, filter)
 }
 
 func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCommand) error {
-	//TODO implement me
-	panic("implement me")
+	p, err := s.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: command.PersonID})
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return exceptions.NewNotFoundException("project not found", err)
+		}
+		return exceptions.NewInternalException("failed to find project", err)
+	}
+
+	if command.PersonID == uuid.Nil || !p.IsOwnedByPerson(command.PersonID) {
+		return exceptions.NewForbiddenException("only project owner can remove project", nil)
+	}
+
+	if err := s.repository.Remove(ctx, p); err != nil {
+		return exceptions.NewInternalException("failed to remove project", err)
+	}
+
+	return nil
 }
 
 func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCommand) (*Project, error) {
-	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID})
+	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: command.PersonID})
 	if err != nil {
 		if errors.Is(err, exceptions.NotFoundError) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
@@ -53,8 +84,33 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 	return p, nil
 }
 
-func NewProjectService(repository ProjectRepository, peopleService PeopleService) *ProjectServiceImpl {
-	return &ProjectServiceImpl{repository: repository, peopleService: peopleService}
+func (s *ProjectServiceImpl) GetTotals(ctx context.Context, projectID uuid.UUID) (ProjectTotals, error) {
+	proj, err := s.FindOne(ctx, ProjectFilter{ProjectID: projectID})
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return ProjectTotals{}, exceptions.NewNotFoundException("project not found", err)
+		}
+		return ProjectTotals{}, err
+	}
+
+	homeCurrency := proj.MainCurrency()
+	if homeCurrency == "" {
+		homeCurrency = "UAH"
+	}
+
+	if s.totalsCalculator == nil {
+		return ProjectTotals{Currency: homeCurrency}, nil
+	}
+
+	return s.totalsCalculator.CalculateTotals(ctx, projectID, homeCurrency)
+}
+
+func NewProjectService(repository ProjectRepository, peopleService PeopleService, totalsCalculator ...TotalsCalculator) *ProjectServiceImpl {
+	var tc TotalsCalculator
+	if len(totalsCalculator) > 0 {
+		tc = totalsCalculator[0]
+	}
+	return &ProjectServiceImpl{repository: repository, peopleService: peopleService, totalsCalculator: tc}
 }
 
 func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCommand) (*Project, error) {
@@ -86,9 +142,10 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 			owner,
 			time.Time{},
 			time.Time{},
+			command.MainCurrency,
 		)
 		if err != nil {
-			return nil, exceptions.NewInternalException("failed to create project", err)
+			return nil, err
 		}
 
 		err = s.repository.Create(ctx, p)

@@ -61,31 +61,39 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	userService := people.NewUserService(db, peopleRepository, hasher)
 	projectRepository := dal.NewPgProjectRepository(db)
 	assetRepository := dal.NewPgAssetRepository(db)
-	peopleService := project.NewPeopleService(peopleRepository)
-	projectService := project.NewProjectService(projectRepository, peopleService)
+	peopleService := &projectPeopleAdapter{repo: peopleRepository}
 	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
 		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
 		CacheTTL:            30 * time.Minute,
 	})
 
+	moneyConverter := &currencyConverterAdapter{provider: rateProvider}
+
 	investmentRepository := dal.NewPgInvestmentRepository(db)
 	investmentService := investment.NewService(
 		db,
 		investmentRepository,
-		assetRepository,
-		projectRepository,
-		peopleService,
-		rateProvider,
+		&investmentAssetReaderAdapter{assets: assetRepository},
+		&investmentProjectReaderAdapter{projects: projectRepository},
+		&investmentContributorReaderAdapter{people: peopleService},
+		moneyConverter,
 	)
 
 	assetService := asset.NewService(
 		db,
 		assetRepository,
-		peopleService,
-		projectRepository,
+		&assetOwnerReaderAdapter{people: peopleService},
+		&assetProjectReaderAdapter{projects: projectRepository},
 		&investmentSourceAdapter{svc: investmentService},
-		rateProvider,
+		moneyConverter,
 	)
+
+	totalsCalculator := &projectTotalsCalculatorAdapter{
+		assets:       assetService,
+		investments:  investmentService,
+		rateProvider: rateProvider,
+	}
+	projectService := project.NewProjectService(projectRepository, peopleService, totalsCalculator)
 
 	statementService := statement.NewService(
 		&projectValidator{svc: projectService},

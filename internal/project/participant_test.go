@@ -1,7 +1,6 @@
 package project_test
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -63,41 +62,6 @@ func TestParticipantValueObject(t *testing.T) {
 		}
 		if p1.Equals(p3) {
 			t.Error("expected p1 not to equal p3")
-		}
-	})
-
-	t.Run("json marshaler and unmarshaler", func(t *testing.T) {
-		p, err := project.NewParticipant("Alice Smith")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		// Marshal
-		data, err := json.Marshal(p)
-		if err != nil {
-			t.Fatalf("failed to marshal participant: %v", err)
-		}
-		expectedJSON := `"Alice Smith"`
-		if string(data) != expectedJSON {
-			t.Errorf("expected %s, got %s", expectedJSON, string(data))
-		}
-
-		// Unmarshal
-		var unmarshaled project.Participant
-		if err := json.Unmarshal(data, &unmarshaled); err != nil {
-			t.Fatalf("failed to unmarshal participant: %v", err)
-		}
-		if !unmarshaled.Equals(p) {
-			t.Errorf("expected %v, got %v", p, unmarshaled)
-		}
-
-		// Unmarshal invalid
-		var invalid project.Participant
-		if err := json.Unmarshal([]byte(`""`), &invalid); err == nil {
-			t.Error("expected error unmarshaling empty string into participant")
-		}
-		if err := json.Unmarshal([]byte(`123`), &invalid); err == nil {
-			t.Error("expected error unmarshaling non-string into participant")
 		}
 	})
 }

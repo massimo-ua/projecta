@@ -10,11 +10,10 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type CurrencyConverter interface {
-	Convert(source, target currency.Currency) (currency.Currency, error)
+	ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error)
 }
 
 type ResourceType string
@@ -209,9 +208,11 @@ func (i *Investment) Allocate(allocations []InvestmentAssetLink) error {
 		return exceptions.NewValidationException(fmt.Sprintf("total share percentages must equal 100%%, got %.2f%%", totalShare), nil)
 	}
 
-	i.primaryAssetID = allocations[0].AssetID
-	i.primaryAssetName = allocations[0].AssetName
-	i.assetAllocations = allocations
+	allocCopy := make([]InvestmentAssetLink, len(allocations))
+	copy(allocCopy, allocations)
+	i.primaryAssetID = allocCopy[0].AssetID
+	i.primaryAssetName = allocCopy[0].AssetName
+	i.assetAllocations = allocCopy
 	return nil
 }
 
@@ -238,9 +239,45 @@ func (i *Investment) UpdateValuation(
 	goodsUnit string,
 	goodsItemName string,
 ) error {
+	targetType := i.resourceType
 	if resType != "" {
-		i.resourceType = resType
+		if _, err := ToResourceType(string(resType)); err != nil {
+			return err
+		}
+		targetType = resType
 	}
+
+	if timeHours != nil && *timeHours <= 0 {
+		return exceptions.NewValidationException("time hours must be greater than 0", nil)
+	}
+	if timeHourlyRate != nil && timeHourlyRate.Amount() <= 0 {
+		return exceptions.NewValidationException("time hourly rate must be greater than 0", nil)
+	}
+	if goodsQuantity != nil && *goodsQuantity <= 0 {
+		return exceptions.NewValidationException("goods quantity must be greater than 0", nil)
+	}
+
+	finalAmount := amount
+	effHours := timeHours
+	if effHours == nil {
+		effHours = i.timeHours
+	}
+	effRate := timeHourlyRate
+	if effRate == nil {
+		effRate = i.timeHourlyRate
+	}
+	if (finalAmount == nil || finalAmount.Amount() <= 0) && targetType == ResourceTypeTime && effHours != nil && effRate != nil {
+		if *effHours > 0 && effRate.Amount() > 0 {
+			calc := int64(*effHours * float64(effRate.Amount()))
+			finalAmount = money.New(calc, effRate.Currency().Code)
+		}
+	}
+
+	if amount != nil && (finalAmount == nil || finalAmount.Amount() <= 0) {
+		return exceptions.NewValidationException("investment amount must be greater than 0", nil)
+	}
+
+	i.resourceType = targetType
 	if timeHours != nil {
 		i.timeHours = timeHours
 	}
@@ -256,15 +293,6 @@ func (i *Investment) UpdateValuation(
 	if goodsItemName != "" {
 		i.goodsItemName = goodsItemName
 	}
-
-	finalAmount := amount
-	if (finalAmount == nil || finalAmount.Amount() <= 0) && i.resourceType == ResourceTypeTime && i.timeHours != nil && i.timeHourlyRate != nil {
-		if *i.timeHours > 0 && i.timeHourlyRate.Amount() > 0 {
-			calc := int64(*i.timeHours * float64(i.timeHourlyRate.Amount()))
-			finalAmount = money.New(calc, i.timeHourlyRate.Currency().Code)
-		}
-	}
-
 	if finalAmount != nil && finalAmount.Amount() > 0 {
 		i.amount = finalAmount
 	}
@@ -296,8 +324,8 @@ func ReconstituteInvestment(
 		date = time.Now()
 	}
 
-	finalAllocations := allocations
-	if len(finalAllocations) == 0 && primaryAssetID != uuid.Nil {
+	var finalAllocations []InvestmentAssetLink
+	if len(allocations) == 0 && primaryAssetID != uuid.Nil {
 		finalAllocations = []InvestmentAssetLink{
 			{
 				AssetID:         primaryAssetID,
@@ -305,8 +333,11 @@ func ReconstituteInvestment(
 				SharePercentage: 100.0,
 			},
 		}
-	} else if finalAllocations == nil {
+	} else if allocations == nil {
 		finalAllocations = make([]InvestmentAssetLink, 0)
+	} else {
+		finalAllocations = make([]InvestmentAssetLink, len(allocations))
+		copy(finalAllocations, allocations)
 	}
 
 	return &Investment{
@@ -339,12 +370,8 @@ func (i *Investment) EvaluateHomeAmount(converter CurrencyConverter) {
 	}
 	i.homeAmount = i.amount.Amount()
 	if converter != nil && i.amount.Currency() != nil && i.amount.Currency().Code != homeCurr {
-		converted, err := converter.Convert(
-			currency.NewCurrency(i.amount.Amount(), i.amount.Currency().Code),
-			currency.NewCurrency(0, homeCurr),
-		)
-		if err == nil {
-			i.homeAmount = converted.Amount
+		if converted, err := converter.ConvertMoney(i.amount, homeCurr); err == nil && converted != nil {
+			i.homeAmount = converted.Amount()
 		}
 	}
 }
@@ -367,20 +394,34 @@ func (i *Investment) HomeAmount() int64 {
 	}
 	return 0
 }
-func (i *Investment) PrimaryAssetID() uuid.UUID              { return i.primaryAssetID }
-func (i *Investment) PrimaryAssetName() string               { return i.primaryAssetName }
-func (i *Investment) AssetAllocations() []InvestmentAssetLink { return i.assetAllocations }
-func (i *Investment) Contributor() ContributorRef             { return i.contributor }
-func (i *Investment) ResourceType() ResourceType             { return i.resourceType }
-func (i *Investment) Amount() *money.Money                   { return i.amount }
-func (i *Investment) TimeHours() *float64                        { return i.timeHours }
-func (i *Investment) TimeHourlyRate() *money.Money               { return i.timeHourlyRate }
-func (i *Investment) GoodsQuantity() *float64                    { return i.goodsQuantity }
-func (i *Investment) GoodsUnit() string                          { return i.goodsUnit }
-func (i *Investment) GoodsItemName() string                      { return i.goodsItemName }
-func (i *Investment) Description() string                        { return i.description }
-func (i *Investment) Date() time.Time                            { return i.date }
-func (i *Investment) Tags() []string                             { return i.tags }
+func (i *Investment) PrimaryAssetID() uuid.UUID { return i.primaryAssetID }
+func (i *Investment) PrimaryAssetName() string  { return i.primaryAssetName }
+func (i *Investment) AssetAllocations() []InvestmentAssetLink {
+	if i.assetAllocations == nil {
+		return make([]InvestmentAssetLink, 0)
+	}
+	cp := make([]InvestmentAssetLink, len(i.assetAllocations))
+	copy(cp, i.assetAllocations)
+	return cp
+}
+func (i *Investment) Contributor() ContributorRef { return i.contributor }
+func (i *Investment) ResourceType() ResourceType { return i.resourceType }
+func (i *Investment) Amount() *money.Money       { return i.amount }
+func (i *Investment) TimeHours() *float64        { return i.timeHours }
+func (i *Investment) TimeHourlyRate() *money.Money { return i.timeHourlyRate }
+func (i *Investment) GoodsQuantity() *float64    { return i.goodsQuantity }
+func (i *Investment) GoodsUnit() string          { return i.goodsUnit }
+func (i *Investment) GoodsItemName() string      { return i.goodsItemName }
+func (i *Investment) Description() string        { return i.description }
+func (i *Investment) Date() time.Time            { return i.date }
+func (i *Investment) Tags() []string {
+	if i.tags == nil {
+		return make([]string, 0)
+	}
+	cp := make([]string, len(i.tags))
+	copy(cp, i.tags)
+	return cp
+}
 
 func cleanTagsSlice(tags []string) []string {
 	if tags == nil {

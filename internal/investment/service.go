@@ -7,10 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 const (
@@ -19,22 +17,12 @@ const (
 	failedToUpdateInvestment = "failed to update investment"
 )
 
-// AssetReader is a consumer-owned interface providing read access to assets.
-type AssetReader interface {
-	FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error)
-}
-
-// ProjectReader is a consumer-owned interface providing read access to projects.
-type ProjectReader interface {
-	FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error)
-}
-
 type ServiceImpl struct {
 	db           core.DbConnection
 	investments  Repository
 	assets       AssetReader
 	projects     ProjectReader
-	people       project.PeopleService
+	people       ContributorReader
 	rateProvider CurrencyConverter
 }
 
@@ -43,7 +31,7 @@ func NewService(
 	investments Repository,
 	assets AssetReader,
 	projects ProjectReader,
-	people project.PeopleService,
+	people ContributorReader,
 	rateProvider ...CurrencyConverter,
 ) *ServiceImpl {
 	var rp CurrencyConverter
@@ -58,6 +46,20 @@ func NewService(
 		people:       people,
 		rateProvider: rp,
 	}
+}
+
+func (s *ServiceImpl) verifyProjectAccess(ctx context.Context, projectID uuid.UUID) error {
+	if projectID == uuid.Nil {
+		return exceptions.NewValidationException("project id is required", nil)
+	}
+	_, err := s.projects.FindProject(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return exceptions.NewNotFoundException("project not found", err)
+		}
+		return exceptions.NewInternalException("failed to verify project access", err)
+	}
+	return nil
 }
 
 func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentCommand) (*Investment, error) {
@@ -78,13 +80,16 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		return nil, exceptions.NewValidationException("description is required", nil)
 	}
 
-	owner, err := s.people.FindOwner(ctx, personID)
+	contributor, err := s.people.FindContributor(ctx, personID)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("project not found", err)
+		}
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
@@ -100,11 +105,11 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 
 	inv, err := NewInvestment(
 		uuid.New(),
-		project.ID(),
-		project.MainCurrency(),
+		proj.ID,
+		proj.MainCurrency,
 		primaryID,
 		primaryName,
-		ContributorRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
+		contributor,
 		resType,
 		command.Amount,
 		command.TimeHours,
@@ -123,8 +128,14 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 
 	inv.EvaluateHomeAmount(s.rateProvider)
 
-	if err := s.investments.Save(ctx, inv); err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		if err := s.investments.Save(txCtx, inv); err != nil {
+			return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
+		}
+		return nil, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return inv, nil
@@ -144,13 +155,16 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 		return nil, exceptions.NewValidationException("at least one investment item is required", nil)
 	}
 
-	owner, err := s.people.FindOwner(ctx, personID)
+	contributor, err := s.people.FindContributor(ctx, personID)
 	if err != nil {
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
-	project, err := s.projects.FindOne(ctx, project.ProjectFilter{ProjectID: command.ProjectID})
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("project not found", err)
+		}
 		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
 	}
 
@@ -165,7 +179,7 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 				return nil, exceptions.NewValidationException(fmt.Sprintf("item %d requires an asset", i), nil)
 			}
 
-			ast, err := s.assets.FindOne(txCtx, asset.Filter{ID: targetAssetID, ProjectID: command.ProjectID})
+			ast, err := s.assets.FindAsset(txCtx, command.ProjectID, targetAssetID)
 			if err != nil {
 				return nil, exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", targetAssetID), err)
 			}
@@ -177,11 +191,11 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 
 			inv, err := NewInvestment(
 				uuid.New(),
-				project.ID(),
-				project.MainCurrency(),
-				ast.ID(),
-				ast.Name(),
-				ContributorRef{PersonID: owner.PersonID, DisplayName: owner.DisplayName},
+				proj.ID,
+				proj.MainCurrency,
+				ast.ID,
+				ast.Name,
+				contributor,
 				resType,
 				item.Amount,
 				item.TimeHours,
@@ -219,6 +233,12 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		return exceptions.NewUnauthorizedException(failedToUpdateInvestment, err)
 	}
 
+	if command.ProjectID != uuid.Nil {
+		if err := s.verifyProjectAccess(ctx, command.ProjectID); err != nil {
+			return err
+		}
+	}
+
 	inv, err := s.investments.FindOne(ctx, Filter{
 		ID:        command.ID,
 		ProjectID: command.ProjectID,
@@ -245,7 +265,13 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		return err
 	}
 
-	return s.investments.Save(ctx, inv)
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		if err := s.investments.Save(txCtx, inv); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	return err
 }
 
 func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error {
@@ -253,37 +279,45 @@ func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID uuid.UUID, inve
 		return nil
 	}
 
-	ast, err := s.assets.FindOne(ctx, asset.Filter{ID: assetID})
+	ast, err := s.assets.FindAsset(ctx, uuid.Nil, assetID)
 	if err != nil {
 		return err
 	}
 
-	for _, invID := range investmentIDs {
-		inv, err := s.investments.FindOne(ctx, Filter{ID: invID})
-		if err != nil {
-			return err
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		for _, invID := range investmentIDs {
+			inv, err := s.investments.FindOne(txCtx, Filter{ID: invID})
+			if err != nil {
+				return nil, err
+			}
+			if err := inv.Allocate([]InvestmentAssetLink{
+				{
+					AssetID:         ast.ID,
+					AssetName:       ast.Name,
+					SharePercentage: 100.0,
+				},
+			}); err != nil {
+				return nil, err
+			}
+			if err := s.investments.Save(txCtx, inv); err != nil {
+				return nil, err
+			}
 		}
-		if err := inv.Allocate([]InvestmentAssetLink{
-			{
-				AssetID:         ast.ID(),
-				AssetName:       ast.Name(),
-				SharePercentage: 100.0,
-			},
-		}); err != nil {
-			return err
-		}
-		if err := s.investments.Save(ctx, inv); err != nil {
-			return err
-		}
-	}
-
-	return nil
+		return nil, nil
+	})
+	return err
 }
 
 func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentCommand) error {
 	_, err := core.AuthGuard(ctx)
 	if err != nil {
 		return exceptions.NewUnauthorizedException(failedToFindInvestment, err)
+	}
+
+	if command.ProjectID != uuid.Nil {
+		if err := s.verifyProjectAccess(ctx, command.ProjectID); err != nil {
+			return err
+		}
 	}
 
 	inv, err := s.investments.FindOne(ctx, Filter{
@@ -297,13 +331,25 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentComman
 		return exceptions.NewInternalException(failedToFindInvestment, err)
 	}
 
-	return s.investments.Remove(ctx, inv)
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		if err := s.investments.Remove(txCtx, inv); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	return err
 }
 
 func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Investment, error) {
 	_, err := core.AuthGuard(ctx)
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToFindInvestment, err)
+	}
+
+	if filter.ProjectID != uuid.Nil {
+		if err := s.verifyProjectAccess(ctx, filter.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 
 	inv, err := s.investments.FindOne(ctx, filter)
@@ -320,6 +366,12 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 	_, err := core.AuthGuard(ctx)
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException(failedToFindInvestment, err)
+	}
+
+	if filter.ProjectID != uuid.Nil {
+		if err := s.verifyProjectAccess(ctx, filter.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 
 	col, err := s.investments.Find(ctx, filter)
@@ -342,6 +394,10 @@ func (s *ServiceImpl) FindTags(ctx context.Context, projectID uuid.UUID) ([]stri
 		return nil, exceptions.NewUnauthorizedException("failed to find tags", err)
 	}
 
+	if err := s.verifyProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
+
 	return s.investments.FindTags(ctx, projectID)
 }
 
@@ -358,16 +414,16 @@ func (s *ServiceImpl) resolveAllocations(
 			if aInput.AssetID == uuid.Nil {
 				return nil, uuid.Nil, "", exceptions.NewValidationException("asset id is required for each allocation", nil)
 			}
-			ast, err := s.assets.FindOne(ctx, asset.Filter{ID: aInput.AssetID, ProjectID: projectID})
+			ast, err := s.assets.FindAsset(ctx, projectID, aInput.AssetID)
 			if err != nil {
 				return nil, uuid.Nil, "", exceptions.NewValidationException(fmt.Sprintf("asset %s not found in project", aInput.AssetID), err)
 			}
 			if primaryName == "" {
-				primaryName = ast.Name()
+				primaryName = ast.Name
 			}
 			allocs = append(allocs, InvestmentAssetLink{
-				AssetID:         ast.ID(),
-				AssetName:       ast.Name(),
+				AssetID:         ast.ID,
+				AssetName:       ast.Name,
 				SharePercentage: aInput.SharePercentage,
 			})
 		}
@@ -382,16 +438,16 @@ func (s *ServiceImpl) resolveAllocations(
 		return nil, uuid.Nil, "", exceptions.NewValidationException("asset id or asset allocations are required", nil)
 	}
 
-	ast, err := s.assets.FindOne(ctx, asset.Filter{ID: targetID, ProjectID: projectID})
+	ast, err := s.assets.FindAsset(ctx, projectID, targetID)
 	if err != nil {
 		return nil, uuid.Nil, "", exceptions.NewValidationException("asset not found in project", err)
 	}
 	allocs := []InvestmentAssetLink{
 		{
-			AssetID:         ast.ID(),
-			AssetName:       ast.Name(),
+			AssetID:         ast.ID,
+			AssetName:       ast.Name,
 			SharePercentage: 100.0,
 		},
 	}
-	return allocs, ast.ID(), ast.Name(), nil
+	return allocs, ast.ID, ast.Name, nil
 }

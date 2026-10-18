@@ -201,7 +201,13 @@ func (p *Project) ID() uuid.UUID                        { return p.id }
 func (p *Project) ProjectID() uuid.UUID                 { return p.id }
 func (p *Project) Name() string                         { return p.name }
 func (p *Project) Description() string                  { return p.description }
-func (p *Project) Owner() *Owner                        { return p.owner }
+func (p *Project) Owner() *Owner {
+	if p.owner == nil {
+		return nil
+	}
+	cp := *p.owner
+	return &cp
+}
 func (p *Project) OwnerID() uuid.UUID {
 	if p.owner != nil {
 		return p.owner.PersonID

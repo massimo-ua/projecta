@@ -2,22 +2,22 @@ package asset_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type mockConverter struct {
 	rate float64
 }
 
-func (m *mockConverter) Convert(source, target currency.Currency) (currency.Currency, error) {
-	// Simple mock: if source != target, multiply by m.rate
-	amt := int64(float64(source.Amount) * m.rate)
-	return currency.NewCurrency(amt, target.Code), nil
+func (m *mockConverter) ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error) {
+	if amount == nil {
+		return money.New(0, targetCurrency), nil
+	}
+	amt := int64(float64(amount.Amount()) * m.rate)
+	return money.New(amt, targetCurrency), nil
 }
 
 func TestCalculateBudgetProgress_SameCurrency(t *testing.T) {
@@ -59,7 +59,7 @@ func TestCalculateProjectTotals(t *testing.T) {
 	inv2 := money.New(100, "EUR") // converted: 4000 UAH
 
 	owner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "User"}
-	rootA := asset.NewAsset(uuid.New(), "RootA", "", uuid.New(), money.New(0, "UAH"), time.Now(), owner)
+	rootA, _ := asset.CreateAssetGroup(uuid.New(), "RootA", "", uuid.New(), owner, nil)
 	rootA.AssignValuation(money.New(5000, "UAH"), money.New(5000, "UAH"), nil, nil)
 
 	totals, err := asset.CalculateProjectTotals(

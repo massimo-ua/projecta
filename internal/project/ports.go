@@ -10,6 +10,17 @@ type PeopleService interface {
 	FindOwner(ctx context.Context, personID uuid.UUID) (*Owner, error)
 }
 
+type ProjectTotals struct {
+	TotalInvested int64
+	Balance       int64
+	HasActivity   bool
+	Currency      string
+}
+
+type TotalsCalculator interface {
+	CalculateTotals(ctx context.Context, projectID uuid.UUID, homeCurrency string) (ProjectTotals, error)
+}
+
 type ProjectService interface {
 	Find(ctx context.Context, filter ProjectCollectionFilter) ([]*Project, error)
 	FindOne(ctx context.Context, filter ProjectFilter) (*Project, error)
@@ -17,6 +28,7 @@ type ProjectService interface {
 	Remove(ctx context.Context, command RemoveProjectCommand) error
 	Update(ctx context.Context, command UpdateProjectCommand) (*Project, error)
 	AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*Project, error)
+	GetTotals(ctx context.Context, projectID uuid.UUID) (ProjectTotals, error)
 }
 
 type ProjectRepository interface {

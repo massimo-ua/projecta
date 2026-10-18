@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
@@ -11,6 +12,45 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
+
+type StatementParseItemDTO struct {
+	DocNum      string    `json:"doc_num"`
+	Date        time.Time `json:"date"`
+	Amount      int64     `json:"amount"` // in minor units
+	Currency    string    `json:"currency"`
+	Description string    `json:"description"`
+	IsDuplicate bool      `json:"is_duplicate"`
+}
+
+type StatementParseResultDTO struct {
+	Account      string                  `json:"account"`
+	Currency     string                  `json:"currency"`
+	Period       string                  `json:"period"`
+	Transactions []StatementParseItemDTO `json:"transactions"`
+}
+
+func toStatementParseResultDTO(res *statement.StatementParseResult) StatementParseResultDTO {
+	if res == nil {
+		return StatementParseResultDTO{}
+	}
+	items := make([]StatementParseItemDTO, 0, len(res.Transactions))
+	for _, item := range res.Transactions {
+		items = append(items, StatementParseItemDTO{
+			DocNum:      item.DocNum,
+			Date:        item.Date,
+			Amount:      item.Amount,
+			Currency:    item.Currency,
+			Description: item.Description,
+			IsDuplicate: item.IsDuplicate,
+		})
+	}
+	return StatementParseResultDTO{
+		Account:      res.Account,
+		Currency:     res.Currency,
+		Period:       res.Period,
+		Transactions: items,
+	}
+}
 
 type StatementEndpoints struct {
 	ParseStatement endpoint.Endpoint
@@ -64,6 +104,10 @@ func decodeParseStatementRequest(_ context.Context, r *http.Request) (any, error
 func makeParseStatementEndpoint(svc statement.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req := request.(ParseStatementRequest)
-		return svc.ParseStatement(ctx, req.ProjectID, req.FileData)
+		res, err := svc.ParseStatement(ctx, req.ProjectID, req.FileData)
+		if err != nil {
+			return nil, err
+		}
+		return toStatementParseResultDTO(res), nil
 	}
 }

@@ -115,7 +115,7 @@ func TestMakeParseStatementEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		stmtRes, ok := res.(*statement.StatementParseResult)
+		stmtRes, ok := res.(StatementParseResultDTO)
 		if !ok || stmtRes.Account != "ACC123" {
 			t.Errorf("unexpected result: %v", res)
 		}

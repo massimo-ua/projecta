@@ -292,4 +292,57 @@ func TestInvestment_Reconstitute(t *testing.T) {
 	if len(inv.AssetAllocations()) != 1 {
 		t.Errorf("expected 1 default allocation reconstituted from primary asset")
 	}
+
+	t.Run("defensive copying on getters and mutators", func(t *testing.T) {
+		// AssetAllocations getter defensive copy
+		allocs := inv.AssetAllocations()
+		allocs[0].SharePercentage = 50.0
+		if inv.AssetAllocations()[0].SharePercentage == 50.0 {
+			t.Errorf("AssetAllocations getter leaked internal slice pointer")
+		}
+
+		// Tags getter defensive copy
+		tags := inv.Tags()
+		tags[0] = "mutated-tag"
+		if inv.Tags()[0] == "mutated-tag" {
+			t.Errorf("Tags getter leaked internal slice pointer")
+		}
+
+		// Allocate defensive copy
+		inputAllocs := []investment.InvestmentAssetLink{
+			{AssetID: assetID, AssetName: "Asset Name", SharePercentage: 100.0},
+		}
+		_ = inv.Allocate(inputAllocs)
+		inputAllocs[0].SharePercentage = 25.0
+		if inv.AssetAllocations()[0].SharePercentage == 25.0 {
+			t.Errorf("Allocate leaked input slice pointer")
+		}
+	})
+
+	t.Run("UpdateValuation validation errors", func(t *testing.T) {
+		negHours := -5.0
+		negRate := money.New(-10, "USD")
+		negQty := -2.0
+		negAmt := money.New(-100, "USD")
+		zeroAmt := money.New(0, "USD")
+
+		if err := inv.UpdateValuation("INVALID_TYPE", nil, nil, nil, nil, "", ""); err == nil {
+			t.Errorf("expected error for invalid resource type")
+		}
+		if err := inv.UpdateValuation(investment.ResourceTypeTime, nil, &negHours, nil, nil, "", ""); err == nil {
+			t.Errorf("expected error for negative time hours")
+		}
+		if err := inv.UpdateValuation(investment.ResourceTypeTime, nil, nil, negRate, nil, "", ""); err == nil {
+			t.Errorf("expected error for negative time hourly rate")
+		}
+		if err := inv.UpdateValuation(investment.ResourceTypeGoods, nil, nil, nil, &negQty, "", ""); err == nil {
+			t.Errorf("expected error for negative goods quantity")
+		}
+		if err := inv.UpdateValuation(investment.ResourceTypeMoney, negAmt, nil, nil, nil, "", ""); err == nil {
+			t.Errorf("expected error for negative investment amount")
+		}
+		if err := inv.UpdateValuation(investment.ResourceTypeMoney, zeroAmt, nil, nil, nil, "", ""); err == nil {
+			t.Errorf("expected error for zero investment amount")
+		}
+	})
 }

@@ -10,13 +10,14 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/project"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
-type mockDb struct{}
+type mockDb struct {
+	txCalled bool
+}
 
 func (m *mockDb) Tx(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+	m.txCalled = true
 	return fn(ctx)
 }
 func (m *mockDb) Close()                        {}
@@ -67,42 +68,27 @@ func (m *mockAssetRepo) FindAncestors(ctx context.Context, assetID uuid.UUID) ([
 }
 
 type mockPeopleService struct {
-	owner *project.Owner
+	owner asset.OwnerRef
 	err   error
 }
 
-func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (*project.Owner, error) {
+func (m *mockPeopleService) FindOwner(ctx context.Context, id uuid.UUID) (asset.OwnerRef, error) {
 	if m.err != nil {
-		return nil, m.err
+		return asset.OwnerRef{}, m.err
 	}
 	return m.owner, nil
 }
 
 type mockProjectRepo struct {
-	project *project.Project
+	project asset.ProjectDescriptor
 	err     error
 }
 
-func (m *mockProjectRepo) Create(ctx context.Context, p *project.Project) error { return nil }
-func (m *mockProjectRepo) Update(ctx context.Context, p *project.Project) error { return nil }
-func (m *mockProjectRepo) Remove(ctx context.Context, p *project.Project) error { return nil }
-func (m *mockProjectRepo) Find(ctx context.Context, filter project.ProjectCollectionFilter) ([]*project.Project, error) {
-	return nil, nil
-}
-func (m *mockProjectRepo) FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error) {
+func (m *mockProjectRepo) FindProject(ctx context.Context, projectID uuid.UUID) (asset.ProjectDescriptor, error) {
 	if m.err != nil {
-		return nil, m.err
+		return asset.ProjectDescriptor{}, m.err
 	}
 	return m.project, nil
-}
-func (m *mockProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectRepo) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
-	return m.err
 }
 
 type mockInvestmentSource struct {
@@ -152,25 +138,36 @@ type mockRateProvider struct {
 	err error
 }
 
-func (m *mockRateProvider) Convert(a currency.Currency, b currency.Currency) (currency.Currency, error) {
+func (m *mockRateProvider) ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error) {
 	if m.err != nil {
-		return currency.Currency{}, m.err
+		return nil, m.err
 	}
-	if a.Code == "USD" && b.Code == "UAH" {
-		return currency.Currency{Amount: a.Amount * 40, Code: b.Code}, nil
+	if amount == nil {
+		return money.New(0, targetCurrency), nil
 	}
-	return currency.Currency{Amount: a.Amount, Code: b.Code}, nil
+	if amount.Currency().Code == "USD" && targetCurrency == "UAH" {
+		return money.New(amount.Amount()*40, targetCurrency), nil
+	}
+	return money.New(amount.Amount(), targetCurrency), nil
 }
 
 func newTestService(
 	db core.DbConnection,
 	assets asset.Repository,
-	people project.PeopleService,
-	projects project.ProjectRepository,
+	people asset.OwnerReader,
+	projects asset.ProjectReader,
 	inv asset.InvestmentSource,
-	rp ...currency.CurrencyRateProvider,
+	rp ...asset.CurrencyConverter,
 ) *asset.ServiceImpl {
 	return asset.NewService(db, assets, people, projects, inv, rp...)
+}
+
+func mustCreateAsset(id uuid.UUID, name, desc string, projectID uuid.UUID, price *money.Money, start time.Time, owner asset.OwnerRef) *asset.Asset {
+	a, err := asset.CreateAsset(id, name, desc, projectID, price, start, owner, asset.AssetStatusActive, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	return a
 }
 
 func TestAssetService(t *testing.T) {
@@ -178,10 +175,10 @@ func TestAssetService(t *testing.T) {
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, requesterID)
 
 	now := time.Now()
-	owner := &project.Owner{PersonID: requesterID, DisplayName: "John Doe"}
-	ownerRef := asset.OwnerRef{PersonID: requesterID, DisplayName: "John Doe"}
-	project, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, now, now)
-	existingAsset := asset.NewAsset(uuid.New(), "Laptop", "Work Laptop", project.ID(), money.New(1000, money.USD), now, ownerRef)
+	owner := asset.OwnerRef{PersonID: requesterID, DisplayName: "John Doe"}
+	ownerRef := owner
+	project := asset.ProjectDescriptor{ID: uuid.New(), MainCurrency: "UAH"}
+	existingAsset := mustCreateAsset(uuid.New(), "Laptop", "Work Laptop", project.ID, money.New(1000, money.USD), now, ownerRef)
 
 	t.Run("Find unauthorized and success", func(t *testing.T) {
 		svc := newTestService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{}, &mockProjectRepo{}, nil)
@@ -235,7 +232,7 @@ func TestAssetService(t *testing.T) {
 		cmd := asset.CreateAssetCommand{
 			Name:        "Server",
 			Description: "Rack Server",
-			ProjectID:   project.ID(),
+			ProjectID:   project.ID,
 			Price:       money.New(5000, money.USD),
 			WithPayment: false,
 		}
@@ -298,13 +295,13 @@ func TestAssetService(t *testing.T) {
 		// Investment source error
 		mockInvErr := &mockInvestmentSource{createErr: errors.New("inv create err")}
 		svcInvErr := newTestService(&mockDb{}, &mockAssetRepo{}, peopleSvc, projRepo, mockInvErr)
-		_, err = svcInvErr.Create(authedCtx, asset.CreateAssetCommand{WithPayment: true, ProjectID: project.ID()})
+		_, err = svcInvErr.Create(authedCtx, asset.CreateAssetCommand{Name: "Asset", Price: money.New(100, "USD"), WithPayment: true, ProjectID: project.ID})
 		if err == nil {
 			t.Errorf("expected investment source create error")
 		}
 
 		svc = newTestService(&mockDb{}, &mockAssetRepo{saveErr: errors.New("asset save err")}, peopleSvc, projRepo, nil)
-		_, err = svc.Create(authedCtx, asset.CreateAssetCommand{WithPayment: true, ProjectID: project.ID()})
+		_, err = svc.Create(authedCtx, asset.CreateAssetCommand{Name: "Asset", Price: money.New(100, "USD"), WithPayment: true, ProjectID: project.ID})
 		if err == nil {
 			t.Errorf("expected asset save error")
 		}
@@ -339,7 +336,7 @@ func TestAssetService(t *testing.T) {
 
 		updCmd := asset.UpdateAssetCommand{
 			AssetID:     existingAsset.ID(),
-			ProjectID:   project.ID(),
+			ProjectID:   project.ID,
 			Name:        "Updated Name",
 			Description: "Updated Desc",
 			Price:       money.New(3000, money.USD),
@@ -389,7 +386,7 @@ func TestAssetService(t *testing.T) {
 		svc := newTestService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, &mockProjectRepo{project: project}, mockInv, rateProv)
 
 		// 1. Unauthorized
-		_, err := svc.CreateFromPayments(context.Background(), asset.CreateAssetFromPaymentsCommand{ProjectID: project.ID()})
+		_, err := svc.CreateFromPayments(context.Background(), asset.CreateAssetFromPaymentsCommand{ProjectID: project.ID})
 		if err == nil {
 			t.Errorf("expected unauthorized error")
 		}
@@ -401,20 +398,20 @@ func TestAssetService(t *testing.T) {
 		}
 
 		// 3. Empty payment ids
-		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{ProjectID: project.ID(), Name: "Asset"})
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{ProjectID: project.ID, Name: "Asset"})
 		if err == nil {
 			t.Errorf("expected empty payment ids error")
 		}
 
 		// 4. Empty name
-		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{ProjectID: project.ID(), PaymentIDs: []uuid.UUID{inv1ID}})
+		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{ProjectID: project.ID, PaymentIDs: []uuid.UUID{inv1ID}})
 		if err == nil {
 			t.Errorf("expected empty name error")
 		}
 
 		// 5. Payment not found
 		_, err = svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
-			ProjectID:  project.ID(),
+			ProjectID:  project.ID,
 			PaymentIDs: []uuid.UUID{uuid.New()},
 			Name:       "Asset",
 		})
@@ -424,7 +421,7 @@ func TestAssetService(t *testing.T) {
 
 		// 6. Single payment success (inherits date, amount, currency)
 		a, err := svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
-			ProjectID:  project.ID(),
+			ProjectID:  project.ID,
 			PaymentIDs: []uuid.UUID{inv1ID},
 			Name:       "Single Asset",
 		})
@@ -440,7 +437,7 @@ func TestAssetService(t *testing.T) {
 
 		// 7. Multiple payments same currency (sums amounts, latest date)
 		a2, err := svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
-			ProjectID:  project.ID(),
+			ProjectID:  project.ID,
 			PaymentIDs: []uuid.UUID{inv1ID, inv2ID},
 			Name:       "Multi Asset",
 		})
@@ -457,7 +454,7 @@ func TestAssetService(t *testing.T) {
 		// 8. Mixed currencies (USD + UAH, project MainCurrency is UAH)
 		// USD 1000 * 40 = 40000 UAH + 500 UAH = 40500 UAH
 		a3, err := svc.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
-			ProjectID:  project.ID(),
+			ProjectID:  project.ID,
 			PaymentIDs: []uuid.UUID{inv1ID, inv3ID},
 			Name:       "Diff Types With Specified Type",
 		})
@@ -471,7 +468,7 @@ func TestAssetService(t *testing.T) {
 		// 9. Rate provider error
 		svcRateErr := newTestService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, &mockProjectRepo{project: project}, mockInv, &mockRateProvider{err: errors.New("rate err")})
 		_, err = svcRateErr.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
-			ProjectID:  project.ID(),
+			ProjectID:  project.ID,
 			PaymentIDs: []uuid.UUID{inv1ID, inv3ID},
 			Name:       "Rate Err",
 		})
@@ -488,12 +485,27 @@ func TestAssetService(t *testing.T) {
 		}
 		svcAssignErr := newTestService(&mockDb{}, &mockAssetRepo{}, &mockPeopleService{owner: owner}, &mockProjectRepo{project: project}, mockInvSrcErr)
 		_, err = svcAssignErr.CreateFromPayments(authedCtx, asset.CreateAssetFromPaymentsCommand{
-			ProjectID:  project.ID(),
+			ProjectID:  project.ID,
 			PaymentIDs: []uuid.UUID{inv1ID},
 			Name:       "Fail Assign",
 		})
 		if err == nil {
 			t.Errorf("expected error on assign failure")
+		}
+
+		// 10. Verify transaction execution
+		dbWithTx := &mockDb{}
+		svcWithTx := newTestService(dbWithTx, &mockAssetRepo{}, &mockPeopleService{owner: owner}, &mockProjectRepo{project: project}, mockInv)
+		_, err = svcWithTx.CreateFromInvestments(authedCtx, asset.CreateAssetFromInvestmentsCommand{
+			ProjectID:     project.ID,
+			InvestmentIDs: []uuid.UUID{inv1ID},
+			Name:          "Tx Asset",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error creating asset: %v", err)
+		}
+		if !dbWithTx.txCalled {
+			t.Errorf("expected db.Tx to be called for CreateFromInvestments")
 		}
 	})
 
@@ -548,7 +560,7 @@ func TestAssetService(t *testing.T) {
 		astID := uuid.New()
 		invID1 := uuid.New()
 		invID2 := uuid.New()
-		targetAsset := asset.NewAsset(astID, "Car", "Vehicle", project.ID(), money.New(100000, "UAH"), time.Now(), ownerRef)
+		targetAsset := mustCreateAsset(astID, "Car", "Vehicle", project.ID, money.New(100000, "UAH"), time.Now(), ownerRef)
 
 		mockInv := &mockInvestmentSource{
 			items: []asset.InvestmentItem{
@@ -568,7 +580,7 @@ func TestAssetService(t *testing.T) {
 		// Unauthenticated
 		err := svc.AssignInvestments(context.Background(), asset.AssignInvestmentsCommand{
 			AssetID:       astID,
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			InvestmentIDs: []uuid.UUID{invID1, invID2},
 		})
 		if err == nil {
@@ -578,7 +590,7 @@ func TestAssetService(t *testing.T) {
 		// Validation errors
 		err = svc.AssignInvestments(authedCtx, asset.AssignInvestmentsCommand{
 			AssetID:       uuid.Nil,
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			InvestmentIDs: []uuid.UUID{invID1},
 		})
 		if err == nil {
@@ -587,7 +599,7 @@ func TestAssetService(t *testing.T) {
 
 		err = svc.AssignInvestments(authedCtx, asset.AssignInvestmentsCommand{
 			AssetID:       astID,
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			InvestmentIDs: nil,
 		})
 		if err == nil {
@@ -597,7 +609,7 @@ func TestAssetService(t *testing.T) {
 		// Success
 		err = svc.AssignInvestments(authedCtx, asset.AssignInvestmentsCommand{
 			AssetID:       astID,
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			InvestmentIDs: []uuid.UUID{invID1, invID2},
 		})
 		if err != nil {
@@ -612,13 +624,14 @@ func TestAssetService(t *testing.T) {
 	})
 
 	t.Run("Group assets success and validation", func(t *testing.T) {
-		child1 := asset.NewAsset(uuid.New(), "Child 1", "", project.ID(), money.New(100, "UAH"), now, ownerRef)
-		child2 := asset.NewAsset(uuid.New(), "Child 2", "", project.ID(), money.New(200, "UAH"), now, ownerRef)
+		child1 := mustCreateAsset(uuid.New(), "Child 1", "", project.ID, money.New(100, "UAH"), now, ownerRef)
+		child2 := mustCreateAsset(uuid.New(), "Child 2", "", project.ID, money.New(200, "UAH"), now, ownerRef)
 
 		assetRepo := &mockAssetRepo{asset: child1}
 		peopleSvc := &mockPeopleService{owner: owner}
 		projRepo := &mockProjectRepo{project: project}
-		svc := newTestService(&mockDb{}, assetRepo, peopleSvc, projRepo, nil)
+		db := &mockDb{}
+		svc := newTestService(db, assetRepo, peopleSvc, projRepo, nil)
 
 		// Validation errors
 		_, err := svc.Group(context.Background(), asset.GroupAssetsCommand{})
@@ -634,7 +647,7 @@ func TestAssetService(t *testing.T) {
 		}
 
 		_, err = svc.Group(authedCtx, asset.GroupAssetsCommand{
-			ProjectID: project.ID(),
+			ProjectID: project.ID,
 			Name:      "",
 		})
 		if err == nil {
@@ -642,7 +655,7 @@ func TestAssetService(t *testing.T) {
 		}
 
 		_, err = svc.Group(authedCtx, asset.GroupAssetsCommand{
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			Name:          "Group 1",
 			ChildAssetIDs: nil,
 		})
@@ -652,7 +665,7 @@ func TestAssetService(t *testing.T) {
 
 		// Success
 		grouped, err := svc.Group(authedCtx, asset.GroupAssetsCommand{
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			Name:          "Rent Aggregate",
 			Description:   "All rent",
 			ChildAssetIDs: []uuid.UUID{child1.ID(), child2.ID()},
@@ -663,14 +676,18 @@ func TestAssetService(t *testing.T) {
 		}
 
 		// LinkChildren success
-		otherChild := asset.NewAsset(uuid.New(), "Other Child", "", project.ID(), money.New(50, "UAH"), now, ownerRef)
+		otherChild := mustCreateAsset(uuid.New(), "Other Child", "", project.ID, money.New(50, "UAH"), now, ownerRef)
+		db.txCalled = false
 		err = svc.LinkChildren(authedCtx, asset.LinkChildrenCommand{
-			ProjectID:     project.ID(),
+			ProjectID:     project.ID,
 			ParentID:      grouped.ID(),
 			ChildAssetIDs: []uuid.UUID{otherChild.ID()},
 		})
 		if err != nil {
 			t.Errorf("unexpected error linking children: %v", err)
+		}
+		if !db.txCalled {
+			t.Errorf("expected db.Tx to be called for LinkChildren")
 		}
 	})
 }

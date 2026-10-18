@@ -24,3 +24,30 @@ type Repository interface {
 	Find(ctx context.Context, filter CollectionFilter) (*Collection, error)
 	FindTags(ctx context.Context, projectID uuid.UUID) ([]string, error)
 }
+
+// AssetDescriptor represents the narrow read view of an asset needed by the investment context.
+type AssetDescriptor struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// AssetReader is a consumer-owned interface providing read access to assets.
+type AssetReader interface {
+	FindAsset(ctx context.Context, projectID uuid.UUID, assetID uuid.UUID) (AssetDescriptor, error)
+}
+
+// ProjectDescriptor represents the narrow read view of a project needed by the investment context.
+type ProjectDescriptor struct {
+	ID           uuid.UUID
+	MainCurrency string
+}
+
+// ProjectReader is a consumer-owned interface providing read access to projects.
+type ProjectReader interface {
+	FindProject(ctx context.Context, projectID uuid.UUID) (ProjectDescriptor, error)
+}
+
+// ContributorReader is a consumer-owned interface providing read access to contributors.
+type ContributorReader interface {
+	FindContributor(ctx context.Context, personID uuid.UUID) (ContributorRef, error)
+}

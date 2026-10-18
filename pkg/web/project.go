@@ -9,17 +9,15 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/project"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
 type CreateProjectDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	MainCurrency string `json:"mainCurrency,omitempty"`
 }
 
 type OwnerDTO struct {
@@ -28,14 +26,14 @@ type OwnerDTO struct {
 }
 
 type ProjectDTO struct {
-	ProjectID    string                `json:"project_id"`
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	Owner        OwnerDTO              `json:"owner"`
-	ShareToken   string                `json:"share_token,omitempty"`
-	IsShared     bool                  `json:"is_shared,omitempty"`
-	MainCurrency string                `json:"mainCurrency,omitempty"`
-	Participants []project.Participant `json:"participants"`
+	ProjectID    string   `json:"project_id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Owner        OwnerDTO `json:"owner"`
+	ShareToken   string   `json:"share_token,omitempty"`
+	IsShared     bool     `json:"is_shared,omitempty"`
+	MainCurrency string   `json:"mainCurrency,omitempty"`
+	Participants []string `json:"participants"`
 }
 
 type UpdateProjectDTO struct {
@@ -52,9 +50,10 @@ func toProjectDTO(p *project.Project) ProjectDTO {
 	if mainCurrency == "" {
 		mainCurrency = "UAH"
 	}
-	participants := p.Participants()
-	if participants == nil {
-		participants = make([]project.Participant, 0)
+	rawParticipants := p.Participants()
+	participants := make([]string, 0, len(rawParticipants))
+	for _, part := range rawParticipants {
+		participants = append(participants, part.DisplayName())
 	}
 	dto := ProjectDTO{
 		ProjectID:    p.ID().String(),
@@ -98,10 +97,11 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}
 
 	return project.CreateProjectCommand{
-		PersonID:    personID,
-		Name:        req.Name,
-		Description: req.Description,
-	}, err
+		PersonID:     personID,
+		Name:         req.Name,
+		Description:  req.Description,
+		MainCurrency: req.MainCurrency,
+	}, nil
 }
 
 func makeCreateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
@@ -142,27 +142,11 @@ func makeListProjectsEndpoint(svc project.ProjectService) endpoint.Endpoint {
 
 func makeShowProjectTotalsEndpoint(
 	projectSvc project.ProjectService,
-	assets asset.Service,
-	rateProvider currency.CurrencyRateProvider,
-	investments ...investment.Service,
 ) endpoint.Endpoint {
-	var invReaders []investment.InvestmentCollectionReader
-	for _, inv := range investments {
-		if inv != nil {
-			invReaders = append(invReaders, inv)
-		}
-	}
 	return func(ctx context.Context, request any) (any, error) {
 		projectID := request.(uuid.UUID)
 
-		calculatedTotals, err := investment.CalculateProjectTotals(
-			ctx,
-			projectID,
-			projectSvc,
-			assets,
-			rateProvider,
-			invReaders...,
-		)
+		calculatedTotals, err := projectSvc.GetTotals(ctx, projectID)
 		if err != nil {
 			return nil, err
 		}
@@ -178,7 +162,7 @@ func makeShowProjectTotalsEndpoint(
 		if calculatedTotals.HasActivity {
 			totals = append(totals, TotalDTO{
 				Title:    "Project Balance",
-				Amount:   calculatedTotals.Balance(),
+				Amount:   calculatedTotals.Balance,
 				Currency: calculatedTotals.Currency,
 			})
 		}
@@ -304,16 +288,13 @@ func makeUpdateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
 
 func MakeProjectEndpoints(
 	projectService project.ProjectService,
-	assetService asset.Service,
-	rateProvider currency.CurrencyRateProvider,
-	investmentService ...investment.Service,
 ) (ProjectEndpoints, error) {
 	return ProjectEndpoints{
 		CreateProject:     makeCreateProjectEndpoint(projectService),
 		GetProject:        makeGetProjectEndpoint(projectService),
 		AcceptShare:       makeAcceptShareEndpoint(projectService),
 		ListProjects:      makeListProjectsEndpoint(projectService),
-		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService, assetService, rateProvider, investmentService...),
+		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService),
 		UpdateProject:     makeUpdateProjectEndpoint(projectService),
 	}, nil
 }
