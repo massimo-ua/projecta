@@ -35,14 +35,14 @@ func toInvitationDTO(inv *people.Invitation) InvitationDTO {
 }
 
 type DeleteInvitationRequest struct {
-	AdminID      uuid.UUID
+	AdminID      core.PersonID
 	InvitationID uuid.UUID
 }
 
 func decodeCreateInvitationRequest(ctx context.Context, r *http.Request) (any, error) {
-	adminID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-	if !ok || adminID == uuid.Nil {
-		return nil, exceptions.NewUnauthorizedException("unauthorized", nil)
+	adminID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("unauthorized", err)
 	}
 
 	var req CreateInvitationDTO
@@ -51,7 +51,7 @@ func decodeCreateInvitationRequest(ctx context.Context, r *http.Request) (any, e
 	}
 
 	return struct {
-		AdminID uuid.UUID
+		AdminID core.PersonID
 		Email   string
 	}{
 		AdminID: adminID,
@@ -60,17 +60,17 @@ func decodeCreateInvitationRequest(ctx context.Context, r *http.Request) (any, e
 }
 
 func decodeListInvitationsRequest(ctx context.Context, _ *http.Request) (any, error) {
-	adminID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-	if !ok || adminID == uuid.Nil {
-		return nil, exceptions.NewUnauthorizedException("unauthorized", nil)
+	adminID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("unauthorized", err)
 	}
 	return adminID, nil
 }
 
 func decodeDeleteInvitationRequest(ctx context.Context, r *http.Request) (any, error) {
-	adminID, ok := ctx.Value(core.RequesterIDContextKey).(uuid.UUID)
-	if !ok || adminID == uuid.Nil {
-		return nil, exceptions.NewUnauthorizedException("unauthorized", nil)
+	adminID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("unauthorized", err)
 	}
 
 	vars := mux.Vars(r)
@@ -98,7 +98,7 @@ func decodeValidateInvitationRequest(_ context.Context, r *http.Request) (any, e
 func makeCreateInvitationEndpoint(svc people.InvitationService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req := request.(struct {
-			AdminID uuid.UUID
+			AdminID core.PersonID
 			Email   string
 		})
 
@@ -120,7 +120,7 @@ func makeCreateInvitationEndpoint(svc people.InvitationService) endpoint.Endpoin
 
 func makeListInvitationsEndpoint(svc people.InvitationService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		adminID := request.(uuid.UUID)
+		adminID := request.(core.PersonID)
 
 		invitations, err := svc.FindAllByCreator(ctx, adminID)
 		if err != nil {

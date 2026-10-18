@@ -61,7 +61,7 @@ func decodeListUsersRequest(_ context.Context, r *http.Request) (any, error) {
 }
 
 type AssignRolesRequest struct {
-	UserID uuid.UUID
+	UserID core.PersonID
 	Roles  []string
 }
 
@@ -72,7 +72,7 @@ func decodeAssignRolesRequest(_ context.Context, r *http.Request) (any, error) {
 		return nil, exceptions.NewValidationException("missing user_id", nil)
 	}
 
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := core.ParsePersonID(userIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid user_id", err)
 	}
@@ -129,7 +129,6 @@ func decodeListProjectsRequest(_ context.Context, r *http.Request) (any, error) 
 }
 
 func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error) {
-	var err error
 	vars := mux.Vars(r)
 
 	projectID, ok := vars["project_id"]
@@ -138,7 +137,7 @@ func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewValidationException("missing project_id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project_id", err)
@@ -149,7 +148,6 @@ func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error)
 
 func decodeProjectResourceRemoveCommand(projectIDKey string, resourceIDKey string) func(context.Context, *http.Request) (any, error) {
 	return func(ctx context.Context, r *http.Request) (any, error) {
-		var err error
 		vars := mux.Vars(r)
 
 		projectID, ok := vars[projectIDKey]
@@ -158,7 +156,7 @@ func decodeProjectResourceRemoveCommand(projectIDKey string, resourceIDKey strin
 			return nil, exceptions.NewValidationException(fmt.Sprintf("missing %s", projectIDKey), nil)
 		}
 
-		projectUUID, err := uuid.Parse(projectID)
+		projectUUID, err := core.ParseProjectID(projectID)
 
 		if err != nil {
 			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid %s", projectIDKey), err)

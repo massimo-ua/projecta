@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 func TestAssetGettersAndSetters(t *testing.T) {
-	id := uuid.New()
-	ownerID := uuid.New()
+	id := core.NewAssetID()
+	ownerID := core.NewPersonID()
 	owner := asset.OwnerRef{PersonID: ownerID, DisplayName: "John Doe"}
-	projectID := uuid.New()
+	projectID := core.NewProjectID()
 	now := time.Now()
 	price := money.New(1000, money.USD)
 
@@ -91,8 +91,8 @@ func TestAssetGettersAndSetters(t *testing.T) {
 		}
 
 		// Children and Parents defensive copy
-		childID := uuid.New()
-		parentID := uuid.New()
+		childID := core.NewAssetID()
+		parentID := core.NewAssetID()
 		a.AssignValuation(newPrice, newPrice, []asset.ChildAssetLink{{ChildID: childID, SharePercentage: 100}}, []asset.ParentAssetLink{{ParentID: parentID, SharePercentage: 100}})
 		children := a.Children()
 		children[0].SharePercentage = 50

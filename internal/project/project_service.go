@@ -18,7 +18,7 @@ type ProjectServiceImpl struct {
 }
 
 func (s *ProjectServiceImpl) FindOne(ctx context.Context, filter ProjectFilter) (*Project, error) {
-	if filter.RequesterID == uuid.Nil {
+	if filter.RequesterID.IsNil() {
 		personID, err := core.AuthGuard(ctx)
 		if err != nil {
 			return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
@@ -29,7 +29,7 @@ func (s *ProjectServiceImpl) FindOne(ctx context.Context, filter ProjectFilter) 
 }
 
 func (s *ProjectServiceImpl) Find(ctx context.Context, filter ProjectCollectionFilter) ([]*Project, error) {
-	if filter.RequesterID == uuid.Nil {
+	if filter.RequesterID.IsNil() {
 		personID, err := core.AuthGuard(ctx)
 		if err != nil {
 			return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
@@ -48,7 +48,7 @@ func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCo
 		return exceptions.NewInternalException("failed to find project", err)
 	}
 
-	if command.PersonID == uuid.Nil || !p.IsOwnedByPerson(command.PersonID) {
+	if command.PersonID.IsNil() || !p.IsOwnedByPerson(command.PersonID) {
 		return exceptions.NewForbiddenException("only project owner can remove project", nil)
 	}
 
@@ -68,7 +68,7 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 		return nil, exceptions.NewInternalException("failed to find project", err)
 	}
 
-	if command.PersonID != uuid.Nil && !p.IsOwnedByPerson(command.PersonID) {
+	if !command.PersonID.IsNil() && !p.IsOwnedByPerson(command.PersonID) {
 		return nil, exceptions.NewForbiddenException("only project owner can update project", nil)
 	}
 
@@ -84,7 +84,7 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 	return p, nil
 }
 
-func (s *ProjectServiceImpl) GetTotals(ctx context.Context, projectID uuid.UUID) (ProjectTotals, error) {
+func (s *ProjectServiceImpl) GetTotals(ctx context.Context, projectID core.ProjectID) (ProjectTotals, error) {
 	proj, err := s.FindOne(ctx, ProjectFilter{ProjectID: projectID})
 	if err != nil {
 		if errors.Is(err, exceptions.NotFoundError) {
@@ -136,7 +136,7 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 
 	if errors.Is(err, exceptions.NotFoundError) {
 		p, err = NewProject(
-			uuid.New(),
+			core.NewProjectID(),
 			command.Name,
 			command.Description,
 			owner,
@@ -160,7 +160,7 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 	return nil, exceptions.NewInternalException("failed to create project", err)
 }
 
-func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, personID uuid.UUID) (*Project, error) {
+func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, personID core.PersonID) (*Project, error) {
 	if token == uuid.Nil {
 		return nil, exceptions.NewValidationException("invalid share token", nil)
 	}

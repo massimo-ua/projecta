@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -42,7 +41,7 @@ func ToResourceType(val string) (ResourceType, error) {
 }
 
 type InvestmentAssetLink struct {
-	AssetID         uuid.UUID
+	AssetID         core.AssetID
 	AssetName       string
 	SharePercentage float64
 }
@@ -55,16 +54,16 @@ func (l InvestmentAssetLink) AllocatedAmount(total *money.Money) int64 {
 }
 
 type ContributorRef struct {
-	PersonID    uuid.UUID
+	PersonID    core.PersonID
 	DisplayName string
 }
 
 type Investment struct {
-	id               uuid.UUID
-	projectID        uuid.UUID
+	id               core.InvestmentID
+	projectID        core.ProjectID
 	homeCurrency     string
 	homeAmount       int64
-	primaryAssetID   uuid.UUID
+	primaryAssetID   core.AssetID
 	primaryAssetName string
 	assetAllocations []InvestmentAssetLink
 	contributor      ContributorRef
@@ -81,10 +80,10 @@ type Investment struct {
 }
 
 func NewInvestment(
-	id uuid.UUID,
-	projectID uuid.UUID,
+	id core.InvestmentID,
+	projectID core.ProjectID,
 	homeCurrency string,
-	primaryAssetID uuid.UUID,
+	primaryAssetID core.AssetID,
 	primaryAssetName string,
 	contributor ContributorRef,
 	resourceType ResourceType,
@@ -99,10 +98,10 @@ func NewInvestment(
 	tags []string,
 	allocations ...InvestmentAssetLink,
 ) (*Investment, error) {
-	if id == uuid.Nil {
+	if id.IsNil() {
 		return nil, exceptions.NewValidationException("investment id is required", nil)
 	}
-	if projectID == uuid.Nil {
+	if projectID.IsNil() {
 		return nil, exceptions.NewValidationException("project is required", nil)
 	}
 	if strings.TrimSpace(description) == "" {
@@ -147,7 +146,7 @@ func NewInvestment(
 		if err := inv.Allocate(allocations); err != nil {
 			return nil, err
 		}
-	} else if primaryAssetID != uuid.Nil {
+	} else if !primaryAssetID.IsNil() {
 		inv.primaryAssetID = primaryAssetID
 		inv.primaryAssetName = primaryAssetName
 		inv.assetAllocations = []InvestmentAssetLink{
@@ -172,7 +171,7 @@ func (i *Investment) Allocate(allocations []InvestmentAssetLink) error {
 
 	if len(allocations) == 1 {
 		a := allocations[0]
-		if a.AssetID == uuid.Nil {
+		if a.AssetID.IsNil() {
 			return exceptions.NewValidationException("asset id is required for allocation", nil)
 		}
 		i.primaryAssetID = a.AssetID
@@ -187,10 +186,10 @@ func (i *Investment) Allocate(allocations []InvestmentAssetLink) error {
 		return nil
 	}
 
-	seen := make(map[uuid.UUID]bool)
+	seen := make(map[core.AssetID]bool)
 	var totalShare float64
 	for _, a := range allocations {
-		if a.AssetID == uuid.Nil {
+		if a.AssetID.IsNil() {
 			return exceptions.NewValidationException("asset id is required for each allocation", nil)
 		}
 		if seen[a.AssetID] {
@@ -301,10 +300,10 @@ func (i *Investment) UpdateValuation(
 
 // ReconstituteInvestment reconstitutes an Investment entity from persistence data without executing business invariants.
 func ReconstituteInvestment(
-	id uuid.UUID,
-	projectID uuid.UUID,
+	id core.InvestmentID,
+	projectID core.ProjectID,
 	homeCurrency string,
-	primaryAssetID uuid.UUID,
+	primaryAssetID core.AssetID,
 	primaryAssetName string,
 	allocations []InvestmentAssetLink,
 	contributor ContributorRef,
@@ -325,7 +324,7 @@ func ReconstituteInvestment(
 	}
 
 	var finalAllocations []InvestmentAssetLink
-	if len(allocations) == 0 && primaryAssetID != uuid.Nil {
+	if len(allocations) == 0 && !primaryAssetID.IsNil() {
 		finalAllocations = []InvestmentAssetLink{
 			{
 				AssetID:         primaryAssetID,
@@ -377,8 +376,8 @@ func (i *Investment) EvaluateHomeAmount(converter CurrencyConverter) {
 }
 
 // Getters
-func (i *Investment) ID() uuid.UUID           { return i.id }
-func (i *Investment) ProjectID() uuid.UUID    { return i.projectID }
+func (i *Investment) ID() core.InvestmentID           { return i.id }
+func (i *Investment) ProjectID() core.ProjectID       { return i.projectID }
 func (i *Investment) HomeCurrency() string {
 	if i.homeCurrency == "" {
 		return "UAH"
@@ -394,8 +393,8 @@ func (i *Investment) HomeAmount() int64 {
 	}
 	return 0
 }
-func (i *Investment) PrimaryAssetID() uuid.UUID { return i.primaryAssetID }
-func (i *Investment) PrimaryAssetName() string  { return i.primaryAssetName }
+func (i *Investment) PrimaryAssetID() core.AssetID { return i.primaryAssetID }
+func (i *Investment) PrimaryAssetName() string    { return i.primaryAssetName }
 func (i *Investment) AssetAllocations() []InvestmentAssetLink {
 	if i.assetAllocations == nil {
 		return make([]InvestmentAssetLink, 0)

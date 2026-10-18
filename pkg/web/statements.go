@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
@@ -66,7 +66,7 @@ func MakeStatementEndpoints(svc statement.Service) StatementEndpoints {
 }
 
 type ParseStatementRequest struct {
-	ProjectID uuid.UUID
+	ProjectID core.ProjectID
 	FileData  []byte
 }
 
@@ -77,7 +77,7 @@ func decodeParseStatementRequest(_ context.Context, r *http.Request) (any, error
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}

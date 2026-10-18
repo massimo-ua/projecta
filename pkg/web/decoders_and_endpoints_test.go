@@ -540,8 +540,8 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		}
 
 		// Test makeGroupAssetsEndpoint
-		ownerRef := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "John"}
-		mockAst, _ := asset.CreateAssetGroup(uuid.New(), "Rent", "", uuid.New(), ownerRef, nil)
+		ownerRef := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "John"}
+		mockAst, _ := asset.CreateAssetGroup(core.NewAssetID(), "Rent", "", core.NewProjectID(), ownerRef, nil)
 		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst})
 		_, err = ep(context.Background(), cmd)
 		if err != nil {
@@ -630,7 +630,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeProfileEndpoint error", func(t *testing.T) {
 		ep := makeProfileEndpoint(peopleSvcErr)
-		_, err := ep(context.Background(), uuid.New())
+		_, err := ep(context.Background(), core.NewPersonID())
 		if err == nil {
 			t.Errorf("expected service error")
 		}
@@ -678,7 +678,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	t.Run("makeShowProjectTotalsEndpoint currency mismatch and service error", func(t *testing.T) {
 		mProjSvcErr := &mockProjectService{err: errors.New("svc error")}
 		epErr := makeShowProjectTotalsEndpoint(mProjSvcErr)
-		_, err := epErr(context.Background(), uuid.New())
+		_, err := epErr(context.Background(), core.NewProjectID())
 		if err == nil {
 			t.Errorf("expected service error")
 		}
@@ -692,7 +692,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 			},
 		}
 		epSuccess := makeShowProjectTotalsEndpoint(mProjSvcSuccess)
-		res, err := epSuccess(context.Background(), uuid.New())
+		res, err := epSuccess(context.Background(), core.NewProjectID())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -738,10 +738,10 @@ func (m *mockInvestmentServiceWithCol) Find(_ context.Context, _ investment.Coll
 	}
 	return m.col, nil
 }
-func (m *mockInvestmentServiceWithCol) FindTags(context.Context, uuid.UUID) ([]string, error) {
+func (m *mockInvestmentServiceWithCol) FindTags(context.Context, core.ProjectID) ([]string, error) {
 	return nil, nil
 }
-func (m *mockInvestmentServiceWithCol) AssignToAsset(context.Context, uuid.UUID, []uuid.UUID) error {
+func (m *mockInvestmentServiceWithCol) AssignToAsset(context.Context, core.AssetID, []core.InvestmentID) error {
 	return nil
 }
 
@@ -822,8 +822,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 
 	t.Run("makeGetProjectEndpoint and makeAcceptShareEndpoint", func(t *testing.T) {
-		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
-		proj, _ := project.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now())
+		owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner"}
+		proj, _ := project.NewProject(core.NewProjectID(), "Project One", "Desc", owner, time.Now(), time.Now())
 		projSvc := &mockProjectService{project: proj}
 
 		epGet := makeGetProjectEndpoint(projSvc)
@@ -851,8 +851,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 
 	t.Run("toProjectDTO and ProjectDTO JSON marshaling with participants", func(t *testing.T) {
-		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner Name"}
-		proj, _ := project.NewProject(uuid.New(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
+		owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner Name"}
+		proj, _ := project.NewProject(core.NewProjectID(), "Project Alpha", "Desc", owner, time.Now(), time.Now())
 		part1, _ := project.NewParticipant("Participant Two")
 		proj.AddParticipant(part1)
 
@@ -902,11 +902,11 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 
 	t.Run("currency conversion endpoints with rateProvider", func(t *testing.T) {
-		owner := &project.Owner{PersonID: uuid.New(), DisplayName: "Owner"}
+		owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner"}
 		ownerRef := asset.OwnerRef{PersonID: owner.PersonID, DisplayName: "Owner"}
-		proj, _ := project.NewProject(uuid.New(), "Project One", "Desc", owner, time.Now(), time.Now(), "UAH")
+		proj, _ := project.NewProject(core.NewProjectID(), "Project One", "Desc", owner, time.Now(), time.Now(), "UAH")
 
-		astUSD, _ := asset.CreateAsset(uuid.New(), "Ast USD", "Desc", proj.ID(), money.New(200, money.USD), time.Now(), ownerRef, asset.AssetStatusActive, nil, nil)
+		astUSD, _ := asset.CreateAsset(core.NewAssetID(), "Ast USD", "Desc", proj.ID(), money.New(200, money.USD), time.Now(), ownerRef, asset.AssetStatusActive, nil, nil)
 
 		rateProv := &mockRateProvider{}
 
@@ -1009,7 +1009,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		// decodeAssignRolesRequest
-		targetID := uuid.New()
+		targetID := core.NewPersonID()
 		bodyBytes, _ := json.Marshal(AssignRolesDTO{Roles: []string{"User", "Administrator"}})
 		reqAssign, _ := http.NewRequest(http.MethodPut, "/users/"+targetID.String()+"/roles", bytes.NewReader(bodyBytes))
 		reqAssign = mux.SetURLVars(reqAssign, map[string]string{"user_id": targetID.String()})
@@ -1086,7 +1086,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invitation Endpoints and Decoders", func(t *testing.T) {
-		adminID := uuid.New()
+		adminID := core.NewPersonID()
 		invID := uuid.New()
 		inv, _ := people.NewInvitation(invID, "invited@example.com", "hash123", time.Now().Add(7*24*time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
 		invWithCode := &people.InvitationWithCode{Invitation: inv, Code: "raw_code_123"}
@@ -1101,7 +1101,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 
 		// Create
 		resCreate, err := eps.CreateInvitation(context.Background(), struct {
-			AdminID uuid.UUID
+			AdminID core.PersonID
 			Email   string
 		}{AdminID: adminID, Email: "invited@example.com"})
 		if err != nil {
@@ -1176,7 +1176,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 				t.Fatalf("unexpected error decoding create invitation: %v", err)
 			}
 			createReq := decCreate.(struct {
-				AdminID uuid.UUID
+				AdminID core.PersonID
 				Email   string
 			})
 			if createReq.Email != "test@example.com" || createReq.AdminID != adminID {
@@ -1196,7 +1196,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 				t.Errorf("expected unauthorized error")
 			}
 			decList, err := decodeListInvitationsRequest(authCtx, req)
-			if err != nil || decList.(uuid.UUID) != adminID {
+			if err != nil || decList.(core.PersonID) != adminID {
 				t.Errorf("unexpected error decoding list invitations: %v", err)
 			}
 
@@ -1246,7 +1246,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 }
 
 func TestUpdateProfileEndpointAndDecoder(t *testing.T) {
-	validUserID := uuid.New()
+	validUserID := core.NewPersonID()
 	authCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, validUserID)
 
 	t.Run("decodeUpdateProfileRequest success", func(t *testing.T) {
@@ -1329,9 +1329,9 @@ func TestUpdateProfileEndpointAndDecoder(t *testing.T) {
 }
 
 func TestDecodeLinkChildAssetRequest(t *testing.T) {
-	projID := uuid.New()
-	parentID := uuid.New()
-	childID := uuid.New()
+	projID := core.NewProjectID()
+	parentID := core.NewAssetID()
+	childID := core.NewAssetID()
 
 	t.Run("omitted share_percentage defaults to 100", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"child_asset_id": "` + childID.String() + `"}`)

@@ -14,22 +14,22 @@ This document provides a comprehensive, file-by-file engineering blueprint to re
 ```text
 1. [Step 1: Enforce Layer & Context Boundaries]    → ✅ COMPLETED: zero cross-context imports across all bounded contexts (`internal/asset`, `internal/investment`, `internal/project`, `internal/people`, `internal/statement`)
 2. [Step 2: Decouple Domain from pkg/currency]     → ✅ COMPLETED: `go list -f '{{.Imports}}' ./internal/...` contains zero `pkg/currency` imports; domain uses pure `*money.Money` CurrencyConverter
-3. [Step 3: Consolidate Validation & Strip JSON]   → verify: negative prices/shares rejected by domain; zero `encoding/json` imports or `json:` tags in `internal/` domain types
-4. [Step 4: Harden Aggregate Encapsulation]        → verify: slice/pointer mutation tests prove immutability; `NewAsset` removed; `UpdateValuation`/`UpdateDetails` return errors
-5. [Step 5: Unify Authorization Boundaries]        → verify: zero `core.AuthGuard` calls in `pkg/dal`; shared-project participants can read/update assets; investment endpoints enforce project membership
-6. [Step 6: Enforce Transactional Boundaries]      → verify: all multi-statement writes execute inside `db.Tx`; `PgAssetRepository.Save` & `PgInvestmentRepository.Save` use atomic `ON CONFLICT` upserts
-7. [Step 7: Complete Use Cases & Clean Adapters]   → verify: `ProjectService.Remove` implemented; `CalculateProjectTotals` moved to `project`; N+1 & silent error swallowing in `cmd/web/adapters.go` eliminated
+3. [Step 3: Consolidate Validation & Strip JSON]   → ✅ COMPLETED: domain price/share validation enforced; zero `encoding/json` imports or `json:` tags in `internal/` domain types
+4. [Step 4: Harden Aggregate Encapsulation]        → ✅ COMPLETED: defensive copying across all slice getters/setters; `NewAsset` removed; `UpdateDetails` & `UpdateValuation` return domain errors
+5. [Step 5: Unify Authorization Boundaries]        → ✅ COMPLETED: zero `core.AuthGuard` calls in `pkg/dal`; shared-project participants can read/update assets; investment endpoints enforce project membership
+6. [Step 6: Enforce Transactional Boundaries]      → ✅ COMPLETED: all multi-statement writes execute inside `db.Tx`; `PgAssetRepository.Save` & `PgInvestmentRepository.Save` use atomic `ON CONFLICT` upserts
+7. [Step 7: Complete Use Cases & Clean Adapters]   → ✅ COMPLETED: `ProjectService.Remove` implemented; `GetTotals` moved to domain port; N+1 eliminated via pagination and batch ID filtering
 ```
 
-| Step | Gap Addressed | Affected Packages | Status / Recommended Order |
+| Step | Gap Addressed | Affected Packages | Status |
 | :--- | :--- | :--- | :---: |
 | **Step 1** | Gap 1: Flat Package Layout & Cross-Context Coupling | `internal/asset`, `internal/investment`, `internal/project`, `internal/people`, `cmd/web`, `pkg/web` | ✅ **COMPLETED** |
 | **Step 2** | Gap 2: Domain Coupled to `pkg/currency` & Dual Money Types | `internal/asset`, `internal/investment`, `pkg/currency`, `cmd/web`, `pkg/web` | ✅ **COMPLETED** |
-| **Step 3** | Gap 3: Business Validation in HTTP Decoders & JSON in Domain | `pkg/web`, `internal/asset`, `internal/investment`, `internal/project`, `internal/people`, `internal/statement` | **Next** |
-| **Step 4** | Gap 4: Encapsulation Leaks & Silent Validation Failures | `internal/asset`, `internal/investment`, `internal/project` | **2nd** |
-| **Step 5** | Gap 5: Inconsistent Authorization Boundaries Across Layers | `internal/project`, `internal/asset`, `internal/investment`, `pkg/dal` | **4th** |
-| **Step 6** | Gap 6: Missing Transactional Boundaries (Unit of Work Gaps) | `internal/asset`, `internal/investment`, `pkg/dal` | **5th** |
-| **Step 7** | Gap 7: Incomplete Domain Use Cases & Cross-Context Quirks | `internal/project`, `internal/investment`, `pkg/dal`, `pkg/web`, `cmd/web` | **6th** |
+| **Step 3** | Gap 3: Business Validation in HTTP Decoders & JSON in Domain | `pkg/web`, `internal/asset`, `internal/investment`, `internal/project`, `internal/people`, `internal/statement` | ✅ **COMPLETED** |
+| **Step 4** | Gap 4: Encapsulation Leaks & Silent Validation Failures | `internal/asset`, `internal/investment`, `internal/project` | ✅ **COMPLETED** |
+| **Step 5** | Gap 5: Inconsistent Authorization Boundaries Across Layers | `internal/project`, `internal/asset`, `internal/investment`, `pkg/dal` | ✅ **COMPLETED** |
+| **Step 6** | Gap 6: Missing Transactional Boundaries (Unit of Work Gaps) | `internal/asset`, `internal/investment`, `pkg/dal` | ✅ **COMPLETED** |
+| **Step 7** | Gap 7: Incomplete Domain Use Cases & Cross-Context Quirks | `internal/project`, `internal/investment`, `pkg/dal`, `pkg/web`, `cmd/web` | ✅ **COMPLETED** |
 
 > [!TIP]
 > **Why execute Steps 2–7 before Step 1?**

@@ -13,8 +13,8 @@ import (
 )
 
 func TestInvitationModel(t *testing.T) {
-	adminID := uuid.New()
-	personID := uuid.New()
+	adminID := core.NewPersonID()
+	personID := core.NewPersonID()
 	codeHash := people.HashInvitationCode("test_code_123")
 	now := time.Now()
 	expiresAt := now.Add(7 * 24 * time.Hour)
@@ -71,7 +71,7 @@ func TestInvitationModel(t *testing.T) {
 			t.Errorf("expected error for empty code hash")
 		}
 
-		_, err = people.NewInvitation(uuid.Nil, "user@example.com", codeHash, expiresAt, uuid.Nil, nil, "", now, nil)
+		_, err = people.NewInvitation(uuid.Nil, "user@example.com", codeHash, expiresAt, core.NilPersonID, nil, "", now, nil)
 		if err == nil {
 			t.Errorf("expected error for empty created by")
 		}
@@ -108,7 +108,7 @@ func TestInvitationModel(t *testing.T) {
 }
 
 func TestInvitationService(t *testing.T) {
-	adminID := uuid.New()
+	adminID := core.NewPersonID()
 	targetEmail := "newuser@example.com"
 
 	t.Run("Create invitation success", func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestInvitationService(t *testing.T) {
 	t.Run("Create invitation fails with invalid email or nil admin", func(t *testing.T) {
 		svc := people.NewInvitationService(&mockDb{}, &mockInvitationRepo{}, &mockPeopleRepo{})
 
-		_, err := svc.Create(context.Background(), uuid.Nil, targetEmail)
+		_, err := svc.Create(context.Background(), core.NilPersonID, targetEmail)
 		if err == nil {
 			t.Errorf("expected error for nil admin ID")
 		}
@@ -179,14 +179,14 @@ func TestInvitationService(t *testing.T) {
 			t.Fatalf("FindAllByCreator failed: %v", err)
 		}
 
-		_, err = svc.FindAllByCreator(context.Background(), uuid.Nil)
+		_, err = svc.FindAllByCreator(context.Background(), core.NilPersonID)
 		if err == nil {
 			t.Errorf("expected error for nil admin ID")
 		}
 	})
 
 	t.Run("Delete invitation removes precreated person if pending", func(t *testing.T) {
-		personID := uuid.New()
+		personID := core.NewPersonID()
 		invID := uuid.New()
 		inv, _ := people.NewInvitation(invID, targetEmail, "hash", time.Now().Add(time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
 
@@ -200,7 +200,7 @@ func TestInvitationService(t *testing.T) {
 		}
 
 		// Unauthorized admin
-		otherAdmin := uuid.New()
+		otherAdmin := core.NewPersonID()
 		err = svc.Delete(context.Background(), otherAdmin, invID)
 		if err == nil {
 			t.Errorf("expected error when non-creator deletes invitation")
@@ -242,8 +242,8 @@ func TestInvitationService(t *testing.T) {
 }
 
 func TestLoginWithInvitation(t *testing.T) {
-	adminID := uuid.New()
-	personID := uuid.New()
+	adminID := core.NewPersonID()
+	personID := core.NewPersonID()
 	targetEmail := "user@gmail.com"
 	rawCode := "valid_google_invitation_code_123"
 	codeHash := people.HashInvitationCode(rawCode)
@@ -412,8 +412,8 @@ func TestInvitationCode(t *testing.T) {
 
 func TestReconstituteInvitation(t *testing.T) {
 	id := uuid.New()
-	creatorID := uuid.New()
-	personID := uuid.New()
+	creatorID := core.NewPersonID()
+	personID := core.NewPersonID()
 	expiresAt := time.Now().Add(24 * time.Hour)
 	createdAt := time.Now().Add(-1 * time.Hour)
 	completedAt := time.Now()

@@ -47,8 +47,8 @@ func TestDates(t *testing.T) {
 }
 
 func TestContext(t *testing.T) {
-	t.Run("AuthGuard with valid UUID context value", func(t *testing.T) {
-		expectedID := uuid.New()
+	t.Run("AuthGuard with valid UUID and PersonID context value", func(t *testing.T) {
+		expectedID := core.NewPersonID()
 		ctx := context.WithValue(context.Background(), core.RequesterIDContextKey, expectedID)
 
 		gotID, err := core.AuthGuard(ctx)
@@ -57,6 +57,14 @@ func TestContext(t *testing.T) {
 		}
 		if gotID != expectedID {
 			t.Errorf("expected %v, got %v", expectedID, gotID)
+		}
+
+		// Also accepts raw uuid.UUID
+		rawUUID := uuid.New()
+		ctxRaw := context.WithValue(context.Background(), core.RequesterIDContextKey, rawUUID)
+		gotRawID, err := core.AuthGuard(ctxRaw)
+		if err != nil || gotRawID != core.PersonID(rawUUID) {
+			t.Errorf("expected %v, got %v", rawUUID, gotRawID)
 		}
 	})
 

@@ -14,14 +14,15 @@ var RequesterRolesContextKey = requesterRolesContextKey("requesterRoles")
 
 var FailedToIdentifyRequester = errors.New("failed to identify requester")
 
-func AuthGuard(ctx context.Context) (uuid.UUID, error) {
-    personID, ok := ctx.Value(RequesterIDContextKey).(uuid.UUID)
-
-    if !ok {
-        return uuid.Nil, FailedToIdentifyRequester
+func AuthGuard(ctx context.Context) (PersonID, error) {
+    if personID, ok := ctx.Value(RequesterIDContextKey).(PersonID); ok {
+        return personID, nil
+    }
+    if u, ok := ctx.Value(RequesterIDContextKey).(uuid.UUID); ok {
+        return PersonID(u), nil
     }
 
-    return personID, nil
+    return NilPersonID, FailedToIdentifyRequester
 }
 
 func RequesterRoles(ctx context.Context) []string {

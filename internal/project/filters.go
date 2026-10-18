@@ -1,18 +1,17 @@
 package project
 
 import (
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type ProjectFilter struct {
 	Name        string
-	ProjectID   uuid.UUID
-	RequesterID uuid.UUID
+	ProjectID   core.ProjectID
+	RequesterID core.PersonID
 }
 
 type ProjectCollectionFilter struct {
 	core.Pagination
 	Name        string
-	RequesterID uuid.UUID
+	RequesterID core.PersonID
 }

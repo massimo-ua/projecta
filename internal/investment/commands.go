@@ -4,17 +4,17 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type InvestmentAssetInput struct {
-	AssetID         uuid.UUID
+	AssetID         core.AssetID
 	SharePercentage float64
 }
 
 type CreateInvestmentCommand struct {
-	ProjectID        uuid.UUID
-	AssetID          uuid.UUID
+	ProjectID        core.ProjectID
+	AssetID          core.AssetID
 	AssetAllocations []InvestmentAssetInput
 	ResourceType     ResourceType
 	Amount           *money.Money
@@ -29,9 +29,9 @@ type CreateInvestmentCommand struct {
 }
 
 type UpdateInvestmentCommand struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	AssetID          uuid.UUID
+	ID               core.InvestmentID
+	ProjectID        core.ProjectID
+	AssetID          core.AssetID
 	AssetAllocations []InvestmentAssetInput
 	ResourceType     ResourceType
 	Amount           *money.Money
@@ -46,12 +46,12 @@ type UpdateInvestmentCommand struct {
 }
 
 type RemoveInvestmentCommand struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID        core.InvestmentID
+	ProjectID core.ProjectID
 }
 
 type BatchCreateInvestmentItem struct {
-	AssetID        uuid.UUID
+	AssetID        core.AssetID
 	ResourceType   ResourceType
 	Amount         *money.Money
 	TimeHours      *float64
@@ -65,7 +65,7 @@ type BatchCreateInvestmentItem struct {
 }
 
 type CreateBatchInvestmentsCommand struct {
-	ProjectID   uuid.UUID
-	DefaultAsset uuid.UUID
-	Items       []BatchCreateInvestmentItem
+	ProjectID    core.ProjectID
+	DefaultAsset core.AssetID
+	Items        []BatchCreateInvestmentItem
 }

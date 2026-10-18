@@ -3,7 +3,7 @@ package people
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
+
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -14,7 +14,7 @@ type ServiceImpl struct {
 	hasher           core.Hasher
 }
 
-func (s *ServiceImpl) FindByID(ctx context.Context, personID uuid.UUID) (*Person, error) {
+func (s *ServiceImpl) FindByID(ctx context.Context, personID core.PersonID) (*Person, error) {
 	return s.peopleRepository.FindByID(ctx, personID)
 }
 
@@ -70,7 +70,7 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
 	}
 
-	person, err := NewPerson(uuid.Nil, command.FirstName, command.LastName, displayName, []Credentials{credentials}, RoleUser)
+	person, err := NewPerson(core.NilPersonID, command.FirstName, command.LastName, displayName, []Credentials{credentials}, RoleUser)
 
 	if err != nil {
 		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)

@@ -4,7 +4,7 @@ import (
 	"context"
 	types "database/sql"
 	"errors"
-	"github.com/google/uuid"
+
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -32,7 +32,7 @@ type personRecord struct {
 }
 
 func (r *personRecord) toPerson(roles []people.Role, credentials []people.Credentials) (*people.Person, error) {
-	pID, err := uuid.Parse(r.id)
+	pID, err := core.ParsePersonID(r.id)
 	if err != nil {
 		return nil, exceptions.NewInternalException("invalid person id", err)
 	}
@@ -79,7 +79,7 @@ func (r *PgPeopleRepository) FindCredentials(
 	ctx context.Context,
 	provider people.IdentityProvider,
 	registrationID string,
-) (uuid.UUID, string, error) {
+) (core.PersonID, string, error) {
 	var personID string
 	var identity string
 
@@ -96,21 +96,20 @@ func (r *PgPeopleRepository) FindCredentials(
 		&identity)
 
 	if err != nil {
-		return uuid.Nil, "", exceptions.NewNotFoundException("credentials not found", err)
+		return core.NilPersonID, "", exceptions.NewNotFoundException("credentials not found", err)
 	}
 
-	personUUID, err := uuid.Parse(personID)
-
+	personTyped, err := core.ParsePersonID(personID)
 	if err != nil {
-		return uuid.Nil, "", exceptions.NewInternalException("failed to fetch person id", err)
+		return core.NilPersonID, "", exceptions.NewInternalException("failed to fetch person id", err)
 	}
 
-	return personUUID, identity, nil
+	return personTyped, identity, nil
 }
 
 func (r *PgPeopleRepository) saveCredentials(
 	ctx context.Context,
-	personID uuid.UUID,
+	personID core.PersonID,
 	credentials []people.Credentials,
 ) error {
 	if len(credentials) == 0 {
@@ -135,7 +134,7 @@ func (r *PgPeopleRepository) saveCredentials(
 	return nil
 }
 
-func (r *PgPeopleRepository) fetchRoles(ctx context.Context, personID uuid.UUID) ([]people.Role, error) {
+func (r *PgPeopleRepository) fetchRoles(ctx context.Context, personID core.PersonID) ([]people.Role, error) {
 	rows, err := r.db.Query(ctx, `SELECT role FROM person_roles WHERE person_id = $1`, personID.String())
 	if err != nil {
 		return nil, err
@@ -155,7 +154,7 @@ func (r *PgPeopleRepository) fetchRoles(ctx context.Context, personID uuid.UUID)
 	return roles, nil
 }
 
-func (r *PgPeopleRepository) fetchCredentials(ctx context.Context, personID uuid.UUID) ([]people.Credentials, error) {
+func (r *PgPeopleRepository) fetchCredentials(ctx context.Context, personID core.PersonID) ([]people.Credentials, error) {
 	rows, err := r.db.Query(ctx, `SELECT provider, identity, registration_id FROM credentials WHERE person_id = $1`, personID.String())
 	if err != nil {
 		return nil, err
@@ -176,7 +175,7 @@ func (r *PgPeopleRepository) fetchCredentials(ctx context.Context, personID uuid
 	return creds, nil
 }
 
-func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error) {
+func (r *PgPeopleRepository) FindByID(ctx context.Context, personID core.PersonID) (*people.Person, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("people")
 	qb.Select("first_name", "last_name", "display_name")
@@ -215,7 +214,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID uuid.UUID) (
 	return rec.toPerson(roles, creds)
 }
 
-func (r *PgPeopleRepository) saveRoles(ctx context.Context, personID uuid.UUID, roles []people.Role) error {
+func (r *PgPeopleRepository) saveRoles(ctx context.Context, personID core.PersonID, roles []people.Role) error {
 	if _, err := r.db.Exec(ctx, `DELETE FROM person_roles WHERE person_id = $1`, personID.String()); err != nil {
 		return err
 	}
@@ -264,7 +263,7 @@ func (r *PgPeopleRepository) FindAll(ctx context.Context, pagination core.Pagina
 			return nil, 0, exceptions.NewInternalException("failed to scan person", err)
 		}
 		rec.id = personID
-		pID, err := uuid.Parse(personID)
+		pID, err := core.ParsePersonID(personID)
 		if err != nil {
 			return nil, 0, exceptions.NewInternalException("invalid person id", err)
 		}
@@ -285,7 +284,7 @@ func (r *PgPeopleRepository) FindAll(ctx context.Context, pagination core.Pagina
 	return list, total, nil
 }
 
-func (r *PgPeopleRepository) DeletePerson(ctx context.Context, personID uuid.UUID) error {
+func (r *PgPeopleRepository) DeletePerson(ctx context.Context, personID core.PersonID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM people WHERE person_id = $1`, personID.String())
 	return err
 }

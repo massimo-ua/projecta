@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 var ErrFailedToSaveAsset = errors.New("failed to save asset")
@@ -103,7 +103,7 @@ func (r *PgAssetRepository) Remove(ctx context.Context, asset *asset.Asset) erro
 	return nil
 }
 
-func (r *PgAssetRepository) AddChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID, sharePercentage float64) error {
+func (r *PgAssetRepository) AddChild(ctx context.Context, parentID core.AssetID, childID core.AssetID, sharePercentage float64) error {
 	sql := `
 		INSERT INTO projecta_asset_compositions (parent_asset_id, child_asset_id, share_percentage)
 		VALUES ($1, $2, $3)
@@ -113,13 +113,13 @@ func (r *PgAssetRepository) AddChild(ctx context.Context, parentID uuid.UUID, ch
 	return err
 }
 
-func (r *PgAssetRepository) RemoveChild(ctx context.Context, parentID uuid.UUID, childID uuid.UUID) error {
+func (r *PgAssetRepository) RemoveChild(ctx context.Context, parentID core.AssetID, childID core.AssetID) error {
 	sql := `DELETE FROM projecta_asset_compositions WHERE parent_asset_id = $1 AND child_asset_id = $2`
 	_, err := r.db.Exec(ctx, sql, parentID.String(), childID.String())
 	return err
 }
 
-func (r *PgAssetRepository) FindChildren(ctx context.Context, parentID uuid.UUID) ([]asset.ChildAssetLink, error) {
+func (r *PgAssetRepository) FindChildren(ctx context.Context, parentID core.AssetID) ([]asset.ChildAssetLink, error) {
 	sql := `
 		SELECT c.child_asset_id, a.name, c.share_percentage
 		FROM projecta_asset_compositions c
@@ -143,7 +143,7 @@ func (r *PgAssetRepository) FindChildren(ctx context.Context, parentID uuid.UUID
 			return nil, err
 		}
 		links = append(links, asset.ChildAssetLink{
-			ChildID:         uuid.MustParse(cid),
+			ChildID:         core.MustParseAssetID(cid),
 			ChildName:       cname,
 			SharePercentage: share,
 		})
@@ -151,7 +151,7 @@ func (r *PgAssetRepository) FindChildren(ctx context.Context, parentID uuid.UUID
 	return links, nil
 }
 
-func (r *PgAssetRepository) FindParents(ctx context.Context, childID uuid.UUID) ([]asset.ParentAssetLink, error) {
+func (r *PgAssetRepository) FindParents(ctx context.Context, childID core.AssetID) ([]asset.ParentAssetLink, error) {
 	sql := `
 		SELECT c.parent_asset_id, a.name, c.share_percentage
 		FROM projecta_asset_compositions c
@@ -175,7 +175,7 @@ func (r *PgAssetRepository) FindParents(ctx context.Context, childID uuid.UUID) 
 			return nil, err
 		}
 		links = append(links, asset.ParentAssetLink{
-			ParentID:        uuid.MustParse(pid),
+			ParentID:        core.MustParseAssetID(pid),
 			ParentName:      pname,
 			SharePercentage: share,
 		})
@@ -183,7 +183,7 @@ func (r *PgAssetRepository) FindParents(ctx context.Context, childID uuid.UUID) 
 	return links, nil
 }
 
-func (r *PgAssetRepository) FindAncestors(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
+func (r *PgAssetRepository) FindAncestors(ctx context.Context, assetID core.AssetID) ([]core.AssetID, error) {
 	sql := `
 		WITH RECURSIVE ancestors AS (
 			SELECT parent_asset_id FROM projecta_asset_compositions WHERE child_asset_id = $1
@@ -199,11 +199,11 @@ func (r *PgAssetRepository) FindAncestors(ctx context.Context, assetID uuid.UUID
 	}
 	defer rows.Close()
 
-	var ancestors []uuid.UUID
+	var ancestors []core.AssetID
 	for rows.Next() {
 		var pid string
 		if err := rows.Scan(&pid); err == nil {
-			ancestors = append(ancestors, uuid.MustParse(pid))
+			ancestors = append(ancestors, core.MustParseAssetID(pid))
 		}
 	}
 	return ancestors, nil
@@ -217,11 +217,11 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 
 	qb.Where(qb.Equal("projecta_assets.asset_id", filter.ID.String()))
 
-	if filter.ProjectID != uuid.Nil {
+	if !filter.ProjectID.IsNil() {
 		qb.Where(qb.Equal("projecta_assets.project_id", filter.ProjectID.String()))
 	}
 
-	if filter.OwnerID != uuid.Nil {
+	if !filter.OwnerID.IsNil() {
 		qb.Where(fmt.Sprintf("(projecta_assets.owner_id = %s OR projecta_assets.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
 	}
 
@@ -301,11 +301,11 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_assets")
 
-	if filter.OwnerID != uuid.Nil {
+	if !filter.OwnerID.IsNil() {
 		qb.Where(fmt.Sprintf("(projecta_assets.owner_id = %s OR projecta_assets.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
 	}
 
-	if filter.ProjectID != uuid.Nil {
+	if !filter.ProjectID.IsNil() {
 		qb.Where(qb.Equal("projecta_assets.project_id", filter.ProjectID.String()))
 	}
 
@@ -410,7 +410,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	return collection, nil
 }
 
-func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, assets []*asset.Asset, projectID uuid.UUID) {
+func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, assets []*asset.Asset, projectID core.ProjectID) {
 	if len(assets) == 0 {
 		return
 	}
@@ -425,13 +425,13 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 		assetIDs[i] = a.ID().String()
 	}
 
-	directCosts := make(map[uuid.UUID]*money.Money)
+	directCosts := make(map[core.AssetID]*money.Money)
 	var defaultCurr string = "UAH"
 
 	// 1. Direct costs
 	var dcSql string
 	var dcArgs []any
-	if projectID != uuid.Nil {
+	if !projectID.IsNil() {
 		dcSql = `
 			SELECT ia.asset_id,
 			       COALESCE(SUM(ROUND(inv.amount * ia.share_percentage / 100.0)), 0)::bigint,
@@ -463,7 +463,7 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 				curr   string
 			)
 			if err := rows.Scan(&aid, &amount, &curr); err == nil {
-				if parsedID, err := uuid.Parse(aid); err == nil {
+				if parsedID, err := core.ParseAssetID(aid); err == nil {
 					directCosts[parsedID] = money.New(amount, curr)
 				}
 			}
@@ -474,7 +474,7 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 	// 2. Compositions
 	var compSql string
 	var compArgs []any
-	if projectID != uuid.Nil {
+	if !projectID.IsNil() {
 		compSql = `
 			SELECT c.parent_asset_id, c.child_asset_id, c.share_percentage
 			FROM projecta_asset_compositions c
@@ -499,10 +499,10 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 				share    float64
 			)
 			if err := rows.Scan(&parentID, &childID, &share); err == nil {
-				cUUID, err1 := uuid.Parse(childID)
-				pUUID, err2 := uuid.Parse(parentID)
+				cID, err1 := core.ParseAssetID(childID)
+				pID, err2 := core.ParseAssetID(parentID)
 				if err1 == nil && err2 == nil {
-					_ = hierarchy.AddEdge(pUUID, cUUID, share)
+					_ = hierarchy.AddEdge(pID, cID, share)
 				}
 			}
 		}
@@ -549,7 +549,7 @@ func toAssetFromPg(
 	tags []string,
 ) (*asset.Asset, error) {
 	owner := asset.OwnerRef{
-		PersonID:    uuid.MustParse(ownerID),
+		PersonID:    core.MustParsePersonID(ownerID),
 		DisplayName: ownerDisplayName,
 	}
 
@@ -559,10 +559,10 @@ func toAssetFromPg(
 	}
 
 	return asset.ReconstituteAsset(
-		uuid.MustParse(assetID),
+		core.MustParseAssetID(assetID),
 		name,
 		description,
-		uuid.MustParse(projectID),
+		core.MustParseProjectID(projectID),
 		targetPriceMoney,
 		acquiredAt,
 		owner,

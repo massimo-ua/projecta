@@ -287,7 +287,7 @@ func TestPgDbConnectionAndRepo(t *testing.T) {
 func TestPgPeopleRepository(t *testing.T) {
 	dbConn := &PgDbConnection{}
 	repo := NewPgPeopleRepository(dbConn)
-	pID := uuid.New()
+	pID := core.NewPersonID()
 	cred, _ := people.NewCredentials("LOCAL", "john@example.com", "secret")
 	person, _ := people.NewPerson(pID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -300,7 +300,7 @@ func TestPgPeopleRepository(t *testing.T) {
 			t.Errorf("unexpected Save error: %v", err)
 		}
 
-		personNoCreds, _ := people.NewPerson(uuid.New(), "Jane", "Doe", "J.D.", nil, people.RoleUser)
+		personNoCreds, _ := people.NewPerson(core.NewPersonID(), "Jane", "Doe", "J.D.", nil, people.RoleUser)
 		if err := repo.Save(ctx, personNoCreds); err != nil {
 			t.Errorf("unexpected Save without credentials error: %v", err)
 		}
@@ -430,8 +430,8 @@ func TestPgProjectRepository(t *testing.T) {
 	dbConn := &PgDbConnection{}
 	repo := NewPgProjectRepository(dbConn)
 
-	pID := uuid.New()
-	ownerID := uuid.New()
+	pID := core.NewProjectID()
+	ownerID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "John Doe"}
 	now := time.Now()
 	proj, _ := project.NewProject(pID, "Project A", "Desc", owner, now, now)
@@ -451,7 +451,7 @@ func TestPgProjectRepository(t *testing.T) {
 		}
 
 		// Shared project (different requester)
-		sharedPersonID := uuid.New()
+		sharedPersonID := core.NewPersonID()
 		sharedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, sharedPersonID)
 		ctxShared := withMockDb(sharedCtx, mockDb)
 		pShared, err := repo.FindOne(ctxShared, project.ProjectFilter{ProjectID: pID, RequesterID: sharedPersonID})
@@ -640,9 +640,9 @@ func TestPgAssetRepository(t *testing.T) {
 	projRepo := NewPgProjectRepository(dbConn)
 	astRepo := NewPgAssetRepository(dbConn)
 
-	pID := uuid.New()
-	astID := uuid.New()
-	ownerID := uuid.New()
+	pID := core.NewProjectID()
+	astID := core.NewAssetID()
+	ownerID := core.NewPersonID()
 	now := time.Now()
 
 	ownerRef := asset.OwnerRef{PersonID: ownerID, DisplayName: "John"}
@@ -814,8 +814,8 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 	peopleRepo := NewPgPeopleRepository(dbConn)
 	invRepo := NewPgInvitationRepository(dbConn)
 
-	pID := uuid.New()
-	adminID := uuid.New()
+	pID := core.NewPersonID()
+	adminID := core.NewPersonID()
 	invID := uuid.New()
 	now := time.Now()
 	codeHash := "sha256_hash_value_123"
@@ -925,10 +925,10 @@ func TestPgInvestmentRepository(t *testing.T) {
 	dbConn := &PgDbConnection{}
 	repo := NewPgInvestmentRepository(dbConn)
 
-	pID := uuid.New()
-	astID := uuid.New()
-	ownerID := uuid.New()
-	invID := uuid.New()
+	pID := core.NewProjectID()
+	astID := core.NewAssetID()
+	ownerID := core.NewPersonID()
+	invID := core.NewInvestmentID()
 	now := time.Now()
 
 	inv, err := investment.NewInvestment(

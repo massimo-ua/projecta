@@ -1,9 +1,9 @@
 package project
 
-import "github.com/google/uuid"
+import "gitlab.com/massimo-ua/projecta/internal/core"
 
 type Owner struct {
-	PersonID        uuid.UUID
+	PersonID        core.PersonID
 	DisplayName     string
 	FirstName       string
 	CanHaveProjects bool

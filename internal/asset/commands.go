@@ -5,12 +5,13 @@ import (
 
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 type CreateAssetCommand struct {
 	Name          string
 	Description   string
-	ProjectID     uuid.UUID
+	ProjectID     core.ProjectID
 	TypeID        uuid.UUID
 	Status        AssetStatus
 	StartDate     time.Time
@@ -23,8 +24,8 @@ type CreateAssetCommand struct {
 }
 
 type CreateAssetFromInvestmentsCommand struct {
-	ProjectID      uuid.UUID
-	InvestmentIDs  []uuid.UUID
+	ProjectID      core.ProjectID
+	InvestmentIDs  []core.InvestmentID
 	Name           string
 	Description    string
 	TypeID         uuid.UUID
@@ -34,8 +35,8 @@ type CreateAssetFromInvestmentsCommand struct {
 
 // Deprecated: Use CreateAssetFromInvestmentsCommand instead.
 type CreateAssetFromPaymentsCommand struct {
-	ProjectID      uuid.UUID
-	PaymentIDs     []uuid.UUID
+	ProjectID      core.ProjectID
+	PaymentIDs     []core.InvestmentID
 	Name           string
 	Description    string
 	TypeID         uuid.UUID
@@ -44,10 +45,10 @@ type CreateAssetFromPaymentsCommand struct {
 }
 
 type UpdateAssetCommand struct {
-	AssetID       uuid.UUID
+	AssetID       core.AssetID
 	Name          string
 	Description   string
-	ProjectID     uuid.UUID
+	ProjectID     core.ProjectID
 	TypeID        uuid.UUID
 	Status        AssetStatus
 	StartDate     time.Time
@@ -59,41 +60,41 @@ type UpdateAssetCommand struct {
 }
 
 type RemoveAssetCommand struct {
-	AssetID   uuid.UUID
-	ProjectID uuid.UUID
+	AssetID   core.AssetID
+	ProjectID core.ProjectID
 }
 
 type LinkChildCommand struct {
-	ParentID        uuid.UUID
-	ChildID         uuid.UUID
-	ProjectID       uuid.UUID
+	ParentID        core.AssetID
+	ChildID         core.AssetID
+	ProjectID       core.ProjectID
 	SharePercentage float64
 }
 
 type UnlinkChildCommand struct {
-	ParentID  uuid.UUID
-	ChildID   uuid.UUID
-	ProjectID uuid.UUID
+	ParentID  core.AssetID
+	ChildID   core.AssetID
+	ProjectID core.ProjectID
 }
 
 type AssignInvestmentsCommand struct {
-	AssetID       uuid.UUID
-	ProjectID     uuid.UUID
-	InvestmentIDs []uuid.UUID
+	AssetID       core.AssetID
+	ProjectID     core.ProjectID
+	InvestmentIDs []core.InvestmentID
 }
 
 type GroupAssetsCommand struct {
-	ProjectID     uuid.UUID
+	ProjectID     core.ProjectID
 	Name          string
 	Description   string
-	ChildAssetIDs []uuid.UUID
+	ChildAssetIDs []core.AssetID
 	Tags          []string
 }
 
 type LinkChildrenCommand struct {
-	ProjectID     uuid.UUID
-	ParentID      uuid.UUID
-	ChildAssetIDs []uuid.UUID
+	ProjectID     core.ProjectID
+	ParentID      core.AssetID
+	ChildAssetIDs []core.AssetID
 }
 
 

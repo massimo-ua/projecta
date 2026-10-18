@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 )
@@ -53,17 +52,17 @@ func (m *mockInvestmentRepo) Find(ctx context.Context, filter investment.Collect
 	}
 	return investment.NewCollection(0), nil
 }
-func (m *mockInvestmentRepo) FindTags(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+func (m *mockInvestmentRepo) FindTags(ctx context.Context, projectID core.ProjectID) ([]string, error) {
 	return m.tags, nil
 }
 
 type mockAssetRepo struct {
 	asset  investment.AssetDescriptor
-	assets map[uuid.UUID]investment.AssetDescriptor
+	assets map[core.AssetID]investment.AssetDescriptor
 	err    error
 }
 
-func (m *mockAssetRepo) FindAsset(ctx context.Context, projectID uuid.UUID, assetID uuid.UUID) (investment.AssetDescriptor, error) {
+func (m *mockAssetRepo) FindAsset(ctx context.Context, projectID core.ProjectID, assetID core.AssetID) (investment.AssetDescriptor, error) {
 	if m.err != nil {
 		return investment.AssetDescriptor{}, m.err
 	}
@@ -80,7 +79,7 @@ type mockProjectRepo struct {
 	err     error
 }
 
-func (m *mockProjectRepo) FindProject(ctx context.Context, projectID uuid.UUID) (investment.ProjectDescriptor, error) {
+func (m *mockProjectRepo) FindProject(ctx context.Context, projectID core.ProjectID) (investment.ProjectDescriptor, error) {
 	if m.err != nil {
 		return investment.ProjectDescriptor{}, m.err
 	}
@@ -92,7 +91,7 @@ type mockPeopleService struct {
 	err   error
 }
 
-func (m *mockPeopleService) FindContributor(ctx context.Context, id uuid.UUID) (investment.ContributorRef, error) {
+func (m *mockPeopleService) FindContributor(ctx context.Context, id core.PersonID) (investment.ContributorRef, error) {
 	if m.err != nil {
 		return investment.ContributorRef{}, m.err
 	}
@@ -100,12 +99,12 @@ func (m *mockPeopleService) FindContributor(ctx context.Context, id uuid.UUID) (
 }
 
 func TestInvestmentService(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, personID)
 
 	owner := investment.ContributorRef{PersonID: personID, DisplayName: "Alex"}
-	project := investment.ProjectDescriptor{ID: uuid.New(), MainCurrency: "UAH"}
-	existingAsset := investment.AssetDescriptor{ID: uuid.New(), Name: "Vehicle"}
+	project := investment.ProjectDescriptor{ID: core.NewProjectID(), MainCurrency: "UAH"}
+	existingAsset := investment.AssetDescriptor{ID: core.NewAssetID(), Name: "Vehicle"}
 
 	t.Run("Create success (Money, Time, Goods)", func(t *testing.T) {
 		db := &mockDb{}
@@ -272,7 +271,7 @@ func TestInvestmentService(t *testing.T) {
 
 	t.Run("Update and Remove", func(t *testing.T) {
 		inv, err := investment.NewInvestment(
-			uuid.New(),
+			core.NewInvestmentID(),
 			project.ID,
 			"USD",
 			existingAsset.ID,
@@ -349,8 +348,8 @@ func TestInvestmentService(t *testing.T) {
 	})
 
 	t.Run("MultiAssetInvestment", func(t *testing.T) {
-		asset2 := investment.AssetDescriptor{ID: uuid.New(), Name: "Second Asset"}
-		assetsMap := map[uuid.UUID]investment.AssetDescriptor{
+		asset2 := investment.AssetDescriptor{ID: core.NewAssetID(), Name: "Second Asset"}
+		assetsMap := map[core.AssetID]investment.AssetDescriptor{
 			existingAsset.ID: existingAsset,
 			asset2.ID:        asset2,
 		}
@@ -439,6 +438,7 @@ func TestInvestmentService(t *testing.T) {
 				t.Fatal("expected error for zero share, got nil")
 			}
 		})
+
 		t.Run("defaults to 100% share for single asset investment without user defining share", func(t *testing.T) {
 			inv, err := svc.Create(authedCtx, investment.CreateInvestmentCommand{
 				ProjectID:    project.ID,

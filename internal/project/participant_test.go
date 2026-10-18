@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
@@ -67,12 +67,12 @@ func TestParticipantValueObject(t *testing.T) {
 }
 
 func TestProjectParticipants(t *testing.T) {
-	ownerID := uuid.New()
+	ownerID := core.NewPersonID()
 	owner := &project.Owner{PersonID: ownerID, DisplayName: "Owner User"}
 	now := time.Now()
 
 	t.Run("new project initializes participants with owner", func(t *testing.T) {
-		proj, err := project.NewProject(uuid.New(), "Project With Owner", "Desc", owner, now, now)
+		proj, err := project.NewProject(core.NewProjectID(), "Project With Owner", "Desc", owner, now, now)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -86,7 +86,7 @@ func TestProjectParticipants(t *testing.T) {
 	})
 
 	t.Run("new project without owner or empty display name", func(t *testing.T) {
-		proj, err := project.NewProject(uuid.New(), "Project No Owner", "Desc", nil, now, now)
+		proj, err := project.NewProject(core.NewProjectID(), "Project No Owner", "Desc", nil, now, now)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -95,7 +95,7 @@ func TestProjectParticipants(t *testing.T) {
 		}
 
 		emptyOwner := &project.Owner{PersonID: ownerID, DisplayName: ""}
-		proj2, err := project.NewProject(uuid.New(), "Project Empty Owner", "Desc", emptyOwner, now, now)
+		proj2, err := project.NewProject(core.NewProjectID(), "Project Empty Owner", "Desc", emptyOwner, now, now)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -105,7 +105,7 @@ func TestProjectParticipants(t *testing.T) {
 	})
 
 	t.Run("add participant and prevent duplicates", func(t *testing.T) {
-		proj, err := project.NewProject(uuid.New(), "Project Multi", "Desc", owner, now, now)
+		proj, err := project.NewProject(core.NewProjectID(), "Project Multi", "Desc", owner, now, now)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

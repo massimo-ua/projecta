@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
@@ -19,11 +19,11 @@ func (t ExistingTransaction) Fingerprint() string {
 }
 
 type ExistingTransactionFinder interface {
-	FindExisting(ctx context.Context, projectID uuid.UUID) ([]ExistingTransaction, error)
+	FindExisting(ctx context.Context, projectID core.ProjectID) ([]ExistingTransaction, error)
 }
 
 type ProjectValidator interface {
-	ValidateProject(ctx context.Context, projectID uuid.UUID) error
+	ValidateProject(ctx context.Context, projectID core.ProjectID) error
 }
 
 type StatementParseItem struct {
@@ -43,7 +43,7 @@ type StatementParseResult struct {
 }
 
 type Service interface {
-	ParseStatement(ctx context.Context, projectID uuid.UUID, fileData []byte) (*StatementParseResult, error)
+	ParseStatement(ctx context.Context, projectID core.ProjectID, fileData []byte) (*StatementParseResult, error)
 }
 
 type ServiceImpl struct {
@@ -64,8 +64,8 @@ func NewService(projects ProjectValidator, finder ExistingTransactionFinder, par
 	}
 }
 
-func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID uuid.UUID, fileData []byte) (*StatementParseResult, error) {
-	if projectID == uuid.Nil {
+func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.ProjectID, fileData []byte) (*StatementParseResult, error) {
+	if projectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 

@@ -236,7 +236,6 @@ type AssignInvestmentsDTO struct {
 	InvestmentIDs []string `json:"investment_ids"`
 }
 
-
 type ListAssetsResponse struct {
 	Assets []AssetDTO `json:"assets"`
 	PaginationDTO
@@ -249,7 +248,7 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -351,7 +350,7 @@ func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (i
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -370,9 +369,9 @@ func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (i
 		return nil, exceptions.NewValidationException("at least one payment must be selected", nil)
 	}
 
-	var paymentUUIDs []uuid.UUID
+	var paymentUUIDs []core.InvestmentID
 	for _, pid := range req.PaymentIDs {
-		pUUID, err := uuid.Parse(pid)
+		pUUID, err := core.ParseInvestmentID(pid)
 		if err != nil {
 			return nil, exceptions.NewValidationException("invalid payment id in list", err)
 		}
@@ -417,7 +416,7 @@ func decodeGetAssetRequest(_ context.Context, r *http.Request) (interface{}, err
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -427,7 +426,7 @@ func decodeGetAssetRequest(_ context.Context, r *http.Request) (interface{}, err
 		return nil, exceptions.NewValidationException("invalid asset id", nil)
 	}
 
-	assetUUID, err := uuid.Parse(assetID)
+	assetUUID, err := core.ParseAssetID(assetID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid asset id", err)
 	}
@@ -445,7 +444,7 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -455,7 +454,7 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		return nil, exceptions.NewValidationException("invalid asset id", nil)
 	}
 
-	assetUUID, err := uuid.Parse(assetID)
+	assetUUID, err := core.ParseAssetID(assetID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid asset id", err)
 	}
@@ -554,7 +553,7 @@ func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, e
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
 
-	projectUUID, err := uuid.Parse(projectID)
+	projectUUID, err := core.ParseProjectID(projectID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -608,7 +607,7 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -617,7 +616,7 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid asset id", nil)
 	}
-	parentID, err := uuid.Parse(assetIDStr)
+	parentID, err := core.ParseAssetID(assetIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid asset id", err)
 	}
@@ -627,7 +626,7 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
-	childID, err := uuid.Parse(req.ChildAssetID)
+	childID, err := core.ParseAssetID(req.ChildAssetID)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid child asset id", err)
 	}
@@ -651,7 +650,7 @@ func decodeUnlinkChildAssetRequest(_ context.Context, r *http.Request) (interfac
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -660,7 +659,7 @@ func decodeUnlinkChildAssetRequest(_ context.Context, r *http.Request) (interfac
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid parent asset id", nil)
 	}
-	parentID, err := uuid.Parse(parentIDStr)
+	parentID, err := core.ParseAssetID(parentIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid parent asset id", err)
 	}
@@ -669,7 +668,7 @@ func decodeUnlinkChildAssetRequest(_ context.Context, r *http.Request) (interfac
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid child asset id", nil)
 	}
-	childID, err := uuid.Parse(childIDStr)
+	childID, err := core.ParseAssetID(childIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid child asset id", err)
 	}
@@ -729,7 +728,7 @@ func makeRemoveAssetEndpoint(svc asset.Service) endpoint.Endpoint {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
 		err := svc.Remove(ctx, asset.RemoveAssetCommand{
-			AssetID:   command.ResourceID,
+			AssetID:   core.AssetID(command.ResourceID),
 			ProjectID: command.ProjectID,
 		})
 		return nil, err
@@ -780,7 +779,7 @@ func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interfa
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -789,7 +788,7 @@ func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interfa
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid asset id", nil)
 	}
-	assetID, err := uuid.Parse(assetIDStr)
+	assetID, err := core.ParseAssetID(assetIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid asset id", err)
 	}
@@ -803,9 +802,9 @@ func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interfa
 		return nil, exceptions.NewValidationException("at least one investment must be selected", nil)
 	}
 
-	invUUIDs := make([]uuid.UUID, 0, len(req.InvestmentIDs))
+	invUUIDs := make([]core.InvestmentID, 0, len(req.InvestmentIDs))
 	for _, idStr := range req.InvestmentIDs {
-		u, err := uuid.Parse(idStr)
+		u, err := core.ParseInvestmentID(idStr)
 		if err != nil {
 			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid investment id: %s", idStr), err)
 		}
@@ -839,7 +838,7 @@ func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, 
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -856,9 +855,9 @@ func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, 
 		return nil, exceptions.NewValidationException("at least one asset must be selected to group", nil)
 	}
 
-	childUUIDs := make([]uuid.UUID, 0, len(req.ChildAssetIDs))
+	childUUIDs := make([]core.AssetID, 0, len(req.ChildAssetIDs))
 	for _, idStr := range req.ChildAssetIDs {
-		u, err := uuid.Parse(idStr)
+		u, err := core.ParseAssetID(idStr)
 		if err != nil {
 			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid child asset id: %s", idStr), err)
 		}
@@ -895,7 +894,7 @@ func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{},
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -904,7 +903,7 @@ func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{},
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid asset id", nil)
 	}
-	parentID, err := uuid.Parse(assetIDStr)
+	parentID, err := core.ParseAssetID(assetIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid asset id", err)
 	}
@@ -918,9 +917,9 @@ func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{},
 		return nil, exceptions.NewValidationException("child asset ids are required", nil)
 	}
 
-	childUUIDs := make([]uuid.UUID, 0, len(req.ChildAssetIDs))
+	childUUIDs := make([]core.AssetID, 0, len(req.ChildAssetIDs))
 	for _, idStr := range req.ChildAssetIDs {
-		u, err := uuid.Parse(idStr)
+		u, err := core.ParseAssetID(idStr)
 		if err != nil {
 			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid child asset id: %s", idStr), err)
 		}
@@ -940,5 +939,3 @@ func makeLinkChildrenEndpoint(s asset.Service) endpoint.Endpoint {
 		return nil, s.LinkChildren(ctx, cmd)
 	}
 }
-
-

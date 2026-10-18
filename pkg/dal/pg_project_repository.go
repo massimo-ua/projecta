@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 )
@@ -46,11 +47,11 @@ func (r *projectRecord) scanFields() []any {
 }
 
 func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Participant) (*project.Project, error) {
-	pID, err := uuid.Parse(r.projectID)
+	pID, err := core.ParseProjectID(r.projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project id: %w", err)
 	}
-	oID, err := uuid.Parse(r.ownerID)
+	oID, err := core.ParsePersonID(r.ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid owner id: %w", err)
 	}
@@ -132,7 +133,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 	)
 	qb.Join("people", "people.person_id = projecta_projects.owner_id")
 
-	if filter.ProjectID != uuid.Nil {
+	if !filter.ProjectID.IsNil() {
 		qb.Where(qb.Equal("projecta_projects.project_id", filter.ProjectID.String()))
 	}
 
@@ -140,7 +141,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		qb.Where(qb.Equal("name", filter.Name))
 	}
 
-	if filter.RequesterID != uuid.Nil {
+	if !filter.RequesterID.IsNil() {
 		qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.RequesterID.String()), qb.Var(filter.RequesterID.String())))
 	}
 
@@ -155,7 +156,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		return nil, err
 	}
 
-	pID, err := uuid.Parse(rec.projectID)
+	pID, err := core.ParseProjectID(rec.projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +166,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		return nil, err
 	}
 
-	isShared := (filter.RequesterID != uuid.Nil && rec.ownerID != filter.RequesterID.String())
+	isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
 	return rec.toProject(isShared, sharedParts)
 }
 
@@ -202,7 +203,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		return nil, err
 	}
 
-	pID, err := uuid.Parse(rec.projectID)
+	pID, err := core.ParseProjectID(rec.projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +216,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 	return rec.toProject(false, sharedParts)
 }
 
-func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID uuid.UUID) ([]project.Participant, error) {
+func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID core.ProjectID) ([]project.Participant, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_project_shares")
 	qb.Select(
@@ -263,7 +264,7 @@ func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID u
 	return participants, rows.Err()
 }
 
-func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID uuid.UUID, personID uuid.UUID) error {
+func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID core.ProjectID, personID core.PersonID) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_project_shares")
 	qb.Cols("share_id", "project_id", "person_id")
@@ -373,7 +374,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 		qb.Where(qb.Like("name", filter.Name))
 	}
 
-	if filter.RequesterID != uuid.Nil {
+	if !filter.RequesterID.IsNil() {
 		qb.Where(fmt.Sprintf("(projecta_projects.owner_id = %s OR projecta_projects.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.RequesterID.String()), qb.Var(filter.RequesterID.String())))
 	}
 
@@ -399,7 +400,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 			return nil, err
 		}
 
-		isShared := (filter.RequesterID != uuid.Nil && rec.ownerID != filter.RequesterID.String())
+		isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
 		p, err := rec.toProject(isShared, nil)
 		if err != nil {
 			return nil, err

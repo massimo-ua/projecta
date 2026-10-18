@@ -5,27 +5,27 @@ import (
 	"time"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
 func makeTestAsset(name string) *asset.Asset {
-	id := uuid.New()
-	owner := asset.OwnerRef{PersonID: uuid.New(), DisplayName: "User"}
-	projectID := uuid.New()
+	id := core.NewAssetID()
+	owner := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "User"}
+	projectID := core.NewProjectID()
 	ast, _ := asset.CreateAsset(id, name, "", projectID, money.New(100, "UAH"), time.Now(), owner, asset.AssetStatusActive, nil, nil)
 	return ast
 }
 
 func TestHierarchy_SelfReferenceAndInvalidShare(t *testing.T) {
 	h := asset.NewAssetHierarchy()
-	id := uuid.New()
+	id := core.NewAssetID()
 
 	if err := h.AddEdge(id, id, 100.0); err != asset.ErrSelfReference {
 		t.Fatalf("expected ErrSelfReference, got %v", err)
 	}
 
-	otherID := uuid.New()
+	otherID := core.NewAssetID()
 	if err := h.AddEdge(id, otherID, 0.0); err != asset.ErrInvalidShare {
 		t.Fatalf("expected ErrInvalidShare for 0, got %v", err)
 	}
@@ -76,7 +76,7 @@ func TestHierarchy_CalculateRollupsAndApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	directCosts := map[uuid.UUID]*money.Money{
+	directCosts := map[core.AssetID]*money.Money{
 		c.ID(): money.New(1000, "UAH"),
 		b.ID(): money.New(200, "UAH"),
 		a.ID(): money.New(300, "UAH"),

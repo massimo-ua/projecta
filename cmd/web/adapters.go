@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/Rhymond/go-money"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -41,14 +40,14 @@ func (a *currencyConverterAdapter) ConvertMoney(amount *money.Money, targetCurre
 }
 
 type personReader interface {
-	FindByID(ctx context.Context, personID uuid.UUID) (*people.Person, error)
+	FindByID(ctx context.Context, personID core.PersonID) (*people.Person, error)
 }
 
 type projectPeopleAdapter struct {
 	repo personReader
 }
 
-func (a *projectPeopleAdapter) FindOwner(ctx context.Context, personID uuid.UUID) (*project.Owner, error) {
+func (a *projectPeopleAdapter) FindOwner(ctx context.Context, personID core.PersonID) (*project.Owner, error) {
 	person, err := a.repo.FindByID(ctx, personID)
 	if err != nil {
 		return nil, err
@@ -65,7 +64,7 @@ type assetProjectReaderAdapter struct {
 	projects project.ProjectRepository
 }
 
-func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID uuid.UUID) (asset.ProjectDescriptor, error) {
+func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (asset.ProjectDescriptor, error) {
 	filter := project.ProjectFilter{ProjectID: projectID}
 	if personID, err := core.AuthGuard(ctx); err == nil {
 		filter.RequesterID = personID
@@ -84,7 +83,7 @@ type assetOwnerReaderAdapter struct {
 	people project.PeopleService
 }
 
-func (a *assetOwnerReaderAdapter) FindOwner(ctx context.Context, personID uuid.UUID) (asset.OwnerRef, error) {
+func (a *assetOwnerReaderAdapter) FindOwner(ctx context.Context, personID core.PersonID) (asset.OwnerRef, error) {
 	owner, err := a.people.FindOwner(ctx, personID)
 	if err != nil {
 		return asset.OwnerRef{}, err
@@ -99,7 +98,7 @@ type investmentAssetReaderAdapter struct {
 	assets asset.Repository
 }
 
-func (a *investmentAssetReaderAdapter) FindAsset(ctx context.Context, projectID uuid.UUID, assetID uuid.UUID) (investment.AssetDescriptor, error) {
+func (a *investmentAssetReaderAdapter) FindAsset(ctx context.Context, projectID core.ProjectID, assetID core.AssetID) (investment.AssetDescriptor, error) {
 	ast, err := a.assets.FindOne(ctx, asset.Filter{ID: assetID, ProjectID: projectID})
 	if err != nil {
 		return investment.AssetDescriptor{}, err
@@ -114,7 +113,7 @@ type investmentProjectReaderAdapter struct {
 	projects project.ProjectRepository
 }
 
-func (a *investmentProjectReaderAdapter) FindProject(ctx context.Context, projectID uuid.UUID) (investment.ProjectDescriptor, error) {
+func (a *investmentProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (investment.ProjectDescriptor, error) {
 	filter := project.ProjectFilter{ProjectID: projectID}
 	if personID, err := core.AuthGuard(ctx); err == nil {
 		filter.RequesterID = personID
@@ -133,7 +132,7 @@ type investmentContributorReaderAdapter struct {
 	people project.PeopleService
 }
 
-func (a *investmentContributorReaderAdapter) FindContributor(ctx context.Context, personID uuid.UUID) (investment.ContributorRef, error) {
+func (a *investmentContributorReaderAdapter) FindContributor(ctx context.Context, personID core.PersonID) (investment.ContributorRef, error) {
 	owner, err := a.people.FindOwner(ctx, personID)
 	if err != nil {
 		return investment.ContributorRef{}, err
@@ -148,7 +147,7 @@ type projectValidator struct {
 	svc project.ProjectService
 }
 
-func (v *projectValidator) ValidateProject(ctx context.Context, projectID uuid.UUID) error {
+func (v *projectValidator) ValidateProject(ctx context.Context, projectID core.ProjectID) error {
 	_, err := v.svc.FindOne(ctx, project.ProjectFilter{ProjectID: projectID})
 	return err
 }
@@ -157,7 +156,7 @@ type investmentTransactionFinder struct {
 	svc investment.Service
 }
 
-func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID uuid.UUID) ([]statement.ExistingTransaction, error) {
+func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID core.ProjectID) ([]statement.ExistingTransaction, error) {
 	pageSize := 500
 	offset := 0
 	var res []statement.ExistingTransaction
@@ -192,7 +191,7 @@ type investmentSourceAdapter struct {
 	svc investment.Service
 }
 
-func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID) ([]asset.InvestmentItem, error) {
+func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID core.ProjectID, ids []core.InvestmentID) ([]asset.InvestmentItem, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -216,7 +215,7 @@ func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID
 	return items, nil
 }
 
-func (a *investmentSourceAdapter) AssignToAsset(ctx context.Context, assetID uuid.UUID, investmentIDs []uuid.UUID) error {
+func (a *investmentSourceAdapter) AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error {
 	return a.svc.AssignToAsset(ctx, assetID, investmentIDs)
 }
 
@@ -239,7 +238,7 @@ type projectTotalsCalculatorAdapter struct {
 	rateProvider currency.CurrencyRateProvider
 }
 
-func (a *projectTotalsCalculatorAdapter) CalculateTotals(ctx context.Context, projectID uuid.UUID, homeCurrency string) (project.ProjectTotals, error) {
+func (a *projectTotalsCalculatorAdapter) CalculateTotals(ctx context.Context, projectID core.ProjectID, homeCurrency string) (project.ProjectTotals, error) {
 	var invAmounts []*money.Money
 	var rootAssets []*asset.Asset
 	hasInvestments := false

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
@@ -21,8 +22,8 @@ type Invitation struct {
 	email       string
 	codeHash    string
 	expiresAt   time.Time
-	createdBy   uuid.UUID
-	personID    *uuid.UUID
+	createdBy   core.PersonID
+	personID    *core.PersonID
 	status      InvitationStatus
 	createdAt   time.Time
 	completedAt *time.Time
@@ -49,11 +50,11 @@ func (i *Invitation) ExpiresAt() time.Time {
 	return i.expiresAt
 }
 
-func (i *Invitation) CreatedBy() uuid.UUID {
+func (i *Invitation) CreatedBy() core.PersonID {
 	return i.createdBy
 }
 
-func (i *Invitation) PersonID() *uuid.UUID {
+func (i *Invitation) PersonID() *core.PersonID {
 	return i.personID
 }
 
@@ -81,18 +82,18 @@ func (i *Invitation) IsCompleted() bool {
 	return i.status == InvitationStatusCompleted
 }
 
-func (i *Invitation) ValidateForRedemption(email string) (uuid.UUID, error) {
+func (i *Invitation) ValidateForRedemption(email string) (core.PersonID, error) {
 	if i.IsExpired() {
-		return uuid.Nil, exceptions.NewValidationException("invitation has expired", nil)
+		return core.NilPersonID, exceptions.NewValidationException("invitation has expired", nil)
 	}
 	if i.IsCompleted() {
-		return uuid.Nil, exceptions.NewValidationException("invitation has already been completed", nil)
+		return core.NilPersonID, exceptions.NewValidationException("invitation has already been completed", nil)
 	}
 	if email != "" && !strings.EqualFold(email, i.email) {
-		return uuid.Nil, exceptions.NewValidationException("google account email does not match invitation email", nil)
+		return core.NilPersonID, exceptions.NewValidationException("google account email does not match invitation email", nil)
 	}
 	if i.personID == nil {
-		return uuid.Nil, exceptions.NewInternalException("invitation has no associated user record", nil)
+		return core.NilPersonID, exceptions.NewInternalException("invitation has no associated user record", nil)
 	}
 	return *i.personID, nil
 }
@@ -115,8 +116,8 @@ func NewInvitation(
 	email string,
 	codeHash string,
 	expiresAt time.Time,
-	createdBy uuid.UUID,
-	personID *uuid.UUID,
+	createdBy core.PersonID,
+	personID *core.PersonID,
 	status InvitationStatus,
 	createdAt time.Time,
 	completedAt *time.Time,
@@ -127,7 +128,7 @@ func NewInvitation(
 	if codeHash == "" {
 		return nil, errors.New("code hash is required")
 	}
-	if createdBy == uuid.Nil {
+	if createdBy.IsNil() {
 		return nil, errors.New("created by is required")
 	}
 
@@ -164,8 +165,8 @@ func ReconstituteInvitation(
 	email string,
 	codeHash string,
 	expiresAt time.Time,
-	createdBy uuid.UUID,
-	personID *uuid.UUID,
+	createdBy core.PersonID,
+	personID *core.PersonID,
 	status InvitationStatus,
 	createdAt time.Time,
 	completedAt *time.Time,

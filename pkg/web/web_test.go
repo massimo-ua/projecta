@@ -24,7 +24,7 @@ type mockPeopleService struct {
 	err  error
 }
 
-func (m *mockPeopleService) FindByID(_ context.Context, _ uuid.UUID) (*people.Person, error) {
+func (m *mockPeopleService) FindByID(_ context.Context, _ core.PersonID) (*people.Person, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -87,19 +87,19 @@ type mockInvitationService struct {
 	err         error
 }
 
-func (m *mockInvitationService) Create(_ context.Context, _ uuid.UUID, _ string) (*people.InvitationWithCode, error) {
+func (m *mockInvitationService) Create(_ context.Context, _ core.PersonID, _ string) (*people.InvitationWithCode, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.invWithCode, nil
 }
-func (m *mockInvitationService) FindAllByCreator(_ context.Context, _ uuid.UUID) ([]*people.Invitation, error) {
+func (m *mockInvitationService) FindAllByCreator(_ context.Context, _ core.PersonID) ([]*people.Invitation, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.invList, nil
 }
-func (m *mockInvitationService) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (m *mockInvitationService) Delete(_ context.Context, _ core.PersonID, _ uuid.UUID) error {
 	return m.err
 }
 func (m *mockInvitationService) FindByCode(_ context.Context, _ string) (*people.Invitation, error) {
@@ -163,13 +163,13 @@ func (m *mockProjectService) Update(_ context.Context, _ project.UpdateProjectCo
 	}
 	return m.project, nil
 }
-func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*project.Project, error) {
+func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ core.PersonID) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.project, nil
 }
-func (m *mockProjectService) GetTotals(_ context.Context, _ uuid.UUID) (project.ProjectTotals, error) {
+func (m *mockProjectService) GetTotals(_ context.Context, _ core.ProjectID) (project.ProjectTotals, error) {
 	if m.err != nil {
 		return project.ProjectTotals{}, m.err
 	}
@@ -234,11 +234,11 @@ func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenC
 }
 
 func TestWebHandlersAndEndpoints(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	owner := &project.Owner{PersonID: personID, DisplayName: "John Doe"}
 	ownerRef := asset.OwnerRef{PersonID: personID, DisplayName: "John Doe"}
-	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
-	ast, _ := asset.CreateAsset(uuid.New(), "Laptop", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef, asset.AssetStatusActive, nil, nil)
+	proj, _ := project.NewProject(core.NewProjectID(), "Project 1", "Desc", owner, time.Now(), time.Now())
+	ast, _ := asset.CreateAsset(core.NewAssetID(), "Laptop", "Desc", proj.ID(), money.New(1000, money.USD), time.Now(), ownerRef, asset.AssetStatusActive, nil, nil)
 	cred, _ := people.NewCredentials("LOCAL", "john@example.com", "secret")
 	person, _ := people.NewPerson(personID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -435,12 +435,12 @@ func TestErrorCodeToHttpStatus(t *testing.T) {
 }
 
 func TestRoleBasedAccessControl(t *testing.T) {
-	personID := uuid.New()
+	personID := core.NewPersonID()
 	cred, _ := people.NewCredentials(people.LOCAL, "admin@example.com", "pass")
 	person, _ := people.NewPerson(personID, "Admin", "User", "Admin", []people.Credentials{cred}, people.RoleAdministrator)
 
 	owner := &project.Owner{PersonID: personID, DisplayName: "Admin User", CanHaveProjects: true}
-	proj, _ := project.NewProject(uuid.New(), "Project 1", "Desc", owner, time.Now(), time.Now())
+	proj, _ := project.NewProject(core.NewProjectID(), "Project 1", "Desc", owner, time.Now(), time.Now())
 
 	peopleSvc := &mockPeopleService{user: person}
 	authSvc := &mockAuthService{}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
@@ -33,7 +34,7 @@ func ValidateCurrency(currency string) (string, error) {
 }
 
 type Project struct {
-	id           uuid.UUID
+	id           core.ProjectID
 	name         string
 	description  string
 	owner        *Owner
@@ -52,8 +53,8 @@ func (p *Project) IsOwnedBy(owner *Owner) bool {
 	return p.owner.PersonID == owner.PersonID
 }
 
-func (p *Project) IsOwnedByPerson(personID uuid.UUID) bool {
-	if p.owner == nil || personID == uuid.Nil {
+func (p *Project) IsOwnedByPerson(personID core.PersonID) bool {
+	if p.owner == nil || personID.IsNil() {
 		return false
 	}
 	return p.owner.PersonID == personID
@@ -110,9 +111,9 @@ func (p *Project) MarkShared() {
 	p.isShared = true
 }
 
-func NewProject(id uuid.UUID, name string, description string, owner *Owner, startDate time.Time, endDate time.Time, mainCurrency ...string) (*Project, error) {
-	if id == uuid.Nil {
-		id = uuid.New()
+func NewProject(id core.ProjectID, name string, description string, owner *Owner, startDate time.Time, endDate time.Time, mainCurrency ...string) (*Project, error) {
+	if id.IsNil() {
+		id = core.NewProjectID()
 	}
 
 	trimmedName := strings.TrimSpace(name)
@@ -157,7 +158,7 @@ func NewProject(id uuid.UUID, name string, description string, owner *Owner, sta
 
 // ReconstituteProject hydrates a Project entity from persistence storage without executing domain validation.
 func ReconstituteProject(
-	id uuid.UUID,
+	id core.ProjectID,
 	name string,
 	description string,
 	owner *Owner,
@@ -197,8 +198,8 @@ func ReconstituteProject(
 
 // Getters
 
-func (p *Project) ID() uuid.UUID                        { return p.id }
-func (p *Project) ProjectID() uuid.UUID                 { return p.id }
+func (p *Project) ID() core.ProjectID                   { return p.id }
+func (p *Project) ProjectID() core.ProjectID            { return p.id }
 func (p *Project) Name() string                         { return p.name }
 func (p *Project) Description() string                  { return p.description }
 func (p *Project) Owner() *Owner {
@@ -208,11 +209,11 @@ func (p *Project) Owner() *Owner {
 	cp := *p.owner
 	return &cp
 }
-func (p *Project) OwnerID() uuid.UUID {
+func (p *Project) OwnerID() core.PersonID {
 	if p.owner != nil {
 		return p.owner.PersonID
 	}
-	return uuid.Nil
+	return core.NilPersonID
 }
 func (p *Project) StartDate() time.Time                 { return p.startDate }
 func (p *Project) EndDate() time.Time                   { return p.endDate }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -48,8 +47,8 @@ func NewService(
 	}
 }
 
-func (s *ServiceImpl) resolveProjectCurrency(ctx context.Context, projectID uuid.UUID) string {
-	if s.projects != nil && projectID != uuid.Nil {
+func (s *ServiceImpl) resolveProjectCurrency(ctx context.Context, projectID core.ProjectID) string {
+	if s.projects != nil && !projectID.IsNil() {
 		if proj, err := s.projects.FindProject(ctx, projectID); err == nil && proj.MainCurrency != "" {
 			return proj.MainCurrency
 		}
@@ -103,7 +102,7 @@ func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Asset, error
 
 	if anAsset != nil {
 		projID := filter.ProjectID
-		if projID == uuid.Nil {
+		if projID.IsNil() {
 			projID = anAsset.ProjectID()
 		}
 		anAsset.EvaluateValuation(s.resolveProjectCurrency(ctx, projID), s.rateProvider)
@@ -139,7 +138,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	}
 
 	anAsset, err := CreateAsset(
-		uuid.New(),
+		core.NewAssetID(),
 		command.Name,
 		command.Description,
 		command.ProjectID,
@@ -173,7 +172,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 
 			if s.investments != nil {
 				if err = s.investments.CreateInitialInvestment(ctx, InitialInvestment{
-					ID:            uuid.New(),
+					ID:            core.NewInvestmentID(),
 					ProjectID:     command.ProjectID,
 					AssetID:       anAsset.ID(),
 					ContributorID: owner.PersonID,
@@ -210,7 +209,7 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 		return nil, exceptions.NewUnauthorizedException(failedToCreateAsset, err)
 	}
 
-	if command.ProjectID == uuid.Nil {
+	if command.ProjectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
@@ -250,7 +249,7 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 	}
 
 	anAsset, err := CreateAssetFromInvestments(
-		uuid.New(),
+		core.NewAssetID(),
 		command.Name,
 		command.Description,
 		command.ProjectID,
@@ -397,10 +396,10 @@ func (s *ServiceImpl) AssignInvestments(ctx context.Context, command AssignInves
 		return exceptions.NewUnauthorizedException("failed to assign investments to asset", err)
 	}
 
-	if command.AssetID == uuid.Nil {
+	if command.AssetID.IsNil() {
 		return exceptions.NewValidationException("asset id is required", nil)
 	}
-	if command.ProjectID == uuid.Nil {
+	if command.ProjectID.IsNil() {
 		return exceptions.NewValidationException("project id is required", nil)
 	}
 	if len(command.InvestmentIDs) == 0 {
@@ -436,7 +435,7 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 		return nil, exceptions.NewUnauthorizedException("failed to group assets", err)
 	}
 
-	if command.ProjectID == uuid.Nil {
+	if command.ProjectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
@@ -466,7 +465,7 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 		}
 	}
 
-	parentID := uuid.New()
+	parentID := core.NewAssetID()
 	parentAsset, err := CreateAssetGroup(
 		parentID,
 		command.Name,

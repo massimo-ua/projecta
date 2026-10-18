@@ -9,7 +9,6 @@ import (
 
 	"github.com/Rhymond/go-money"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -77,7 +76,7 @@ func toInvestmentDTO(inv *investment.Investment) InvestmentDTO {
 	}
 
 	var contribDTO OwnerDTO
-	if inv.Contributor().PersonID != uuid.Nil {
+	if !inv.Contributor().PersonID.IsNil() {
 		contribDTO = OwnerDTO{
 			PersonID:    inv.Contributor().PersonID.String(),
 			DisplayName: inv.Contributor().DisplayName,
@@ -86,13 +85,13 @@ func toInvestmentDTO(inv *investment.Investment) InvestmentDTO {
 
 	var assetName string
 	var assetID string
-	if inv.PrimaryAssetID() != uuid.Nil {
+	if !inv.PrimaryAssetID().IsNil() {
 		assetID = inv.PrimaryAssetID().String()
 		assetName = inv.PrimaryAssetName()
 	}
 
 	var projectID string
-	if inv.ProjectID() != uuid.Nil {
+	if !inv.ProjectID().IsNil() {
 		projectID = inv.ProjectID().String()
 	}
 
@@ -212,7 +211,7 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -222,10 +221,10 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
-	var assetID uuid.UUID
+	var assetID core.AssetID
 	if req.AssetID != "" {
 		var err error
-		assetID, err = uuid.Parse(req.AssetID)
+		assetID, err = core.ParseAssetID(req.AssetID)
 		if err != nil {
 			return nil, exceptions.NewValidationException("invalid asset id", err)
 		}
@@ -235,7 +234,7 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 
 	var assetAllocations []investment.InvestmentAssetInput
 	for _, a := range req.AssetAllocations {
-		aID, err := uuid.Parse(a.AssetID)
+		aID, err := core.ParseAssetID(a.AssetID)
 		if err != nil {
 			return nil, exceptions.NewValidationException("invalid allocation asset id", err)
 		}
@@ -291,7 +290,7 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -300,7 +299,7 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid investment id", nil)
 	}
-	invID, err := uuid.Parse(invIDStr)
+	invID, err := core.ParseInvestmentID(invIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid investment id", err)
 	}
@@ -310,14 +309,14 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
-	var assetID uuid.UUID
+	var assetID core.AssetID
 	if req.AssetID != "" {
-		assetID, _ = uuid.Parse(req.AssetID)
+		assetID, _ = core.ParseAssetID(req.AssetID)
 	}
 
 	var assetAllocations []investment.InvestmentAssetInput
 	for _, a := range req.AssetAllocations {
-		aID, err := uuid.Parse(a.AssetID)
+		aID, err := core.ParseAssetID(a.AssetID)
 		if err != nil {
 			return nil, exceptions.NewValidationException("invalid allocation asset id", err)
 		}
@@ -374,7 +373,7 @@ func decodeListInvestmentsRequest(_ context.Context, r *http.Request) (interface
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -392,9 +391,9 @@ func decodeListInvestmentsRequest(_ context.Context, r *http.Request) (interface
 		}
 	}
 
-	var assetID uuid.UUID
+	var assetID core.AssetID
 	if a := r.URL.Query().Get("asset_id"); a != "" {
-		assetID, _ = uuid.Parse(a)
+		assetID, _ = core.ParseAssetID(a)
 	}
 
 	var resType investment.ResourceType
@@ -422,7 +421,7 @@ func decodeGetInvestmentRequest(_ context.Context, r *http.Request) (interface{}
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -431,7 +430,7 @@ func decodeGetInvestmentRequest(_ context.Context, r *http.Request) (interface{}
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid investment id", nil)
 	}
-	invID, err := uuid.Parse(invIDStr)
+	invID, err := core.ParseInvestmentID(invIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid investment id", err)
 	}
@@ -448,7 +447,7 @@ func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (in
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -458,16 +457,16 @@ func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (in
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
-	var defaultAsset uuid.UUID
+	var defaultAsset core.AssetID
 	if req.DefaultAsset != "" {
-		defaultAsset, _ = uuid.Parse(req.DefaultAsset)
+		defaultAsset, _ = core.ParseAssetID(req.DefaultAsset)
 	}
 
 	var items []investment.BatchCreateInvestmentItem
 	for _, it := range req.Items {
-		var aID uuid.UUID
+		var aID core.AssetID
 		if it.AssetID != "" {
-			aID, _ = uuid.Parse(it.AssetID)
+			aID, _ = core.ParseAssetID(it.AssetID)
 		}
 
 		var date time.Time
@@ -516,7 +515,7 @@ func decodeListTagsRequest(_ context.Context, r *http.Request) (interface{}, err
 	if !ok {
 		return nil, exceptions.NewValidationException("invalid project id", nil)
 	}
-	projectID, err := uuid.Parse(projectIDStr)
+	projectID, err := core.ParseProjectID(projectIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
@@ -548,7 +547,7 @@ func makeRemoveInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
 		return nil, svc.Remove(ctx, investment.RemoveInvestmentCommand{
-			ID:        cmd.ResourceID,
+			ID:        core.InvestmentID(cmd.ResourceID),
 			ProjectID: cmd.ProjectID,
 		})
 	}
@@ -606,7 +605,7 @@ func makeCreateBatchInvestmentsEndpoint(svc investment.Service) endpoint.Endpoin
 
 func makeListTagsEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		projectID := request.(uuid.UUID)
+		projectID := request.(core.ProjectID)
 		tags, err := svc.FindTags(ctx, projectID)
 		if err != nil {
 			return nil, err
