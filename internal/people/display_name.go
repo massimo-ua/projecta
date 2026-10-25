@@ -1,9 +1,10 @@
 package people
 
 import (
-	"errors"
 	"strings"
 	"unicode/utf8"
+
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 type DisplayName struct {
@@ -13,7 +14,7 @@ type DisplayName struct {
 func NewDisplayName(value string) (DisplayName, error) {
 	trimmed := strings.TrimSpace(value)
 	if utf8.RuneCountInString(trimmed) > 255 {
-		return DisplayName{}, errors.New("display name cannot exceed 255 characters")
+		return DisplayName{}, exceptions.NewValidationException("display name cannot exceed 255 characters", nil)
 	}
 	return DisplayName{value: trimmed}, nil
 }

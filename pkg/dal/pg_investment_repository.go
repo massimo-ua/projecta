@@ -10,11 +10,12 @@ import (
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
 )
 
 var ErrFailedToSaveInvestment = errors.New("failed to save investment")
-var ErrInvestmentNotFound = errors.New("investment not found")
+var ErrInvestmentNotFound = errors.Join(exceptions.NotFoundError, errors.New("investment not found"))
 
 type PgInvestmentRepository struct {
 	db *PgRepository
@@ -202,7 +203,10 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 		return nil, err
 	}
 
-	allocsMap, _ := r.loadAllocations(ctx, []string{rec.id.String()})
+	allocsMap, err := r.loadAllocations(ctx, []string{rec.id.String()})
+	if err != nil {
+		return nil, err
+	}
 	var allocs []investment.InvestmentAssetLink
 	if allocsMap != nil {
 		allocs = allocsMap[rec.id.String()]
@@ -256,7 +260,13 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 	qb.Offset(filter.Offset)
 	qb.Limit(filter.Limit)
 
-	if filter.OrderBy != "" && filter.Order != "" {
+	validInvestmentOrderBy := map[string]bool{
+		"date":          true,
+		"amount":        true,
+		"resource_type": true,
+		"description":   true,
+	}
+	if filter.OrderBy != "" && filter.Order != "" && validInvestmentOrderBy[filter.OrderBy] {
 		qb.OrderBy(fmt.Sprintf("projecta_investments.%s %s", filter.OrderBy, filter.Order.String()))
 	} else {
 		qb.OrderBy("projecta_investments.date DESC")
@@ -282,7 +292,11 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 
 	var allocsMap map[string][]investment.InvestmentAssetLink
 	if len(invIDs) > 0 {
-		allocsMap, _ = r.loadAllocations(ctx, invIDs)
+		var err error
+		allocsMap, err = r.loadAllocations(ctx, invIDs)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	col := investment.NewCollection(total)

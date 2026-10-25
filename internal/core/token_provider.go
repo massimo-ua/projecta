@@ -6,24 +6,24 @@ import (
 )
 
 type AuthTokenPayload struct {
-	Sub         string   `json:"sub"`
-	DisplayName string   `json:"display_name"`
-	Roles       []string `json:"roles"`
-	Email       string   `json:"email,omitempty"`
-	FirstName   string   `json:"first_name,omitempty"`
-	LastName    string   `json:"last_name,omitempty"`
+	Sub         string
+	DisplayName string
+	Roles       []string
+	Email       string
+	FirstName   string
+	LastName    string
 }
 
 type AuthTokenClaims struct {
 	AuthTokenPayload
-	ID string `json:"jti"`
+	ID string
 }
 
 type AuthResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	IssuedAt     int64  `json:"issued_at"`
-	ExpiresAt    int64  `json:"expires_at"`
+	AccessToken  string
+	RefreshToken string
+	IssuedAt     int64
+	ExpiresAt    int64
 }
 
 var AuthTokenIsExpired = errors.New("auth token is expired")

@@ -121,3 +121,53 @@ func TestAssetGettersAndSetters(t *testing.T) {
 		}
 	})
 }
+
+func TestAsset_PointerImmutability(t *testing.T) {
+	now := time.Now()
+	completedAt := now.Add(24 * time.Hour)
+	ast, err := asset.CreateAsset(
+		core.NewAssetID(),
+		"Test Asset",
+		"Desc",
+		core.NewProjectID(),
+		money.New(10000, "UAH"),
+		now,
+		asset.OwnerRef{PersonID: core.NewPersonID()},
+		asset.AssetStatusCompleted,
+		&completedAt,
+		[]string{"tag1"},
+	)
+	if err != nil {
+		t.Fatalf("CreateAsset failed: %v", err)
+	}
+
+	// Mutate completed date
+	cd := ast.CompletedDate()
+	if cd == nil {
+		t.Fatalf("expected non-nil completed date")
+	}
+	*cd = cd.Add(100 * time.Hour)
+	if ast.CompletedDate().Equal(*cd) {
+		t.Errorf("CompletedDate pointer mutation leaked into asset")
+	}
+
+	// Mutate target home amount
+	tha := ast.TargetHomeAmount()
+	if tha != nil {
+		orig := *tha
+		*tha = orig + 99999
+		if *ast.TargetHomeAmount() == *tha {
+			t.Errorf("TargetHomeAmount pointer mutation leaked into asset")
+		}
+	}
+
+	// Mutate progress percentage
+	pp := ast.ProgressPercentage()
+	if pp != nil {
+		orig := *pp
+		*pp = orig + 50.0
+		if *ast.ProgressPercentage() == *pp {
+			t.Errorf("ProgressPercentage pointer mutation leaked into asset")
+		}
+	}
+}

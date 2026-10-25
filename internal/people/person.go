@@ -33,7 +33,7 @@ func (r Role) String() string {
 func ToRole(s string) (Role, error) {
 	r := Role(s)
 	if !r.IsValid() {
-		return "", fmt.Errorf("invalid role: %s", s)
+		return "", exceptions.NewValidationException(fmt.Sprintf("invalid role: %s", s), nil)
 	}
 	return r, nil
 }
@@ -126,7 +126,7 @@ func (p *Person) AssignRoles(roles []Role) error {
 	unique := make([]Role, 0, len(roles))
 	for _, r := range roles {
 		if !r.IsValid() {
-			return fmt.Errorf("invalid role: %s", r)
+			return exceptions.NewValidationException(fmt.Sprintf("invalid role: %s", r), nil)
 		}
 		if !seen[r] {
 			seen[r] = true
@@ -139,7 +139,7 @@ func (p *Person) AssignRoles(roles []Role) error {
 
 func (p *Person) AddRole(role Role) error {
 	if !role.IsValid() {
-		return fmt.Errorf("invalid role: %s", role)
+		return exceptions.NewValidationException(fmt.Sprintf("invalid role: %s", role), nil)
 	}
 	for _, r := range p.roles {
 		if r == role {
@@ -183,7 +183,13 @@ func NewPerson(personID core.PersonID, firstName string, lastName string, displa
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, exceptions.NewValidationException("failed to create person", err)
+	}
+
+	var idsCopy []Credentials
+	if identities != nil {
+		idsCopy = make([]Credentials, len(identities))
+		copy(idsCopy, identities)
 	}
 
 	p := &Person{
@@ -191,7 +197,7 @@ func NewPerson(personID core.PersonID, firstName string, lastName string, displa
 		firstName:   firstName,
 		lastName:    lastName,
 		displayName: dn,
-		identities:  identities,
+		identities:  idsCopy,
 	}
 
 	if len(roles) > 0 {
@@ -226,7 +232,7 @@ func (p *Person) UpdateProfile(firstName string, lastName string, displayName Di
 		err = errors.Join(err, errors.New("invalid person last name"))
 	}
 	if err != nil {
-		return err
+		return exceptions.NewValidationException("failed to update profile", err)
 	}
 
 	p.firstName = firstName

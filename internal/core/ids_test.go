@@ -1,8 +1,6 @@
 package core_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,20 +43,6 @@ func TestPersonID(t *testing.T) {
 		t.Errorf("MustParsePersonID failed")
 	}
 
-	// SQL driver Value and Scan
-	val, err := id.Value()
-	if err != nil || val != raw.String() {
-		t.Errorf("Value() failed: %v, %v", val, err)
-	}
-
-	var scanned core.PersonID
-	if err := scanned.Scan(raw.String()); err != nil || scanned != id {
-		t.Errorf("Scan() from string failed: %v, %v", scanned, err)
-	}
-	if err := scanned.Scan(raw[:]); err != nil || scanned != id {
-		t.Errorf("Scan() from bytes failed: %v, %v", scanned, err)
-	}
-
 	// Text marshaling
 	text, err := id.MarshalText()
 	if err != nil || string(text) != raw.String() {
@@ -67,16 +51,6 @@ func TestPersonID(t *testing.T) {
 	var unmarshaledText core.PersonID
 	if err := unmarshaledText.UnmarshalText(text); err != nil || unmarshaledText != id {
 		t.Errorf("UnmarshalText failed: %v, %v", unmarshaledText, err)
-	}
-
-	// JSON marshaling
-	data, err := json.Marshal(id)
-	if err != nil || !bytes.Contains(data, []byte(raw.String())) {
-		t.Errorf("json.Marshal failed: %s, %v", string(data), err)
-	}
-	var unmarshaledJSON core.PersonID
-	if err := json.Unmarshal(data, &unmarshaledJSON); err != nil || unmarshaledJSON != id {
-		t.Errorf("json.Unmarshal failed: %v, %v", unmarshaledJSON, err)
 	}
 }
 
@@ -104,17 +78,7 @@ func TestProjectID(t *testing.T) {
 		t.Errorf("MustParseProjectID failed")
 	}
 
-	// SQL Value & Scan
-	val, err := id.Value()
-	if err != nil || val != raw.String() {
-		t.Errorf("Value() failed")
-	}
-	var scanned core.ProjectID
-	if err := scanned.Scan(raw.String()); err != nil || scanned != id {
-		t.Errorf("Scan() failed")
-	}
-
-	// Text & JSON
+	// Text marshaling
 	text, err := id.MarshalText()
 	if err != nil || string(text) != raw.String() {
 		t.Errorf("MarshalText failed")
@@ -122,15 +86,6 @@ func TestProjectID(t *testing.T) {
 	var unmarshaledText core.ProjectID
 	if err := unmarshaledText.UnmarshalText(text); err != nil || unmarshaledText != id {
 		t.Errorf("UnmarshalText failed")
-	}
-
-	data, err := json.Marshal(id)
-	if err != nil {
-		t.Errorf("Marshal failed")
-	}
-	var unmarshaledJSON core.ProjectID
-	if err := json.Unmarshal(data, &unmarshaledJSON); err != nil || unmarshaledJSON != id {
-		t.Errorf("Unmarshal failed")
 	}
 }
 
@@ -158,17 +113,7 @@ func TestAssetID(t *testing.T) {
 		t.Errorf("MustParseAssetID failed")
 	}
 
-	// SQL Value & Scan
-	val, err := id.Value()
-	if err != nil || val != raw.String() {
-		t.Errorf("Value() failed")
-	}
-	var scanned core.AssetID
-	if err := scanned.Scan(raw.String()); err != nil || scanned != id {
-		t.Errorf("Scan() failed")
-	}
-
-	// Text & JSON
+	// Text marshaling
 	text, err := id.MarshalText()
 	if err != nil || string(text) != raw.String() {
 		t.Errorf("MarshalText failed")
@@ -176,15 +121,6 @@ func TestAssetID(t *testing.T) {
 	var unmarshaledText core.AssetID
 	if err := unmarshaledText.UnmarshalText(text); err != nil || unmarshaledText != id {
 		t.Errorf("UnmarshalText failed")
-	}
-
-	data, err := json.Marshal(id)
-	if err != nil {
-		t.Errorf("Marshal failed")
-	}
-	var unmarshaledJSON core.AssetID
-	if err := json.Unmarshal(data, &unmarshaledJSON); err != nil || unmarshaledJSON != id {
-		t.Errorf("Unmarshal failed")
 	}
 }
 
@@ -212,17 +148,7 @@ func TestInvestmentID(t *testing.T) {
 		t.Errorf("MustParseInvestmentID failed")
 	}
 
-	// SQL Value & Scan
-	val, err := id.Value()
-	if err != nil || val != raw.String() {
-		t.Errorf("Value() failed")
-	}
-	var scanned core.InvestmentID
-	if err := scanned.Scan(raw.String()); err != nil || scanned != id {
-		t.Errorf("Scan() failed")
-	}
-
-	// Text & JSON
+	// Text marshaling
 	text, err := id.MarshalText()
 	if err != nil || string(text) != raw.String() {
 		t.Errorf("MarshalText failed")
@@ -231,13 +157,39 @@ func TestInvestmentID(t *testing.T) {
 	if err := unmarshaledText.UnmarshalText(text); err != nil || unmarshaledText != id {
 		t.Errorf("UnmarshalText failed")
 	}
+}
 
-	data, err := json.Marshal(id)
-	if err != nil {
-		t.Errorf("Marshal failed")
+func TestInvitationID(t *testing.T) {
+	raw := uuid.New()
+	id := core.InvitationID(raw)
+
+	if id.String() != raw.String() || id.UUID() != raw || id.IsNil() || !core.NilInvitationID.IsNil() {
+		t.Errorf("basic InvitationID methods failed")
 	}
-	var unmarshaledJSON core.InvestmentID
-	if err := json.Unmarshal(data, &unmarshaledJSON); err != nil || unmarshaledJSON != id {
-		t.Errorf("Unmarshal failed")
+
+	newID := core.NewInvitationID()
+	if newID.IsNil() {
+		t.Errorf("expected non-nil NewInvitationID")
+	}
+
+	parsed, err := core.ParseInvitationID(raw.String())
+	if err != nil || parsed != id {
+		t.Errorf("ParseInvitationID failed")
+	}
+	if _, err := core.ParseInvitationID("invalid"); err == nil {
+		t.Errorf("expected error on invalid string")
+	}
+	if core.MustParseInvitationID(raw.String()) != id {
+		t.Errorf("MustParseInvitationID failed")
+	}
+
+	// Text marshaling
+	text, err := id.MarshalText()
+	if err != nil || string(text) != raw.String() {
+		t.Errorf("MarshalText failed")
+	}
+	var unmarshaledText core.InvitationID
+	if err := unmarshaledText.UnmarshalText(text); err != nil || unmarshaledText != id {
+		t.Errorf("UnmarshalText failed")
 	}
 }

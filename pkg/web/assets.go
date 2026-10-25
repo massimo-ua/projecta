@@ -15,7 +15,6 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 type AssetEndpoints struct {
@@ -721,16 +720,37 @@ func makeUpdateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 	}
 }
 
+func decodeRemoveAssetRequest(_ context.Context, r *http.Request) (any, error) {
+	vars := mux.Vars(r)
+	projectID, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("missing project_id", nil)
+	}
+	projectUUID, err := core.ParseProjectID(projectID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project_id", err)
+	}
+	assetID, ok := vars["asset_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("missing asset_id", nil)
+	}
+	assetUUID, err := core.ParseAssetID(assetID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid asset_id", err)
+	}
+	return asset.RemoveAssetCommand{
+		ProjectID: projectUUID,
+		AssetID:   assetUUID,
+	}, nil
+}
+
 func makeRemoveAssetEndpoint(svc asset.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command, ok := request.(project.RemoveProjectResourceCommand)
+		command, ok := request.(asset.RemoveAssetCommand)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
-		err := svc.Remove(ctx, asset.RemoveAssetCommand{
-			AssetID:   core.AssetID(command.ResourceID),
-			ProjectID: command.ProjectID,
-		})
+		err := svc.Remove(ctx, command)
 		return nil, err
 	}
 }

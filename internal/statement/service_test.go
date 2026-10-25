@@ -123,4 +123,22 @@ func TestStatementService(t *testing.T) {
 			t.Errorf("expected DOC2 not to be marked as duplicate")
 		}
 	})
+
+	t.Run("Finder error", func(t *testing.T) {
+		p := &mockParser{
+			stmt: &statement.ParsedStatement{
+				Account:  "ACC123",
+				Currency: "UAH",
+				Transactions: []statement.ParsedStatementTransaction{
+					{Date: now, DocNum: "DOC1", AmountMinor: 50000, Currency: "UAH"},
+				},
+			},
+		}
+		finder := &mockFinder{err: errors.New("db error")}
+		svc := statement.NewService(&mockProjectValidator{}, finder, p)
+		_, err := svc.ParseStatement(ctx, projID, []byte("data"))
+		if err == nil {
+			t.Errorf("expected error when finder fails")
+		}
+	})
 }

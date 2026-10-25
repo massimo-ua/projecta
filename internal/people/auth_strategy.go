@@ -3,7 +3,6 @@ package people
 import (
 	"context"
 	"errors"
-	"log"
 
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -81,15 +80,11 @@ func (s *GoogleAuthStrategy) Provider() IdentityProvider {
 func (s *GoogleAuthStrategy) Authenticate(ctx context.Context, credentials Credentials) (core.PersonID, error) {
 	claims, err := s.google.ValidateToken(credentials.Identifier())
 	if err != nil {
-		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
 		return core.NilPersonID, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
-	log.Printf("[GOOGLE AUTH] Successfully validated Google token for Sub ID: %s (DisplayName: %s)", claims.Sub, claims.DisplayName)
-
 	personID, _, err := s.repo.FindCredentials(ctx, GOOGLE, claims.Sub)
 	if err != nil {
-		log.Printf("[GOOGLE AUTH ERROR] No user found for Google Sub ID: %s. To map this user, insert credentials with provider='GOOGLE' and registration_id='%s'", claims.Sub, claims.Sub)
 		return core.NilPersonID, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 
@@ -99,7 +94,6 @@ func (s *GoogleAuthStrategy) Authenticate(ctx context.Context, credentials Crede
 func (s *GoogleAuthStrategy) ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error) {
 	claims, err := s.google.ValidateToken(token)
 	if err != nil {
-		log.Printf("[GOOGLE AUTH ERROR] Failed to validate Google token: %v", err)
 		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
 	}
 	return claims, nil

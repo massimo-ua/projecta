@@ -2,7 +2,6 @@ package people
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
@@ -30,16 +29,16 @@ type Repository interface {
 
 type InvitationRepository interface {
 	Save(ctx context.Context, invitation *Invitation) error
-	FindByID(ctx context.Context, id uuid.UUID) (*Invitation, error)
+	FindByID(ctx context.Context, id core.InvitationID) (*Invitation, error)
 	FindByCodeHash(ctx context.Context, codeHash string) (*Invitation, error)
 	FindByCreator(ctx context.Context, creatorID core.PersonID) ([]*Invitation, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, id core.InvitationID) error
 	EmailExists(ctx context.Context, email string) (bool, error)
 }
 
 type InvitationService interface {
-	Create(ctx context.Context, adminID core.PersonID, email string) (*InvitationWithCode, error)
+	Create(ctx context.Context, command CreateInvitationCommand) (*InvitationWithCode, error)
 	FindAllByCreator(ctx context.Context, adminID core.PersonID) ([]*Invitation, error)
-	Delete(ctx context.Context, adminID core.PersonID, invitationID uuid.UUID) error
+	Delete(ctx context.Context, command DeleteInvitationCommand) error
 	FindByCode(ctx context.Context, code string) (*Invitation, error)
 }

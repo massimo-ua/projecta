@@ -47,18 +47,21 @@ func NewService(
 	}
 }
 
-func (s *ServiceImpl) verifyProjectAccess(ctx context.Context, projectID core.ProjectID) error {
+func (s *ServiceImpl) verifyProjectAccess(ctx context.Context, projectID core.ProjectID) (ProjectDescriptor, error) {
 	if projectID.IsNil() {
-		return exceptions.NewValidationException("project id is required", nil)
+		return ProjectDescriptor{}, exceptions.NewValidationException("project id is required", nil)
 	}
-	_, err := s.projects.FindProject(ctx, projectID)
+	proj, err := s.projects.FindProject(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, exceptions.NotFoundError) {
-			return exceptions.NewNotFoundException("project not found", err)
+			return ProjectDescriptor{}, exceptions.NewNotFoundException("project not found", err)
 		}
-		return exceptions.NewInternalException("failed to verify project access", err)
+		return ProjectDescriptor{}, preserveOrWrapError(err, "failed to verify project access")
 	}
-	return nil
+	if proj.MainCurrency == "" {
+		proj.MainCurrency = "UAH"
+	}
+	return proj, nil
 }
 
 func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentCommand) (*Investment, error) {
@@ -89,7 +92,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 		if errors.Is(err, exceptions.NotFoundError) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
 		}
-		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
+		return nil, preserveOrWrapError(err, failedToCreateInvestment)
 	}
 
 	allocations, primaryID, primaryName, err := s.resolveAllocations(ctx, command.ProjectID, command.AssetID, command.AssetAllocations)
@@ -129,12 +132,12 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateInvestmentComman
 
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
 		if err := s.investments.Save(txCtx, inv); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
+			return nil, err
 		}
 		return nil, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, preserveOrWrapError(err, failedToCreateInvestment)
 	}
 
 	return inv, nil
@@ -164,7 +167,7 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 		if errors.Is(err, exceptions.NotFoundError) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
 		}
-		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
+		return nil, preserveOrWrapError(err, failedToCreateInvestment)
 	}
 
 	var created []*Investment
@@ -220,7 +223,7 @@ func (s *ServiceImpl) CreateBatch(ctx context.Context, command CreateBatchInvest
 	})
 
 	if err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateInvestment, err)
+		return nil, preserveOrWrapError(err, failedToCreateInvestment)
 	}
 
 	return created, nil
@@ -232,8 +235,11 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		return exceptions.NewUnauthorizedException(failedToUpdateInvestment, err)
 	}
 
+	var proj ProjectDescriptor
 	if !command.ProjectID.IsNil() {
-		if err := s.verifyProjectAccess(ctx, command.ProjectID); err != nil {
+		var err error
+		proj, err = s.verifyProjectAccess(ctx, command.ProjectID)
+		if err != nil {
 			return err
 		}
 	}
@@ -243,10 +249,7 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		ProjectID: command.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, exceptions.NotFoundError) {
-			return exceptions.NewNotFoundException(failedToFindInvestment, err)
-		}
-		return exceptions.NewInternalException(failedToFindInvestment, err)
+		return preserveOrWrapError(err, failedToFindInvestment)
 	}
 
 	if len(command.AssetAllocations) > 0 || (!command.AssetID.IsNil() && command.AssetID != inv.PrimaryAssetID()) {
@@ -264,13 +267,20 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 		return err
 	}
 
+	if proj.MainCurrency == "" && !inv.ProjectID().IsNil() {
+		if p, err := s.verifyProjectAccess(ctx, inv.ProjectID()); err == nil {
+			proj = p
+		}
+	}
+	inv.EvaluateHomeAmount(s.rateProvider, proj.MainCurrency)
+
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
 		if err := s.investments.Save(txCtx, inv); err != nil {
 			return nil, err
 		}
 		return nil, nil
 	})
-	return err
+	return preserveOrWrapError(err, failedToUpdateInvestment)
 }
 
 func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error {
@@ -304,7 +314,7 @@ func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID core.AssetID, i
 		}
 		return nil, nil
 	})
-	return err
+	return preserveOrWrapError(err, failedToUpdateInvestment)
 }
 
 func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentCommand) error {
@@ -314,7 +324,7 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentComman
 	}
 
 	if !command.ProjectID.IsNil() {
-		if err := s.verifyProjectAccess(ctx, command.ProjectID); err != nil {
+		if _, err := s.verifyProjectAccess(ctx, command.ProjectID); err != nil {
 			return err
 		}
 	}
@@ -324,10 +334,7 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentComman
 		ProjectID: command.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, exceptions.NotFoundError) {
-			return exceptions.NewNotFoundException(failedToFindInvestment, err)
-		}
-		return exceptions.NewInternalException(failedToFindInvestment, err)
+		return preserveOrWrapError(err, failedToFindInvestment)
 	}
 
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
@@ -336,7 +343,7 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveInvestmentComman
 		}
 		return nil, nil
 	})
-	return err
+	return preserveOrWrapError(err, "failed to remove investment")
 }
 
 func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Investment, error) {
@@ -345,18 +352,26 @@ func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Investment, 
 		return nil, exceptions.NewUnauthorizedException(failedToFindInvestment, err)
 	}
 
+	var proj ProjectDescriptor
 	if !filter.ProjectID.IsNil() {
-		if err := s.verifyProjectAccess(ctx, filter.ProjectID); err != nil {
+		var err error
+		proj, err = s.verifyProjectAccess(ctx, filter.ProjectID)
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	inv, err := s.investments.FindOne(ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, preserveOrWrapError(err, failedToFindInvestment)
 	}
 	if inv != nil {
-		inv.EvaluateHomeAmount(s.rateProvider)
+		if proj.MainCurrency == "" && !inv.ProjectID().IsNil() {
+			if p, err := s.verifyProjectAccess(ctx, inv.ProjectID()); err == nil {
+				proj = p
+			}
+		}
+		inv.EvaluateHomeAmount(s.rateProvider, proj.MainCurrency)
 	}
 	return inv, nil
 }
@@ -367,20 +382,29 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 		return nil, exceptions.NewUnauthorizedException(failedToFindInvestment, err)
 	}
 
+	var proj ProjectDescriptor
 	if !filter.ProjectID.IsNil() {
-		if err := s.verifyProjectAccess(ctx, filter.ProjectID); err != nil {
+		var err error
+		proj, err = s.verifyProjectAccess(ctx, filter.ProjectID)
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	col, err := s.investments.Find(ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, preserveOrWrapError(err, failedToFindInvestment)
 	}
 	if col != nil {
 		for _, inv := range col.Elements() {
 			if inv != nil {
-				inv.EvaluateHomeAmount(s.rateProvider)
+				invProjCurrency := proj.MainCurrency
+				if invProjCurrency == "" && !inv.ProjectID().IsNil() {
+					if p, err := s.verifyProjectAccess(ctx, inv.ProjectID()); err == nil {
+						invProjCurrency = p.MainCurrency
+					}
+				}
+				inv.EvaluateHomeAmount(s.rateProvider, invProjCurrency)
 			}
 		}
 	}
@@ -393,11 +417,15 @@ func (s *ServiceImpl) FindTags(ctx context.Context, projectID core.ProjectID) ([
 		return nil, exceptions.NewUnauthorizedException("failed to find tags", err)
 	}
 
-	if err := s.verifyProjectAccess(ctx, projectID); err != nil {
+	if _, err := s.verifyProjectAccess(ctx, projectID); err != nil {
 		return nil, err
 	}
 
-	return s.investments.FindTags(ctx, projectID)
+	tags, err := s.investments.FindTags(ctx, projectID)
+	if err != nil {
+		return nil, preserveOrWrapError(err, "failed to find tags")
+	}
+	return tags, nil
 }
 
 func (s *ServiceImpl) resolveAllocations(
@@ -449,4 +477,18 @@ func (s *ServiceImpl) resolveAllocations(
 		},
 	}
 	return allocs, ast.ID, ast.Name, nil
+}
+
+func preserveOrWrapError(err error, fallbackMsg string) error {
+	if err == nil {
+		return nil
+	}
+	var exc exceptions.Exception
+	if errors.As(err, &exc) {
+		return err
+	}
+	if errors.Is(err, exceptions.NotFoundError) {
+		return exceptions.NewNotFoundException(fallbackMsg, err)
+	}
+	return exceptions.NewInternalException(fallbackMsg, err)
 }

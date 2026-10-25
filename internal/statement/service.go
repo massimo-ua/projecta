@@ -2,6 +2,7 @@ package statement
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -71,7 +72,14 @@ func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.Project
 
 	if s.projects != nil {
 		if err := s.projects.ValidateProject(ctx, projectID); err != nil {
-			return nil, exceptions.NewValidationException("project not found", err)
+			var exc exceptions.Exception
+			if errors.As(err, &exc) {
+				return nil, err
+			}
+			if errors.Is(err, exceptions.NotFoundError) {
+				return nil, exceptions.NewNotFoundException("project not found", err)
+			}
+			return nil, exceptions.NewInternalException("failed to validate project", err)
 		}
 	}
 
@@ -83,7 +91,10 @@ func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.Project
 	existingMap := make(map[string]bool)
 	if s.finder != nil {
 		existing, err := s.finder.FindExisting(ctx, projectID)
-		if err == nil && existing != nil {
+		if err != nil {
+			return nil, exceptions.NewInternalException("failed to load existing transactions", err)
+		}
+		if existing != nil {
 			for _, it := range existing {
 				existingMap[it.Fingerprint()] = true
 			}

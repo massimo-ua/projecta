@@ -1,9 +1,6 @@
 package core
 
 import (
-	"database/sql/driver"
-	"encoding/json"
-
 	"github.com/google/uuid"
 )
 
@@ -44,19 +41,6 @@ func (id PersonID) IsNil() bool {
 	return id == NilPersonID
 }
 
-func (id PersonID) Value() (driver.Value, error) {
-	return uuid.UUID(id).Value()
-}
-
-func (id *PersonID) Scan(src any) error {
-	var u uuid.UUID
-	if err := u.Scan(src); err != nil {
-		return err
-	}
-	*id = PersonID(u)
-	return nil
-}
-
 func (id PersonID) MarshalText() ([]byte, error) {
 	return uuid.UUID(id).MarshalText()
 }
@@ -67,23 +51,6 @@ func (id *PersonID) UnmarshalText(data []byte) error {
 		return err
 	}
 	*id = PersonID(u)
-	return nil
-}
-
-func (id PersonID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(id.String())
-}
-
-func (id *PersonID) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	parsed, err := ParsePersonID(s)
-	if err != nil {
-		return err
-	}
-	*id = parsed
 	return nil
 }
 
@@ -124,19 +91,6 @@ func (id ProjectID) IsNil() bool {
 	return id == NilProjectID
 }
 
-func (id ProjectID) Value() (driver.Value, error) {
-	return uuid.UUID(id).Value()
-}
-
-func (id *ProjectID) Scan(src any) error {
-	var u uuid.UUID
-	if err := u.Scan(src); err != nil {
-		return err
-	}
-	*id = ProjectID(u)
-	return nil
-}
-
 func (id ProjectID) MarshalText() ([]byte, error) {
 	return uuid.UUID(id).MarshalText()
 }
@@ -147,23 +101,6 @@ func (id *ProjectID) UnmarshalText(data []byte) error {
 		return err
 	}
 	*id = ProjectID(u)
-	return nil
-}
-
-func (id ProjectID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(id.String())
-}
-
-func (id *ProjectID) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	parsed, err := ParseProjectID(s)
-	if err != nil {
-		return err
-	}
-	*id = parsed
 	return nil
 }
 
@@ -204,19 +141,6 @@ func (id AssetID) IsNil() bool {
 	return id == NilAssetID
 }
 
-func (id AssetID) Value() (driver.Value, error) {
-	return uuid.UUID(id).Value()
-}
-
-func (id *AssetID) Scan(src any) error {
-	var u uuid.UUID
-	if err := u.Scan(src); err != nil {
-		return err
-	}
-	*id = AssetID(u)
-	return nil
-}
-
 func (id AssetID) MarshalText() ([]byte, error) {
 	return uuid.UUID(id).MarshalText()
 }
@@ -227,23 +151,6 @@ func (id *AssetID) UnmarshalText(data []byte) error {
 		return err
 	}
 	*id = AssetID(u)
-	return nil
-}
-
-func (id AssetID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(id.String())
-}
-
-func (id *AssetID) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	parsed, err := ParseAssetID(s)
-	if err != nil {
-		return err
-	}
-	*id = parsed
 	return nil
 }
 
@@ -284,19 +191,6 @@ func (id InvestmentID) IsNil() bool {
 	return id == NilInvestmentID
 }
 
-func (id InvestmentID) Value() (driver.Value, error) {
-	return uuid.UUID(id).Value()
-}
-
-func (id *InvestmentID) Scan(src any) error {
-	var u uuid.UUID
-	if err := u.Scan(src); err != nil {
-		return err
-	}
-	*id = InvestmentID(u)
-	return nil
-}
-
 func (id InvestmentID) MarshalText() ([]byte, error) {
 	return uuid.UUID(id).MarshalText()
 }
@@ -310,19 +204,52 @@ func (id *InvestmentID) UnmarshalText(data []byte) error {
 	return nil
 }
 
-func (id InvestmentID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(id.String())
+// ============================================================================
+// InvitationID
+// ============================================================================
+
+// InvitationID uniquely identifies an invitation aggregate across contexts.
+type InvitationID uuid.UUID
+
+var NilInvitationID = InvitationID(uuid.Nil)
+
+func NewInvitationID() InvitationID {
+	return InvitationID(uuid.New())
 }
 
-func (id *InvestmentID) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	parsed, err := ParseInvestmentID(s)
+func ParseInvitationID(s string) (InvitationID, error) {
+	u, err := uuid.Parse(s)
 	if err != nil {
+		return NilInvitationID, err
+	}
+	return InvitationID(u), nil
+}
+
+func MustParseInvitationID(s string) InvitationID {
+	return InvitationID(uuid.MustParse(s))
+}
+
+func (id InvitationID) String() string {
+	return uuid.UUID(id).String()
+}
+
+func (id InvitationID) UUID() uuid.UUID {
+	return uuid.UUID(id)
+}
+
+func (id InvitationID) IsNil() bool {
+	return id == NilInvitationID
+}
+
+func (id InvitationID) MarshalText() ([]byte, error) {
+	return uuid.UUID(id).MarshalText()
+}
+
+func (id *InvitationID) UnmarshalText(data []byte) error {
+	var u uuid.UUID
+	if err := u.UnmarshalText(data); err != nil {
 		return err
 	}
-	*id = parsed
+	*id = InvitationID(u)
 	return nil
 }

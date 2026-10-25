@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 )
@@ -21,7 +20,7 @@ func TestInvitationModel(t *testing.T) {
 
 	t.Run("NewInvitation valid", func(t *testing.T) {
 		inv, err := people.NewInvitation(
-			uuid.Nil,
+			core.NilInvitationID,
 			"user@example.com",
 			codeHash,
 			expiresAt,
@@ -34,7 +33,7 @@ func TestInvitationModel(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if inv.ID() == uuid.Nil {
+		if inv.ID().IsNil() {
 			t.Errorf("expected generated UUID")
 		}
 		if inv.Email() != "user@example.com" {
@@ -61,17 +60,17 @@ func TestInvitationModel(t *testing.T) {
 	})
 
 	t.Run("NewInvitation validation errors", func(t *testing.T) {
-		_, err := people.NewInvitation(uuid.Nil, "", codeHash, expiresAt, adminID, nil, "", now, nil)
+		_, err := people.NewInvitation(core.NilInvitationID, "", codeHash, expiresAt, adminID, nil, "", now, nil)
 		if err == nil {
 			t.Errorf("expected error for empty email")
 		}
 
-		_, err = people.NewInvitation(uuid.Nil, "user@example.com", "", expiresAt, adminID, nil, "", now, nil)
+		_, err = people.NewInvitation(core.NilInvitationID, "user@example.com", "", expiresAt, adminID, nil, "", now, nil)
 		if err == nil {
 			t.Errorf("expected error for empty code hash")
 		}
 
-		_, err = people.NewInvitation(uuid.Nil, "user@example.com", codeHash, expiresAt, core.NilPersonID, nil, "", now, nil)
+		_, err = people.NewInvitation(core.NilInvitationID, "user@example.com", codeHash, expiresAt, core.NilPersonID, nil, "", now, nil)
 		if err == nil {
 			t.Errorf("expected error for empty created by")
 		}
@@ -79,7 +78,7 @@ func TestInvitationModel(t *testing.T) {
 
 	t.Run("Complete and Expired", func(t *testing.T) {
 		past := now.Add(-1 * time.Hour)
-		expiredInv, _ := people.NewInvitation(uuid.Nil, "user@example.com", codeHash, past, adminID, nil, people.InvitationStatusPending, now, nil)
+		expiredInv, _ := people.NewInvitation(core.NilInvitationID, "user@example.com", codeHash, past, adminID, nil, people.InvitationStatusPending, now, nil)
 		if !expiredInv.IsExpired() {
 			t.Errorf("expected invitation to be expired")
 		}
@@ -90,7 +89,7 @@ func TestInvitationModel(t *testing.T) {
 			t.Errorf("completing expired invitation should error")
 		}
 
-		validInv, _ := people.NewInvitation(uuid.Nil, "user@example.com", codeHash, expiresAt, adminID, nil, people.InvitationStatusPending, now, nil)
+		validInv, _ := people.NewInvitation(core.NilInvitationID, "user@example.com", codeHash, expiresAt, adminID, nil, people.InvitationStatusPending, now, nil)
 		if err := validInv.Complete(); err != nil {
 			t.Fatalf("unexpected Complete error: %v", err)
 		}
@@ -118,7 +117,10 @@ func TestInvitationService(t *testing.T) {
 
 		svc := people.NewInvitationService(db, invRepo, peopleRepo)
 
-		invWithCode, err := svc.Create(context.Background(), adminID, targetEmail)
+		invWithCode, err := svc.Create(context.Background(), people.CreateInvitationCommand{
+			AdminID: adminID,
+			Email:   targetEmail,
+		})
 		if err != nil {
 			t.Fatalf("unexpected Create error: %v", err)
 		}
@@ -149,7 +151,10 @@ func TestInvitationService(t *testing.T) {
 		peopleRepo := &mockPeopleRepo{}
 		svc := people.NewInvitationService(&mockDb{}, invRepo, peopleRepo)
 
-		_, err := svc.Create(context.Background(), adminID, targetEmail)
+		_, err := svc.Create(context.Background(), people.CreateInvitationCommand{
+			AdminID: adminID,
+			Email:   targetEmail,
+		})
 		if err == nil {
 			t.Errorf("expected error when email already exists")
 		}
@@ -158,19 +163,25 @@ func TestInvitationService(t *testing.T) {
 	t.Run("Create invitation fails with invalid email or nil admin", func(t *testing.T) {
 		svc := people.NewInvitationService(&mockDb{}, &mockInvitationRepo{}, &mockPeopleRepo{})
 
-		_, err := svc.Create(context.Background(), core.NilPersonID, targetEmail)
+		_, err := svc.Create(context.Background(), people.CreateInvitationCommand{
+			AdminID: core.NilPersonID,
+			Email:   targetEmail,
+		})
 		if err == nil {
 			t.Errorf("expected error for nil admin ID")
 		}
 
-		_, err = svc.Create(context.Background(), adminID, "invalid-email")
+		_, err = svc.Create(context.Background(), people.CreateInvitationCommand{
+			AdminID: adminID,
+			Email:   "invalid-email",
+		})
 		if err == nil {
 			t.Errorf("expected error for invalid email")
 		}
 	})
 
 	t.Run("FindAllByCreator", func(t *testing.T) {
-		sampleInv, _ := people.NewInvitation(uuid.New(), targetEmail, "hash", time.Now().Add(time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
+		sampleInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, "hash", time.Now().Add(time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
 		invRepo := &mockInvitationRepo{invList: []*people.Invitation{sampleInv}}
 		svc := people.NewInvitationService(&mockDb{}, invRepo, &mockPeopleRepo{})
 
@@ -187,21 +198,27 @@ func TestInvitationService(t *testing.T) {
 
 	t.Run("Delete invitation removes precreated person if pending", func(t *testing.T) {
 		personID := core.NewPersonID()
-		invID := uuid.New()
+		invID := core.NewInvitationID()
 		inv, _ := people.NewInvitation(invID, targetEmail, "hash", time.Now().Add(time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
 
 		invRepo := &mockInvitationRepo{inv: inv}
 		peopleRepo := &mockPeopleRepo{}
 		svc := people.NewInvitationService(&mockDb{}, invRepo, peopleRepo)
 
-		err := svc.Delete(context.Background(), adminID, invID)
+		err := svc.Delete(context.Background(), people.DeleteInvitationCommand{
+			AdminID:      adminID,
+			InvitationID: invID,
+		})
 		if err != nil {
 			t.Fatalf("unexpected Delete error: %v", err)
 		}
 
 		// Unauthorized admin
 		otherAdmin := core.NewPersonID()
-		err = svc.Delete(context.Background(), otherAdmin, invID)
+		err = svc.Delete(context.Background(), people.DeleteInvitationCommand{
+			AdminID:      otherAdmin,
+			InvitationID: invID,
+		})
 		if err == nil {
 			t.Errorf("expected error when non-creator deletes invitation")
 		}
@@ -211,7 +228,7 @@ func TestInvitationService(t *testing.T) {
 		rawCode := "secret_invite_code"
 		codeHash := people.HashInvitationCode(rawCode)
 
-		validInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
+		validInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
 		invRepo := &mockInvitationRepo{inv: validInv}
 		svc := people.NewInvitationService(&mockDb{}, invRepo, &mockPeopleRepo{})
 
@@ -221,7 +238,7 @@ func TestInvitationService(t *testing.T) {
 		}
 
 		// Expired
-		expiredInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(-1*time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
+		expiredInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(-1*time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
 		invRepoExpired := &mockInvitationRepo{inv: expiredInv}
 		svcExpired := people.NewInvitationService(&mockDb{}, invRepoExpired, &mockPeopleRepo{})
 		_, err = svcExpired.FindByCode(context.Background(), rawCode)
@@ -231,7 +248,7 @@ func TestInvitationService(t *testing.T) {
 
 		// Completed
 		now := time.Now()
-		compInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(time.Hour), adminID, nil, people.InvitationStatusCompleted, time.Now(), &now)
+		compInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(time.Hour), adminID, nil, people.InvitationStatusCompleted, time.Now(), &now)
 		invRepoComp := &mockInvitationRepo{inv: compInv}
 		svcComp := people.NewInvitationService(&mockDb{}, invRepoComp, &mockPeopleRepo{})
 		_, err = svcComp.FindByCode(context.Background(), rawCode)
@@ -249,7 +266,7 @@ func TestLoginWithInvitation(t *testing.T) {
 	codeHash := people.HashInvitationCode(rawCode)
 
 	precreatedPerson, _ := people.NewPerson(personID, "Invited", "User", targetEmail, nil, people.RoleUser)
-	validInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(7*24*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
+	validInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(7*24*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
 
 	peopleRepo := &mockPeopleRepo{person: precreatedPerson}
 	invRepo := &mockInvitationRepo{inv: validInv}
@@ -283,7 +300,7 @@ func TestLoginWithInvitation(t *testing.T) {
 	})
 
 	t.Run("LoginWithInvitation fails on email mismatch", func(t *testing.T) {
-		pendingInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(7*24*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
+		pendingInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(7*24*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
 		mismatchedGoogle := &mockThirdPartyAuth{
 			claims: &core.AuthTokenClaims{
 				AuthTokenPayload: core.AuthTokenPayload{
@@ -317,7 +334,7 @@ func TestLoginWithInvitation(t *testing.T) {
 
 	t.Run("LoginWithInvitation fails when invitation is completed", func(t *testing.T) {
 		now := time.Now()
-		completedInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(time.Hour), adminID, &personID, people.InvitationStatusCompleted, time.Now(), &now)
+		completedInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(time.Hour), adminID, &personID, people.InvitationStatusCompleted, time.Now(), &now)
 		svcCompleted := people.NewAuthService(&mockDb{}, peopleRepo, tokenProvider, hasher, googleAuth, &mockInvitationRepo{inv: completedInv})
 
 		_, err := svcCompleted.LoginWithInvitation(context.Background(), "token", people.GOOGLE, rawCode)
@@ -327,7 +344,7 @@ func TestLoginWithInvitation(t *testing.T) {
 	})
 
 	t.Run("LoginWithInvitation fails when invitation is expired", func(t *testing.T) {
-		expiredInv, _ := people.NewInvitation(uuid.New(), targetEmail, codeHash, time.Now().Add(-1*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
+		expiredInv, _ := people.NewInvitation(core.NewInvitationID(), targetEmail, codeHash, time.Now().Add(-1*time.Hour), adminID, &personID, people.InvitationStatusPending, time.Now(), nil)
 		svcExpired := people.NewAuthService(&mockDb{}, peopleRepo, tokenProvider, hasher, googleAuth, &mockInvitationRepo{inv: expiredInv})
 
 		_, err := svcExpired.LoginWithInvitation(context.Background(), "token", people.GOOGLE, rawCode)
@@ -411,7 +428,7 @@ func TestInvitationCode(t *testing.T) {
 }
 
 func TestReconstituteInvitation(t *testing.T) {
-	id := uuid.New()
+	id := core.NewInvitationID()
 	creatorID := core.NewPersonID()
 	personID := core.NewPersonID()
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -441,6 +458,29 @@ func TestReconstituteInvitation(t *testing.T) {
 	}
 	if !inv.CreatedAt().Equal(createdAt) || !inv.CompletedAt().Equal(completedAt) {
 		t.Errorf("ReconstituteInvitation timestamp mismatch")
+	}
+
+	// Pointer immutability
+	pIDPtr := inv.PersonID()
+	*pIDPtr = core.NewPersonID()
+	if *inv.PersonID() != personID {
+		t.Errorf("PersonID getter leaked internal pointer")
+	}
+
+	compPtr := inv.CompletedAt()
+	*compPtr = compPtr.Add(100 * time.Hour)
+	if inv.CompletedAt().Equal(*compPtr) {
+		t.Errorf("CompletedAt getter leaked internal pointer")
+	}
+
+	// Mutate inputs
+	personID = core.NewPersonID()
+	if *inv.PersonID() == personID {
+		t.Errorf("ReconstituteInvitation leaked input personID pointer")
+	}
+	completedAt = completedAt.Add(50 * time.Hour)
+	if inv.CompletedAt().Equal(completedAt) {
+		t.Errorf("ReconstituteInvitation leaked input completedAt pointer")
 	}
 }
 

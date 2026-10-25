@@ -1,6 +1,8 @@
 package people
 
-import "errors"
+import (
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
+)
 
 type Credentials struct {
 	provider       IdentityProvider
@@ -25,7 +27,7 @@ func ToIdentityProvider(s string) (IdentityProvider, error) {
 	case "LOCAL":
 		return LOCAL, nil
 	default:
-		return "", errors.New("invalid identity provider")
+		return "", exceptions.NewValidationException("invalid identity provider", nil)
 	}
 }
 
@@ -60,11 +62,11 @@ func NewCredentials(provider string, id string, identity string) (Credentials, e
 	}
 
 	if id == "" && p == LOCAL {
-		return Credentials{}, errors.New("invalid credentials")
+		return Credentials{}, exceptions.NewValidationException("invalid credentials", nil)
 	}
 
 	if identity == "" {
-		return Credentials{}, errors.New("invalid credentials")
+		return Credentials{}, exceptions.NewValidationException("invalid credentials", nil)
 	}
 
 	return Credentials{

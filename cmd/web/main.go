@@ -108,7 +108,6 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		projectService,
 		statementService,
 		assetService,
-		rateProvider,
 		investmentService,
 	)
 }

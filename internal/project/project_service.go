@@ -39,8 +39,23 @@ func (s *ProjectServiceImpl) Find(ctx context.Context, filter ProjectCollectionF
 	return s.repository.Find(ctx, filter)
 }
 
+func resolveRequesterID(ctx context.Context, explicitID core.PersonID) (core.PersonID, error) {
+	if !explicitID.IsNil() {
+		return explicitID, nil
+	}
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return core.NilPersonID, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+	return personID, nil
+}
+
 func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCommand) error {
-	p, err := s.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: command.PersonID})
+	personID, err := resolveRequesterID(ctx, command.PersonID)
+	if err != nil {
+		return err
+	}
+	p, err := s.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: personID})
 	if err != nil {
 		if errors.Is(err, exceptions.NotFoundError) {
 			return exceptions.NewNotFoundException("project not found", err)
@@ -48,7 +63,7 @@ func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCo
 		return exceptions.NewInternalException("failed to find project", err)
 	}
 
-	if command.PersonID.IsNil() || !p.IsOwnedByPerson(command.PersonID) {
+	if !p.IsOwnedByPerson(personID) {
 		return exceptions.NewForbiddenException("only project owner can remove project", nil)
 	}
 
@@ -60,7 +75,11 @@ func (s *ProjectServiceImpl) Remove(ctx context.Context, command RemoveProjectCo
 }
 
 func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCommand) (*Project, error) {
-	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: command.PersonID})
+	personID, err := resolveRequesterID(ctx, command.PersonID)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: personID})
 	if err != nil {
 		if errors.Is(err, exceptions.NotFoundError) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
@@ -68,7 +87,7 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 		return nil, exceptions.NewInternalException("failed to find project", err)
 	}
 
-	if !command.PersonID.IsNil() && !p.IsOwnedByPerson(command.PersonID) {
+	if !p.IsOwnedByPerson(personID) {
 		return nil, exceptions.NewForbiddenException("only project owner can update project", nil)
 	}
 
@@ -128,7 +147,10 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 		return nil, exceptions.NewForbiddenException("owner cannot have projects", nil)
 	}
 
-	p, err := s.repository.FindOne(ctx, ProjectFilter{Name: command.Name})
+	p, err := s.repository.FindOne(ctx, ProjectFilter{
+		Name:        command.Name,
+		RequesterID: command.PersonID,
+	})
 
 	if p != nil {
 		return p, nil

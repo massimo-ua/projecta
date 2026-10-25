@@ -65,11 +65,14 @@ type assetProjectReaderAdapter struct {
 }
 
 func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (asset.ProjectDescriptor, error) {
-	filter := project.ProjectFilter{ProjectID: projectID}
-	if personID, err := core.AuthGuard(ctx); err == nil {
-		filter.RequesterID = personID
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return asset.ProjectDescriptor{}, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
-	proj, err := a.projects.FindOne(ctx, filter)
+	proj, err := a.projects.FindOne(ctx, project.ProjectFilter{
+		ProjectID:   projectID,
+		RequesterID: personID,
+	})
 	if err != nil {
 		return asset.ProjectDescriptor{}, err
 	}
@@ -114,11 +117,14 @@ type investmentProjectReaderAdapter struct {
 }
 
 func (a *investmentProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (investment.ProjectDescriptor, error) {
-	filter := project.ProjectFilter{ProjectID: projectID}
-	if personID, err := core.AuthGuard(ctx); err == nil {
-		filter.RequesterID = personID
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return investment.ProjectDescriptor{}, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
-	proj, err := a.projects.FindOne(ctx, filter)
+	proj, err := a.projects.FindOne(ctx, project.ProjectFilter{
+		ProjectID:   projectID,
+		RequesterID: personID,
+	})
 	if err != nil {
 		return investment.ProjectDescriptor{}, err
 	}
@@ -173,6 +179,9 @@ func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectI
 			return nil, err
 		}
 		for _, inv := range col.Elements() {
+			if inv == nil || inv.Amount() == nil {
+				continue
+			}
 			res = append(res, statement.ExistingTransaction{
 				Date:        inv.Date(),
 				Amount:      inv.Amount().Amount(),

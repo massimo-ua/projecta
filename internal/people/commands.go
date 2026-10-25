@@ -16,7 +16,17 @@ type AssignRolesCommand struct {
 }
 
 type UpdateDisplayNameCommand struct {
-    PersonID    core.PersonID
-    DisplayName DisplayName
+	PersonID    core.PersonID
+	DisplayName DisplayName
+}
+
+type CreateInvitationCommand struct {
+	AdminID core.PersonID
+	Email   string
+}
+
+type DeleteInvitationCommand struct {
+	AdminID      core.PersonID
+	InvitationID core.InvitationID
 }
 

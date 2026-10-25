@@ -11,10 +11,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
 	"gitlab.com/massimo-ua/projecta/internal/core"
+	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
 var ErrFailedToSaveAsset = errors.New("failed to save asset")
-var ErrAssetNotFound = errors.New("asset not found")
+var ErrAssetNotFound = errors.Join(exceptions.NotFoundError, errors.New("asset not found"))
 
 type PgAssetRepository struct {
 	db *PgRepository
@@ -330,7 +331,15 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	qb.Offset(filter.Offset)
 	qb.Limit(filter.Limit)
 
-	if filter.OrderBy != "" && filter.Order != "" {
+	validAssetOrderBy := map[string]bool{
+		"name":           true,
+		"acquired_at":    true,
+		"start_date":     true,
+		"completed_date": true,
+		"status":         true,
+		"target_price":   true,
+	}
+	if filter.OrderBy != "" && filter.Order != "" && validAssetOrderBy[filter.OrderBy] {
 		qb.OrderBy(fmt.Sprintf("projecta_assets.%s %s", filter.OrderBy, filter.Order.String()))
 	} else {
 		qb.OrderBy("projecta_assets.acquired_at DESC")

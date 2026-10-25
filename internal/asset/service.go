@@ -66,13 +66,20 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 
 	collection, err := s.assets.Find(ctx, filter)
 	if err != nil {
-		return nil, exceptions.NewInternalException(failedToFindAsset, err)
+		return nil, preserveOrWrapError(err, failedToFindAsset)
 	}
 
 	if collection != nil {
-		homeCurrency := s.resolveProjectCurrency(ctx, filter.ProjectID)
+		var defaultHomeCurrency string
+		if !filter.ProjectID.IsNil() {
+			defaultHomeCurrency = s.resolveProjectCurrency(ctx, filter.ProjectID)
+		}
 		for _, a := range collection.Elements() {
 			if a != nil {
+				homeCurrency := defaultHomeCurrency
+				if homeCurrency == "" {
+					homeCurrency = s.resolveProjectCurrency(ctx, a.ProjectID())
+				}
 				a.EvaluateValuation(homeCurrency, s.rateProvider)
 			}
 		}
@@ -91,10 +98,7 @@ func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Asset, error
 
 	anAsset, err := s.assets.FindOne(ctx, filter)
 	if err != nil {
-		if errors.Is(err, exceptions.NotFoundError) {
-			return nil, exceptions.NewNotFoundException("asset not found", err)
-		}
-		return nil, exceptions.NewInternalException(failedToFindAsset, err)
+		return nil, preserveOrWrapError(err, failedToFindAsset)
 	}
 	if anAsset == nil {
 		return nil, exceptions.NewNotFoundException("asset not found", nil)
@@ -124,7 +128,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 
 	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		return nil, preserveOrWrapError(err, failedToCreateAsset)
 	}
 
 	price := command.TargetPrice
@@ -167,7 +171,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	if command.WithPayment {
 		_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
 			if err = s.assets.Save(ctx, anAsset); err != nil {
-				return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+				return nil, err
 			}
 
 			if s.investments != nil {
@@ -181,7 +185,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 					Description:   paymentDescription,
 					Tags:          command.Tags,
 				}); err != nil {
-					return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+					return nil, err
 				}
 			}
 
@@ -189,7 +193,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 		})
 
 		if err != nil {
-			return nil, err
+			return nil, preserveOrWrapError(err, failedToCreateAsset)
 		}
 
 		return anAsset, nil
@@ -197,7 +201,7 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 
 	err = s.assets.Save(ctx, anAsset)
 	if err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		return nil, preserveOrWrapError(err, failedToCreateAsset)
 	}
 
 	return anAsset, nil
@@ -228,7 +232,7 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 
 	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		return nil, preserveOrWrapError(err, failedToCreateAsset)
 	}
 
 	if s.investments == nil {
@@ -237,7 +241,7 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 
 	invItems, err := s.investments.FindInvestments(ctx, command.ProjectID, command.InvestmentIDs)
 	if err != nil {
-		return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+		return nil, preserveOrWrapError(err, failedToCreateAsset)
 	}
 	if len(invItems) != len(command.InvestmentIDs) {
 		return nil, exceptions.NewValidationException("one or more investments not found in project", nil)
@@ -266,17 +270,17 @@ func (s *ServiceImpl) CreateFromInvestments(ctx context.Context, command CreateA
 
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
 		if err = s.assets.Save(txCtx, anAsset); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+			return nil, err
 		}
 
 		if err = s.investments.AssignToAsset(txCtx, anAsset.ID(), command.InvestmentIDs); err != nil {
-			return nil, exceptions.NewInternalException(failedToCreateAsset, err)
+			return nil, err
 		}
 
 		return nil, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, preserveOrWrapError(err, failedToCreateAsset)
 	}
 
 	return anAsset, nil
@@ -301,9 +305,9 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveAssetCommand) er
 		return exceptions.NewUnauthorizedException(failedToFindAsset, err)
 	}
 
-	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
+	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, ProjectID: command.ProjectID, OwnerID: personID})
 	if err != nil {
-		return exceptions.NewInternalException(failedToFindAsset, err)
+		return preserveOrWrapError(err, failedToFindAsset)
 	}
 
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
@@ -312,7 +316,7 @@ func (s *ServiceImpl) Remove(ctx context.Context, command RemoveAssetCommand) er
 		}
 		return nil, nil
 	})
-	return err
+	return preserveOrWrapError(err, "failed to remove asset")
 }
 
 func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) error {
@@ -321,14 +325,14 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		return exceptions.NewUnauthorizedException(failedToUpdateAsset, err)
 	}
 
-	_, err = s.projects.FindProject(ctx, command.ProjectID)
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
-		return exceptions.NewInternalException(failedToUpdateAsset, err)
+		return preserveOrWrapError(err, failedToUpdateAsset)
 	}
 
-	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, OwnerID: personID})
+	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, ProjectID: command.ProjectID, OwnerID: personID})
 	if err != nil {
-		return exceptions.NewInternalException(failedToUpdateAsset, err)
+		return preserveOrWrapError(err, failedToUpdateAsset)
 	}
 
 	price := command.TargetPrice
@@ -347,7 +351,14 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 		anAsset.Reschedule(command.AcquiredAt)
 	}
 
-	return s.assets.Save(ctx, anAsset)
+	homeCurrency := "UAH"
+	if proj.MainCurrency != "" {
+		homeCurrency = proj.MainCurrency
+	}
+	anAsset.EvaluateValuation(homeCurrency, s.rateProvider)
+
+	err = s.assets.Save(ctx, anAsset)
+	return preserveOrWrapError(err, failedToUpdateAsset)
 }
 
 func (s *ServiceImpl) LinkChild(ctx context.Context, command LinkChildCommand) error {
@@ -360,12 +371,12 @@ func (s *ServiceImpl) LinkChild(ctx context.Context, command LinkChildCommand) e
 		return err
 	}
 
-	_, err = s.assets.FindOne(ctx, Filter{ID: command.ParentID, OwnerID: personID})
+	_, err = s.assets.FindOne(ctx, Filter{ID: command.ParentID, ProjectID: command.ProjectID, OwnerID: personID})
 	if err != nil {
 		return exceptions.NewValidationException("parent asset not found", err)
 	}
 
-	_, err = s.assets.FindOne(ctx, Filter{ID: command.ChildID, OwnerID: personID})
+	_, err = s.assets.FindOne(ctx, Filter{ID: command.ChildID, ProjectID: command.ProjectID, OwnerID: personID})
 	if err != nil {
 		return exceptions.NewValidationException("child asset not found", err)
 	}
@@ -378,16 +389,29 @@ func (s *ServiceImpl) LinkChild(ctx context.Context, command LinkChildCommand) e
 		return err
 	}
 
-	return s.assets.AddChild(ctx, command.ParentID, command.ChildID, command.SharePercentage)
+	err = s.assets.AddChild(ctx, command.ParentID, command.ChildID, command.SharePercentage)
+	return preserveOrWrapError(err, "failed to link child asset")
 }
 
 func (s *ServiceImpl) UnlinkChild(ctx context.Context, command UnlinkChildCommand) error {
-	_, err := core.AuthGuard(ctx)
+	personID, err := core.AuthGuard(ctx)
 	if err != nil {
 		return exceptions.NewUnauthorizedException("failed to unlink child asset", err)
 	}
 
-	return s.assets.RemoveChild(ctx, command.ParentID, command.ChildID)
+	if _, err := s.assets.FindOne(ctx, Filter{
+		ID:        command.ParentID,
+		ProjectID: command.ProjectID,
+		OwnerID:   personID,
+	}); err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return exceptions.NewNotFoundException("parent asset not found", err)
+		}
+		return preserveOrWrapError(err, "failed to unlink child asset")
+	}
+
+	err = s.assets.RemoveChild(ctx, command.ParentID, command.ChildID)
+	return preserveOrWrapError(err, "failed to unlink child asset")
 }
 
 func (s *ServiceImpl) AssignInvestments(ctx context.Context, command AssignInvestmentsCommand) error {
@@ -422,7 +446,7 @@ func (s *ServiceImpl) AssignInvestments(ctx context.Context, command AssignInves
 		}
 
 		if err = s.investments.AssignToAsset(ctx, command.AssetID, command.InvestmentIDs); err != nil {
-			return exceptions.NewInternalException("failed to assign investments to asset", err)
+			return preserveOrWrapError(err, "failed to assign investments to asset")
 		}
 	}
 
@@ -454,12 +478,12 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 
 	proj, err := s.projects.FindProject(ctx, command.ProjectID)
 	if err != nil {
-		return nil, exceptions.NewInternalException("failed to group assets", err)
+		return nil, preserveOrWrapError(err, "failed to group assets")
 	}
 
 	// Verify all child assets exist and belong to the project
 	for _, childID := range command.ChildAssetIDs {
-		child, err := s.assets.FindOne(ctx, Filter{ID: childID, OwnerID: personID})
+		child, err := s.assets.FindOne(ctx, Filter{ID: childID, ProjectID: command.ProjectID, OwnerID: personID})
 		if err != nil || child == nil {
 			return nil, exceptions.NewValidationException(fmt.Sprintf("child asset %s not found in project", childID), err)
 		}
@@ -480,12 +504,12 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
 		if err := s.assets.Save(ctx, parentAsset); err != nil {
-			return nil, exceptions.NewInternalException("failed to group assets", err)
+			return nil, err
 		}
 
 		for _, childID := range command.ChildAssetIDs {
 			if err := s.assets.AddChild(ctx, parentID, childID, 100.0); err != nil {
-				return nil, exceptions.NewInternalException("failed to link child asset", err)
+				return nil, err
 			}
 		}
 
@@ -493,12 +517,12 @@ func (s *ServiceImpl) Group(ctx context.Context, command GroupAssetsCommand) (*A
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, preserveOrWrapError(err, "failed to group assets")
 	}
 
-	res, err := s.assets.FindOne(ctx, Filter{ID: parentID, OwnerID: personID})
+	res, err := s.assets.FindOne(ctx, Filter{ID: parentID, ProjectID: command.ProjectID, OwnerID: personID})
 	if err != nil {
-		return nil, err
+		return nil, preserveOrWrapError(err, "failed to find grouped asset")
 	}
 	if res != nil {
 		homeCurrency := "UAH"
@@ -525,6 +549,20 @@ func (s *ServiceImpl) LinkChildren(ctx context.Context, command LinkChildrenComm
 		return nil, nil
 	})
 	return err
+}
+
+func preserveOrWrapError(err error, fallbackMsg string) error {
+	if err == nil {
+		return nil
+	}
+	var exc exceptions.Exception
+	if errors.As(err, &exc) {
+		return err
+	}
+	if errors.Is(err, exceptions.NotFoundError) {
+		return exceptions.NewNotFoundException(fallbackMsg, err)
+	}
+	return exceptions.NewInternalException(fallbackMsg, err)
 }
 
 

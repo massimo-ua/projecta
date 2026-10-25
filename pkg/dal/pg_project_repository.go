@@ -391,7 +391,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 
 	defer rows.Close()
 
-	var projects []*project.Project
+	var records []projectRecord
 
 	for rows.Next() {
 		var rec projectRecord
@@ -400,8 +400,24 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 			return nil, err
 		}
 
+		records = append(records, rec)
+	}
+	rows.Close()
+
+	var projects []*project.Project
+	for _, rec := range records {
+		pID, err := core.ParseProjectID(rec.projectID)
+		if err != nil {
+			return nil, err
+		}
+
+		sharedParts, err := r.fetchParticipants(ctx, pID)
+		if err != nil {
+			return nil, err
+		}
+
 		isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
-		p, err := rec.toProject(isShared, nil)
+		p, err := rec.toProject(isShared, sharedParts)
 		if err != nil {
 			return nil, err
 		}

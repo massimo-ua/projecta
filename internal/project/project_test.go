@@ -250,5 +250,11 @@ func TestProject_ReconstituteProject(t *testing.T) {
 		if proj.Owner().DisplayName == "Mutated DisplayName" {
 			t.Errorf("Project.Owner() leaked internal pointer")
 		}
+
+		// Mutate original input owner
+		owner.DisplayName = "Input Mutated"
+		if proj.Owner().DisplayName == "Input Mutated" {
+			t.Errorf("ReconstituteProject leaked input owner pointer")
+		}
 	})
 }
