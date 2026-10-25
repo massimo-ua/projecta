@@ -83,8 +83,8 @@ export function ProjectCard({ project }) {
         </div>
 
         {/* Badges */}
-        {project.isShared && (
-          <div className="mb-3">
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          {project.isShared && (
             <Badge variant="secondary" className="gap-1.5 text-xs font-normal bg-secondary/80 text-secondary-foreground border border-border/40">
               <Users className="h-3 w-3" />
               <span>{String(content?.sharedTag || 'Shared')}</span>
@@ -92,8 +92,17 @@ export function ProjectCard({ project }) {
                 <span className="text-muted-foreground">({project.owner.name})</span>
               )}
             </Badge>
-          </div>
-        )}
+          )}
+          {project.endDate ? (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/60">
+              <span>{`→ ${project.endDate.split('T')[0]}`}</span>
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground/80 border-border/40 font-normal">
+              <span>{String(content?.ongoingBadge || 'Ongoing')}</span>
+            </Badge>
+          )}
+        </div>
 
         {/* Description */}
         <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-4 min-h-[2rem]">
@@ -118,6 +127,8 @@ ProjectCard.propTypes = {
     name: PropTypes.string.isRequired,
     description: PropTypes.string,
     mainCurrency: PropTypes.string,
+    startDate: PropTypes.string,
+    endDate: PropTypes.string,
     shareToken: PropTypes.string,
     isShared: PropTypes.bool,
     owner: PropTypes.shape({

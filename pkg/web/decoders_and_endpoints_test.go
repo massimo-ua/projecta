@@ -743,6 +743,21 @@ func TestEndpointsErrorBranches(t *testing.T) {
 		}
 	})
 
+	t.Run("makeUpdateProjectBudgetEndpoint success and error", func(t *testing.T) {
+		epErr := makeUpdateProjectBudgetEndpoint(projSvcErr)
+		_, err := epErr(context.Background(), project.UpdateProjectBudgetCommand{})
+		if err == nil {
+			t.Errorf("expected service error")
+		}
+
+		dummyOwner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner"}
+		dummyProj, _ := project.NewProject(core.NewProjectID(), "Proj", "Desc", dummyOwner, time.Now(), time.Now())
+		epOk := makeUpdateProjectBudgetEndpoint(&mockProjectService{project: dummyProj})
+		res, err := epOk(context.Background(), project.UpdateProjectBudgetCommand{})
+		if err != nil || res == nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
 	t.Run("makeRemoveAssetEndpoint error", func(t *testing.T) {
 		ep := makeRemoveAssetEndpoint(astSvcErr)
 		_, err := ep(context.Background(), "invalid request type")
@@ -974,6 +989,90 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		_, err = decodeUpdateProjectRequest(ctx, req)
 		if err == nil {
 			t.Error("expected error for invalid project_id")
+		}
+	})
+
+	t.Run("DecodeCreateProjectRequest with start_date and tag_budgets", func(t *testing.T) {
+		authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, uuid.New())
+		body := `{"name":"Project with Budget","description":"Desc","mainCurrency":"EUR","start_date":"2026-05-01","tag_budgets":[{"tag":"materials","frequency":"MONTHLY","amount":50000}]}`
+		req, _ := http.NewRequest(http.MethodPost, "/projects", strings.NewReader(body))
+		res, err := DecodeCreateProjectRequest(authedCtx, req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd, ok := res.(project.CreateProjectCommand)
+		if !ok {
+			t.Fatalf("expected CreateProjectCommand")
+		}
+		if cmd.Name != "Project with Budget" || len(cmd.TagBudgets) != 1 || cmd.TagBudgets[0].Tag != "materials" {
+			t.Errorf("unexpected command data: %+v", cmd)
+		}
+
+		// Bad date
+		badDateBody := `{"name":"Project","start_date":"not-a-date"}`
+		reqBadDate, _ := http.NewRequest(http.MethodPost, "/projects", strings.NewReader(badDateBody))
+		_, err = DecodeCreateProjectRequest(authedCtx, reqBadDate)
+		if err == nil {
+			t.Errorf("expected error for bad start_date")
+		}
+	})
+
+	t.Run("decodeUpdateProjectBudgetRequest success and errors", func(t *testing.T) {
+		pID := uuid.New()
+		authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, uuid.New())
+
+		// Missing auth
+		reqNoAuth, _ := http.NewRequest(http.MethodPut, "/projects/"+pID.String()+"/budget", nil)
+		_, err := decodeUpdateProjectBudgetRequest(context.Background(), reqNoAuth)
+		if err == nil {
+			t.Errorf("expected error for unauthenticated request")
+		}
+
+		// Missing project_id
+		reqNoProj, _ := http.NewRequest(http.MethodPut, "/projects//budget", nil)
+		_, err = decodeUpdateProjectBudgetRequest(authedCtx, reqNoProj)
+		if err == nil {
+			t.Errorf("expected error for missing project_id")
+		}
+
+		// Bad project_id
+		reqBadProj, _ := http.NewRequest(http.MethodPut, "/", nil)
+		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
+		_, err = decodeUpdateProjectBudgetRequest(authedCtx, reqBadProj)
+		if err == nil {
+			t.Errorf("expected error for invalid project_id")
+		}
+
+		// Valid request
+		body := `{"tag_budgets":[{"tag":"rent","frequency":"MONTHLY","amount":100000}]}`
+		reqValid, _ := http.NewRequest(http.MethodPut, "/", strings.NewReader(body))
+		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": pID.String()})
+		res, err := decodeUpdateProjectBudgetRequest(authedCtx, reqValid)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		cmd, ok := res.(project.UpdateProjectBudgetCommand)
+		if !ok || len(cmd.TagBudgets) != 1 || cmd.TagBudgets[0].Tag != "rent" {
+			t.Errorf("unexpected command: %+v", cmd)
+		}
+	})
+
+	t.Run("toProjectDTO with TagBudgets", func(t *testing.T) {
+		owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner Name"}
+		proj, _ := project.NewProject(core.NewProjectID(), "Project Budget DTO", "Desc", owner, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{}, "EUR")
+		_ = proj.SetTagBudgets([]project.TagBudgetInput{
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 50000},
+		})
+
+		dto := toProjectDTO(proj)
+		if len(dto.TagBudgets) != 1 {
+			t.Fatalf("expected 1 TagBudgetDTO, got %d", len(dto.TagBudgets))
+		}
+		if dto.TagBudgets[0].Tag != "materials" || dto.TagBudgets[0].AnnualTotal != 600000 {
+			t.Errorf("unexpected TagBudgetDTO: %+v", dto.TagBudgets[0])
+		}
+		if dto.AnnualPlannedBudget != 600000 {
+			t.Errorf("expected AnnualPlannedBudget 600000, got %d", dto.AnnualPlannedBudget)
 		}
 	})
 

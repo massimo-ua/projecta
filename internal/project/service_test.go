@@ -150,12 +150,51 @@ func TestProjectService(t *testing.T) {
 		t.Fatalf("Create existing project error: %v", err)
 	}
 
-	// Create new project
+	// Create new project with tag budgets
 	projRepoNotFound := &mockProjectRepo{findErr: exceptions.NotFoundError}
 	svcNew := project.NewProjectService(projRepoNotFound, peopleSvc)
-	pNew, err := svcNew.Create(context.Background(), project.CreateProjectCommand{PersonID: owner.PersonID, Name: "New Project", Description: "Desc"})
+	pNew, err := svcNew.Create(context.Background(), project.CreateProjectCommand{
+		PersonID:    owner.PersonID,
+		Name:        "New Project",
+		Description: "Desc",
+		StartDate:   time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		TagBudgets: []project.TagBudgetInput{
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 50000},
+			{Tag: "labor", Frequency: "MONTHLY", Amount: 100000},
+		},
+	})
 	if err != nil || pNew == nil {
 		t.Fatalf("Create new project error: %v", err)
+	}
+	if len(pNew.TagBudgets()) != 2 {
+		t.Errorf("expected 2 tag budgets, got %d", len(pNew.TagBudgets()))
+	}
+	if pNew.AnnualPlannedBudget() != (50000*12 + 100000*12) {
+		t.Errorf("expected annual planned budget %d, got %d", 50000*12+100000*12, pNew.AnnualPlannedBudget())
+	}
+
+	// Create with invalid tag budget returns error
+	_, err = svcNew.Create(context.Background(), project.CreateProjectCommand{
+		PersonID: owner.PersonID,
+		Name:     "Invalid Tag Budget Project",
+		TagBudgets: []project.TagBudgetInput{
+			{Tag: "materials", Frequency: "INVALID_FREQ", Amount: 50000},
+		},
+	})
+	if err == nil {
+		t.Errorf("expected error for invalid tag budget frequency")
+	}
+
+	// UpdateBudget
+	pBudgetUpdated, err := svc.UpdateBudget(context.Background(), project.UpdateProjectBudgetCommand{
+		PersonID:  owner.PersonID,
+		ProjectID: proj.ID(),
+		TagBudgets: []project.TagBudgetInput{
+			{Tag: "rent", Frequency: "MONTHLY", Amount: 80000},
+		},
+	})
+	if err != nil || len(pBudgetUpdated.TagBudgets()) != 1 {
+		t.Errorf("UpdateBudget error: %v", err)
 	}
 
 	// Create error branches

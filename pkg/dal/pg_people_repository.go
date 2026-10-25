@@ -151,6 +151,9 @@ func (r *PgPeopleRepository) fetchRoles(ctx context.Context, personID core.Perso
 			roles = append(roles, role)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return roles, nil
 }
 
@@ -171,6 +174,9 @@ func (r *PgPeopleRepository) fetchCredentials(ctx context.Context, personID core
 		if err == nil {
 			creds = append(creds, c)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return creds, nil
 }
@@ -280,6 +286,9 @@ func (r *PgPeopleRepository) FindAll(ctx context.Context, pagination core.Pagina
 			return nil, 0, exceptions.NewInternalException("failed to build person", err)
 		}
 		list = append(list, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, exceptions.NewInternalException("failed to iterate people", err)
 	}
 	return list, total, nil
 }

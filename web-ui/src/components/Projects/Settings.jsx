@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { Loader2, Settings2, Share2, Check, Copy } from 'lucide-react';
+import { Loader2, Settings2, Share2, Check, Copy, Calendar, X } from 'lucide-react';
 
 const SUPPORTED_CURRENCIES = [
   { code: 'UAH', name: 'Ukrainian Hryvnia (UAH ₴)' },
@@ -31,6 +31,8 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mainCurrency, setMainCurrency] = useState('UAH');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [project, setProject] = useState(null);
   const [copied, setCopied] = useState(false);
 
@@ -45,6 +47,12 @@ export default function Settings() {
           if (current.mainCurrency) {
             setMainCurrency(current.mainCurrency);
           }
+          if (current.startDate) {
+            setStartDate(current.startDate.split('T')[0]);
+          }
+          if (current.endDate) {
+            setEndDate(current.endDate.split('T')[0]);
+          }
         }
       })
       .catch((err) => {
@@ -57,9 +65,17 @@ export default function Settings() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (endDate && startDate && endDate < startDate) {
+      toast.error(String(content.invalidEndDateError));
+      return;
+    }
     setSaving(true);
     try {
-      await projectsRepository.updateProjectSettings(projectId, { mainCurrency });
+      await projectsRepository.updateProjectSettings(projectId, {
+        mainCurrency,
+        startDate: startDate ? startDate : undefined,
+        endDate: endDate ? endDate : undefined,
+      });
       toast.success(String(content.settingsUpdatedSuccess));
     } catch (err) {
       toast.error(`${String(content.failedToUpdate)}: ${err.message}`);
@@ -124,6 +140,73 @@ export default function Settings() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="pt-2 border-t border-border/50 space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span>{String(content.timelineTitle || 'Project Timeline')}</span>
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {String(content.timelineDesc || '')}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="project-start-date" className="text-xs font-semibold">
+                  {String(content.startDateLabel || 'Start Date')}
+                </Label>
+                <Input
+                  id="project-start-date"
+                  type="date"
+                  value={startDate}
+                  disabled={saving}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="rounded-xl h-10"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="project-end-date" className="text-xs font-semibold">
+                    {String(content.endDateLabel || 'Target End Date')}
+                  </Label>
+                  {endDate && (
+                    <button
+                      type="button"
+                      onClick={() => setEndDate('')}
+                      disabled={saving}
+                      className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                      title={String(content.clearEndDateButton || 'Clear')}
+                    >
+                      <X className="h-3 w-3" />
+                      <span>{String(content.clearEndDateButton || 'Clear')}</span>
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="project-end-date"
+                  type="date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  disabled={saving}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="rounded-xl h-10"
+                />
+              </div>
+            </div>
+
+            {endDate && startDate && endDate < startDate ? (
+              <p className="text-[11px] text-rose-500 font-medium">
+                {String(content.invalidEndDateError || 'End date cannot be earlier than start date.')}
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {String(content.endDateHint || '')}
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end pt-2">

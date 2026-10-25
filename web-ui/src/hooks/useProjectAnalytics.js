@@ -12,7 +12,9 @@ import {
   startOfMonth,
   eachMonthOfInterval,
 } from 'date-fns';
+import { useLocale } from 'react-intlayer';
 import { investmentRepository, assetRepository, projectsRepository } from '../api';
+import { ProjectBudgetSchedule } from '../models';
 
 export function getPaymentHomeAmount(p) {
   if (!p) return 0;
@@ -53,6 +55,7 @@ export function getAssetTargetHomeAmount(a) {
 }
 
 export function useProjectAnalytics(projectId) {
+  const { locale } = useLocale();
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -129,12 +132,11 @@ export function useProjectAnalytics(projectId) {
 
     const filteredAssets = timeframe === 'all'
       ? assets
-      : assets.filter(
-          (a) =>
-            isWithinTimeframe(a.rawAcquiredAt) ||
-            isWithinTimeframe(a.rawCompletedDate) ||
-            activeAssetIdsInPeriod.has(a.id),
-        );
+      : assets.filter((a) => (
+        isWithinTimeframe(a.rawAcquiredAt)
+        || isWithinTimeframe(a.rawCompletedDate)
+        || activeAssetIdsInPeriod.has(a.id)
+      ));
 
     const totalInvested = Math.round(
       filteredPayments.reduce((sum, p) => sum + getPaymentHomeAmount(p), 0) * 100,
@@ -148,6 +150,17 @@ export function useProjectAnalytics(projectId) {
         return sum;
       }, 0) * 10,
     ) / 10;
+
+    // Calculate budget schedule from tag budgets
+    const budgetSchedule = new ProjectBudgetSchedule({
+      tagBudgets: project?.tagBudgets || [],
+      payments: filteredPayments,
+      startDate: project?.startDate,
+      endDate: project?.endDate,
+      locale,
+    });
+
+    const hasTagBudgets = Array.isArray(project?.tagBudgets) && project.tagBudgets.length > 0;
 
     // Calculate target budget without double-counting parent/child hierarchies
     const assetById = new Map(assets.map((a) => [a.id, a]));
@@ -177,12 +190,25 @@ export function useProjectAnalytics(projectId) {
       }
     });
 
-    totalTargetBudget = Math.round(totalTargetBudget * 100) / 100;
-    budgetedActualCost = Math.round(budgetedActualCost * 100) / 100;
-    const budgetUtilization = totalTargetBudget > 0
-      ? Math.round((budgetedActualCost / totalTargetBudget) * 100)
-      : null;
-    const budgetVariance = Math.round((totalTargetBudget - budgetedActualCost) * 100) / 100;
+    let budgetUtilization;
+    let budgetVariance;
+    let isTagBasedBudget = false;
+
+    if (hasTagBudgets) {
+      isTagBasedBudget = true;
+      totalTargetBudget = budgetSchedule.totalAnnualBudget;
+      budgetedActualCost = totalInvested;
+      budgetUtilization = budgetSchedule.budgetUtilization;
+      budgetVariance = budgetSchedule.annualVariance;
+      overBudgetCount = budgetSchedule.overBudgetTagsCount;
+    } else {
+      totalTargetBudget = Math.round(totalTargetBudget * 100) / 100;
+      budgetedActualCost = Math.round(budgetedActualCost * 100) / 100;
+      budgetUtilization = totalTargetBudget > 0
+        ? Math.round((budgetedActualCost / totalTargetBudget) * 100)
+        : null;
+      budgetVariance = Math.round((totalTargetBudget - budgetedActualCost) * 100) / 100;
+    }
 
     const completedAssetsCount = filteredAssets.filter((a) => a.isCompleted).length;
     const activeAssetsCount = filteredAssets.filter((a) => a.isActive).length;
@@ -221,6 +247,7 @@ export function useProjectAnalytics(projectId) {
       assets: filteredAssets,
       allAssets: assets,
       hasData: filteredPayments.length > 0 || filteredAssets.length > 0,
+      budgetSchedule,
       kpis: {
         totalInvested,
         investmentCount: filteredPayments.length,
@@ -236,9 +263,10 @@ export function useProjectAnalytics(projectId) {
         activeAssetsCount,
         avgMonthlyBurn,
         activeMonthsCount,
+        isTagBasedBudget,
       },
     };
-  }, [payments, assets, timeframe]);
+  }, [payments, assets, timeframe, project, locale]);
 
   return {
     loading,
@@ -250,10 +278,10 @@ export function useProjectAnalytics(projectId) {
     assets: filteredData.assets,
     allAssets: filteredData.allAssets,
     kpis: filteredData.kpis,
+    budgetSchedule: filteredData.budgetSchedule,
     hasData: filteredData.hasData,
     reload: fetchData,
   };
 }
 
 export default useProjectAnalytics;
-

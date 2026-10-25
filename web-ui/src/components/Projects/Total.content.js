@@ -34,6 +34,45 @@ const totalContent = {
       }),
     },
     charts: {
+      projectedSchedule: {
+        title: t({
+          en: 'Projected vs. Real Annual Investment Schedule',
+          uk: 'Річний графік: Прогнозовані та фактичні інвестиції',
+        }),
+        description: t({
+          en: '12-month comparison of planned tag budgets against real investments',
+          uk: 'Помісячне порівняння планових бюджетів за тегами з фактичними інвестиціями',
+        }),
+        monthlyMode: t({ en: 'Monthly Schedule', uk: 'За місяцями' }),
+        cumulativeMode: t({ en: 'Cumulative Trajectory', uk: 'Накопичувально' }),
+        byTagMode: t({ en: 'By Category (Tag)', uk: 'За категоріями (тегами)' }),
+        allCategoriesFilter: t({ en: 'All Categories', uk: 'Усі категорії' }),
+        tagFilterPlaceholder: t({ en: 'Tag', uk: 'Тег' }),
+        showTableButton: t({ en: 'Table', uk: 'Таблиця' }),
+        hideTableButton: t({ en: 'Hide Table', uk: 'Приховати' }),
+        unplannedTagLabel: t({ en: 'Unplanned / Untagged', uk: 'Позапланові / Без бюджету' }),
+        plannedAnnualTitle: t({ en: 'Planned Annual Budget', uk: 'Плановий річний бюджет' }),
+        realInvestedTitle: t({ en: 'Real Invested', uk: 'Фактично інвестовано' }),
+        remainingBudgetTitle: t({ en: 'Remaining Budget', uk: 'Залишок бюджету' }),
+        overBudgetTitle: t({ en: 'Over Budget', uk: 'Перевитрата бюджету' }),
+        adherenceTitle: t({ en: 'Budget Utilization', uk: 'Використання бюджету' }),
+        projectedSeriesLabel: t({ en: 'Projected', uk: 'План' }),
+        actualSeriesLabel: t({ en: 'Real Invested', uk: 'Факт' }),
+        monthColumnTitle: t({ en: 'Month', uk: 'Місяць' }),
+        varianceColumnTitle: t({ en: 'Variance', uk: 'Різниця' }),
+        noBudgetEmptyTitle: t({
+          en: 'No Category Budgets Configured Yet',
+          uk: 'Бюджети за категоріями ще не налаштовані',
+        }),
+        noBudgetEmptyDesc: t({
+          en: 'Define expected investment frequencies and amounts per tag to compare your projected annual schedule with real investments.',
+          uk: 'Визначте очікувану періодичність та обсяг інвестицій для тегів, щоб порівнювати річний план із фактичними витратами.',
+        }),
+        configureInTagsButton: t({
+          en: 'Configure Category Budgets',
+          uk: 'Налаштувати бюджети категорій',
+        }),
+      },
       monthlyTrend: {
         title: t({
           en: 'Monthly Investment Trend',

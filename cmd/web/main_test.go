@@ -124,6 +124,13 @@ func TestCrossContextAdapters(t *testing.T) {
 		t.Errorf("expected error from projectPeopleAdapter")
 	}
 
+	personAdminOnly, _ := people.NewPerson(pID, "Admin", "User", "Admin", []people.Credentials{cred}, people.RoleAdministrator)
+	adapterAdmin := &projectPeopleAdapter{repo: &mockPersonReader{person: personAdminOnly}}
+	ownerAdmin, err := adapterAdmin.FindOwner(context.Background(), pID)
+	if err != nil || ownerAdmin == nil || ownerAdmin.CanHaveProjects {
+		t.Errorf("expected CanHaveProjects=false for Admin-only person, got %v", ownerAdmin.CanHaveProjects)
+	}
+
 	assetOwnerAdapter := &assetOwnerReaderAdapter{people: peopleAdapter}
 	ownerRef, err := assetOwnerAdapter.FindOwner(ctx, pID)
 	if err != nil || ownerRef.PersonID != pID || ownerRef.DisplayName != "J.D." {
@@ -322,6 +329,9 @@ func (m *mockProjectServiceForAdapter) Remove(context.Context, project.RemovePro
 	return m.err
 }
 func (m *mockProjectServiceForAdapter) Update(context.Context, project.UpdateProjectCommand) (*project.Project, error) {
+	return m.proj, m.err
+}
+func (m *mockProjectServiceForAdapter) UpdateBudget(context.Context, project.UpdateProjectBudgetCommand) (*project.Project, error) {
 	return m.proj, m.err
 }
 func (m *mockProjectServiceForAdapter) AcceptShare(context.Context, uuid.UUID, core.PersonID) (*project.Project, error) {

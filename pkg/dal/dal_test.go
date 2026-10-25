@@ -160,6 +160,9 @@ type mockPgDb struct {
 	rowVal     []any
 	rowErr     error
 	countErr   error
+	rolesErr   error
+	credsErr   error
+	rowsErr    error
 	isNotFound bool
 	zeroTotal  bool
 }
@@ -179,12 +182,12 @@ func (m *mockPgDb) Query(ctx context.Context, sql string, args ...interface{}) (
 		return nil, m.queryErr
 	}
 	if strings.Contains(sql, "person_roles") {
-		return &mockRows{data: m.rolesData}, nil
+		return &mockRows{data: m.rolesData, err: m.rolesErr}, nil
 	}
 	if strings.Contains(sql, "credentials") {
-		return &mockRows{data: m.credsData}, nil
+		return &mockRows{data: m.credsData, err: m.credsErr}, nil
 	}
-	return &mockRows{data: m.rowsData}, nil
+	return &mockRows{data: m.rowsData, err: m.rowsErr}, nil
 }
 
 func (m *mockPgDb) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
@@ -359,6 +362,28 @@ func TestPgPeopleRepository(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected internal error on db failure")
 		}
+
+		// Verify rows.Err() propagation from fetchRoles
+		mockDbRolesErr := &mockPgDb{
+			rowVal:   []any{"John", "Doe", "J.D."},
+			rolesErr: errors.New("roles iteration failure"),
+		}
+		ctxRolesErr := withMockDb(context.Background(), mockDbRolesErr)
+		_, err = repo.FindByID(ctxRolesErr, pID)
+		if err == nil {
+			t.Errorf("expected error when fetchRoles rows iterator encounters error")
+		}
+
+		// Verify rows.Err() propagation from fetchCredentials
+		mockDbCredsErr := &mockPgDb{
+			rowVal:   []any{"John", "Doe", "J.D."},
+			credsErr: errors.New("creds iteration failure"),
+		}
+		ctxCredsErr := withMockDb(context.Background(), mockDbCredsErr)
+		_, err = repo.FindByID(ctxCredsErr, pID)
+		if err == nil {
+			t.Errorf("expected error when fetchCredentials rows iterator encounters error")
+		}
 	})
 
 	t.Run("personRecord toPerson test", func(t *testing.T) {
@@ -422,6 +447,18 @@ func TestPgPeopleRepository(t *testing.T) {
 		_, _, err = repo.FindAll(ctxQueryErr, core.Pagination{Limit: 10, Offset: 0})
 		if err == nil {
 			t.Errorf("expected query error")
+		}
+
+		// Verify rows.Err() propagation in FindAll
+		mockDbRowsErr := &mockPgDb{
+			rowVal:   []any{1},
+			rowsData: [][]any{{pID.String(), "John", "Doe", "J.D."}},
+			rowsErr:  errors.New("rows iteration failure"),
+		}
+		ctxRowsErr := withMockDb(context.Background(), mockDbRowsErr)
+		_, _, err = repo.FindAll(ctxRowsErr, core.Pagination{Limit: 10, Offset: 0})
+		if err == nil {
+			t.Errorf("expected error when FindAll rows iterator encounters error")
 		}
 	})
 }
@@ -594,6 +631,27 @@ func TestPgProjectRepository(t *testing.T) {
 		err = repo.CreateShareRecord(ctxErr, pID, ownerID)
 		if err == nil {
 			t.Errorf("expected exec error")
+		}
+	})
+
+	t.Run("Create and Update with Tag Budgets", func(t *testing.T) {
+		mockDb := &mockPgDb{}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		projWithBudgets, _ := project.NewProject(pID, "Project Tag Budget", "Desc", owner, now, now, "EUR")
+		_ = projWithBudgets.SetTagBudgets([]project.TagBudgetInput{
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 50000},
+			{Tag: "labor", Frequency: "WEEKLY", Amount: 20000},
+		})
+
+		err := repo.Create(ctx, projWithBudgets)
+		if err != nil {
+			t.Errorf("Create with tag budgets error: %v", err)
+		}
+
+		err = repo.Update(ctx, projWithBudgets)
+		if err != nil {
+			t.Errorf("Update with tag budgets error: %v", err)
 		}
 	})
 

@@ -258,3 +258,199 @@ func TestProject_ReconstituteProject(t *testing.T) {
 		}
 	})
 }
+
+func TestTagBudget(t *testing.T) {
+	t.Run("creates valid monthly money tag budget", func(t *testing.T) {
+		tb, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:          "#materials",
+			Frequency:    "MONTHLY",
+			ResourceType: "MONEY",
+			Amount:       50000,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tb.Tag() != "materials" {
+			t.Errorf("expected tag 'materials', got '%s'", tb.Tag())
+		}
+		if tb.Frequency() != project.FrequencyMonthly {
+			t.Errorf("expected frequency MONTHLY, got '%s'", tb.Frequency())
+		}
+		if tb.Amount() != 50000 {
+			t.Errorf("expected amount 50000, got %d", tb.Amount())
+		}
+		if tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) != 600000 {
+			t.Errorf("expected annual total 600000, got %d", tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+		}
+	})
+
+	t.Run("calculates time resource valuation automatically", func(t *testing.T) {
+		hours := 40.0
+		rate := int64(2500) // 25.00 EUR/h
+		tb, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:            "labor",
+			Frequency:      "WEEKLY",
+			ResourceType:   "TIME",
+			TimeHours:      &hours,
+			TimeHourlyRate: &rate,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expectedPerWeek := int64(40 * 2500) // 100000
+		if tb.Amount() != expectedPerWeek {
+			t.Errorf("expected amount %d, got %d", expectedPerWeek, tb.Amount())
+		}
+		// Weekly projection across 12 months (52 weeks):
+		annual := tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+		if annual <= 0 {
+			t.Errorf("expected positive annual total, got %d", annual)
+		}
+	})
+
+	t.Run("handles ONCE frequency placed in target month", func(t *testing.T) {
+		tb, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:          "down-payment",
+			Frequency:    "ONCE",
+			TargetMonth:  3,
+			ResourceType: "MONEY",
+			Amount:       300000,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tb.ProjectedAmountForMonth(1, 2026, time.January) != 0 {
+			t.Errorf("expected 0 for month 1")
+		}
+		if tb.ProjectedAmountForMonth(3, 2026, time.March) != 300000 {
+			t.Errorf("expected 300000 for month 3")
+		}
+		if tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) != 300000 {
+			t.Errorf("expected annual total 300000, got %d", tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+		}
+	})
+
+	t.Run("handles ANNUALLY frequency placed in calendar target month", func(t *testing.T) {
+		tb, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:          "materials",
+			Frequency:    "ANNUALLY",
+			TargetMonth:  12, // December
+			ResourceType: "MONEY",
+			Amount:       2000000, // 20,000.00 UAH per year
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// In October (month 10): 0
+		if tb.ProjectedAmountForMonth(1, 2026, time.October) != 0 {
+			t.Errorf("expected 0 for October, got %d", tb.ProjectedAmountForMonth(1, 2026, time.October))
+		}
+		// In December (month 12): 2000000
+		if tb.ProjectedAmountForMonth(3, 2026, time.December) != 2000000 {
+			t.Errorf("expected 2000000 for December, got %d", tb.ProjectedAmountForMonth(3, 2026, time.December))
+		}
+		// Project starts 2026-10-25 and ends 2026-12-31: December falls within period, so total is 2000000!
+		start := time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC)
+		end := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		if tb.AnnualTotal(start, end) != 2000000 {
+			t.Errorf("expected annual total for Oct-Dec period 2000000, got %d", tb.AnnualTotal(start, end))
+		}
+	})
+
+	t.Run("calculates AnnualTotal capped by optional endDate", func(t *testing.T) {
+		tb, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:          "car-saving",
+			Frequency:    "MONTHLY",
+			ResourceType: "MONEY",
+			Amount:       100000, // 1,000.00
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		// Ongoing project (no end date): 12 months * 100,000 = 1,200,000
+		ongoingAnnual := tb.AnnualTotal(start)
+		if ongoingAnnual != 1200000 {
+			t.Errorf("expected ongoing annual 1200000, got %d", ongoingAnnual)
+		}
+		// Target project ending in 6 months (June 30, 2026): 6 months * 100,000 = 600,000
+		end := time.Date(2026, 6, 30, 23, 59, 59, 0, time.UTC)
+		targetAnnual := tb.AnnualTotal(start, end)
+		if targetAnnual != 600000 {
+			t.Errorf("expected targeted annual 600000, got %d", targetAnnual)
+		}
+	})
+
+	t.Run("rejects invalid inputs", func(t *testing.T) {
+		_, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:       "",
+			Frequency: "MONTHLY",
+			Amount:    100,
+		})
+		if err == nil {
+			t.Errorf("expected error for empty tag")
+		}
+
+		_, err = project.NewTagBudget(project.TagBudgetInput{
+			Tag:       "rent",
+			Frequency: "BIWEEKLY",
+			Amount:    100,
+		})
+		if err == nil {
+			t.Errorf("expected error for invalid frequency")
+		}
+
+		_, err = project.NewTagBudget(project.TagBudgetInput{
+			Tag:       "rent",
+			Frequency: "MONTHLY",
+			Amount:    0,
+		})
+		if err == nil {
+			t.Errorf("expected error for non-positive amount")
+		}
+	})
+}
+
+func TestProject_TagBudgets(t *testing.T) {
+	owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Alice"}
+	proj, err := project.NewProject(core.NewProjectID(), "Tag Budget Project", "Desc", owner, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{}, "EUR")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("assigns valid tag budgets and rejects duplicates", func(t *testing.T) {
+		err := proj.SetTagBudgets([]project.TagBudgetInput{
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 50000},
+			{Tag: "rent", Frequency: "MONTHLY", Amount: 100000},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(proj.TagBudgets()) != 2 {
+			t.Errorf("expected 2 tag budgets, got %d", len(proj.TagBudgets()))
+		}
+		if proj.AnnualPlannedBudget() != (50000*12 + 100000*12) {
+			t.Errorf("expected annual planned budget %d, got %d", 50000*12+100000*12, proj.AnnualPlannedBudget())
+		}
+
+		// Duplicate tag should be rejected
+		err = proj.SetTagBudgets([]project.TagBudgetInput{
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 50000},
+			{Tag: "#materials", Frequency: "WEEKLY", Amount: 20000},
+		})
+		if err == nil {
+			t.Errorf("expected error for duplicate tag")
+		}
+	})
+
+	t.Run("TagBudgets getter returns defensive copy", func(t *testing.T) {
+		budgets := proj.TagBudgets()
+		if len(budgets) == 0 {
+			t.Fatalf("expected non-empty tag budgets")
+		}
+		budgets = append(budgets, project.ReconstituteTagBudget("extra", "MONTHLY", 1, "MONEY", 100, nil, nil, nil, "", "", ""))
+		if len(proj.TagBudgets()) == len(budgets) {
+			t.Errorf("TagBudgets() leaked internal slice")
+		}
+	})
+}

@@ -340,6 +340,10 @@ func (r *PgInvestmentRepository) FindTags(ctx context.Context, projectID core.Pr
 			SELECT unnest(tags) AS tag 
 			FROM projecta_assets 
 			WHERE project_id = $1
+			UNION
+			SELECT tag AS tag
+			FROM projecta_project_tag_budgets
+			WHERE project_id = $1
 		) t 
 		WHERE tag <> '' 
 		ORDER BY tag ASC

@@ -28,6 +28,7 @@ type ProjectService interface {
 	Create(ctx context.Context, command CreateProjectCommand) (*Project, error)
 	Remove(ctx context.Context, command RemoveProjectCommand) error
 	Update(ctx context.Context, command UpdateProjectCommand) (*Project, error)
+	UpdateBudget(ctx context.Context, command UpdateProjectBudgetCommand) (*Project, error)
 	AcceptShare(ctx context.Context, token uuid.UUID, personID core.PersonID) (*Project, error)
 	GetTotals(ctx context.Context, projectID core.ProjectID) (ProjectTotals, error)
 }

@@ -46,7 +46,7 @@ func (r *projectRecord) scanFields() []any {
 	}
 }
 
-func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Participant) (*project.Project, error) {
+func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Participant, tagBudgets ...[]project.TagBudget) (*project.Project, error) {
 	pID, err := core.ParseProjectID(r.projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project id: %w", err)
@@ -102,6 +102,7 @@ func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Pa
 		isShared,
 		curr,
 		participants,
+		tagBudgets...,
 	), nil
 }
 
@@ -166,8 +167,13 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		return nil, err
 	}
 
+	tagBudgets, err := r.fetchTagBudgets(ctx, pID)
+	if err != nil {
+		return nil, err
+	}
+
 	isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
-	return rec.toProject(isShared, sharedParts)
+	return rec.toProject(isShared, sharedParts, tagBudgets)
 }
 
 func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
@@ -213,7 +219,12 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		return nil, err
 	}
 
-	return rec.toProject(false, sharedParts)
+	tagBudgets, err := r.fetchTagBudgets(ctx, pID)
+	if err != nil {
+		return nil, err
+	}
+
+	return rec.toProject(false, sharedParts, tagBudgets)
 }
 
 func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID core.ProjectID) ([]project.Participant, error) {
@@ -264,6 +275,130 @@ func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID c
 	return participants, rows.Err()
 }
 
+func (r *PgProjectRepository) fetchTagBudgets(ctx context.Context, projectID core.ProjectID) ([]project.TagBudget, error) {
+	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	qb.From("projecta_project_tag_budgets")
+	qb.Select(
+		"tag",
+		"frequency",
+		"target_month",
+		"resource_type",
+		"amount",
+		"time_hours",
+		"time_hourly_rate",
+		"goods_quantity",
+		"goods_unit",
+		"goods_item_name",
+		"description",
+	)
+	qb.Where(qb.Equal("project_id", projectID.String()))
+	qb.OrderBy("created_at").Asc()
+
+	sql, args := qb.Build()
+	rows, err := r.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var budgets []project.TagBudget
+	for rows.Next() {
+		var (
+			tag            string
+			frequency      string
+			targetMonth    int
+			resourceType   string
+			amount         int64
+			timeHours      *float64
+			timeHourlyRate *int64
+			goodsQuantity  *float64
+			goodsUnit      string
+			goodsItemName  string
+			description    string
+		)
+
+		if err := rows.Scan(
+			&tag,
+			&frequency,
+			&targetMonth,
+			&resourceType,
+			&amount,
+			&timeHours,
+			&timeHourlyRate,
+			&goodsQuantity,
+			&goodsUnit,
+			&goodsItemName,
+			&description,
+		); err != nil {
+			return nil, err
+		}
+
+		budgets = append(budgets, project.ReconstituteTagBudget(
+			tag,
+			frequency,
+			targetMonth,
+			resourceType,
+			amount,
+			timeHours,
+			timeHourlyRate,
+			goodsQuantity,
+			goodsUnit,
+			goodsItemName,
+			description,
+		))
+	}
+
+	return budgets, rows.Err()
+}
+
+func (r *PgProjectRepository) saveTagBudgets(ctx context.Context, proj *project.Project) error {
+	delSql := "DELETE FROM projecta_project_tag_budgets WHERE project_id = $1"
+	if _, err := r.db.Exec(ctx, delSql, proj.ID().String()); err != nil {
+		return err
+	}
+
+	budgets := proj.TagBudgets()
+	for _, b := range budgets {
+		insertSql := `
+			INSERT INTO projecta_project_tag_budgets (
+				project_id, tag, frequency, target_month, resource_type,
+				amount, time_hours, time_hourly_rate, goods_quantity,
+				goods_unit, goods_item_name, description
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			ON CONFLICT (project_id, tag) DO UPDATE SET
+				frequency = EXCLUDED.frequency,
+				target_month = EXCLUDED.target_month,
+				resource_type = EXCLUDED.resource_type,
+				amount = EXCLUDED.amount,
+				time_hours = EXCLUDED.time_hours,
+				time_hourly_rate = EXCLUDED.time_hourly_rate,
+				goods_quantity = EXCLUDED.goods_quantity,
+				goods_unit = EXCLUDED.goods_unit,
+				goods_item_name = EXCLUDED.goods_item_name,
+				description = EXCLUDED.description
+		`
+		if _, err := r.db.Exec(
+			ctx,
+			insertSql,
+			proj.ID().String(),
+			b.Tag(),
+			b.Frequency().String(),
+			b.TargetMonth(),
+			b.ResourceType().String(),
+			b.Amount(),
+			b.TimeHours(),
+			b.TimeHourlyRate(),
+			b.GoodsQuantity(),
+			b.GoodsUnit(),
+			b.GoodsItemName(),
+			b.Description(),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *PgProjectRepository) CreateShareRecord(ctx context.Context, projectID core.ProjectID, personID core.PersonID) error {
 	qb := sqlbuilder.PostgreSQL.NewInsertBuilder()
 	qb.InsertInto("projecta_project_shares")
@@ -308,8 +443,21 @@ func (r *PgProjectRepository) Create(ctx context.Context, project *project.Proje
 
 	sql, args := qb.Build()
 
-	_, err := r.db.Exec(ctx, sql, args...)
+	execFn := func(txCtx context.Context) (any, error) {
+		if _, err := r.db.Exec(txCtx, sql, args...); err != nil {
+			return nil, err
+		}
+		if err := r.saveTagBudgets(txCtx, project); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
 
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, execFn)
+		return err
+	}
+	_, err := execFn(ctx)
 	return err
 }
 
@@ -334,8 +482,21 @@ func (r *PgProjectRepository) Update(ctx context.Context, project *project.Proje
 
 	sql, args := qb.Build()
 
-	_, err := r.db.Exec(ctx, sql, args...)
+	execFn := func(txCtx context.Context) (any, error) {
+		if _, err := r.db.Exec(txCtx, sql, args...); err != nil {
+			return nil, err
+		}
+		if err := r.saveTagBudgets(txCtx, project); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
 
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, execFn)
+		return err
+	}
+	_, err := execFn(ctx)
 	return err
 }
 
@@ -416,8 +577,13 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 			return nil, err
 		}
 
+		tagBudgets, err := r.fetchTagBudgets(ctx, pID)
+		if err != nil {
+			return nil, err
+		}
+
 		isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
-		p, err := rec.toProject(isShared, sharedParts)
+		p, err := rec.toProject(isShared, sharedParts, tagBudgets)
 		if err != nil {
 			return nil, err
 		}

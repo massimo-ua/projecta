@@ -67,6 +67,10 @@ const projectDetailsContent = {
       en: 'Share project',
       uk: 'Поділитися',
     }),
+    ongoingBadge: t({
+      en: 'Ongoing',
+      uk: 'Безстроковий',
+    }),
   },
 };
 

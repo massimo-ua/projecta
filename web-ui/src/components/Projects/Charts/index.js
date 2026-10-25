@@ -4,4 +4,5 @@ export { CategoryBreakdown } from './CategoryBreakdown';
 export { PaymentKindBreakdown } from './PaymentKindBreakdown';
 export { TopCostTypes } from './TopCostTypes';
 export { PaymentsVsAssets } from './PaymentsVsAssets';
+export { ProjectedVsRealSchedule } from './ProjectedVsRealSchedule';
 export { CHART_COLORS } from './colors';
