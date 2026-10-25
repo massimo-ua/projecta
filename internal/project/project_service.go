@@ -95,9 +95,58 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 		return nil, err
 	}
 
+	if command.StartDate != nil || command.EndDate != nil {
+		st := p.StartDate()
+		if command.StartDate != nil {
+			st = *command.StartDate
+		}
+		et := p.EndDate()
+		if command.EndDate != nil {
+			et = *command.EndDate
+		}
+		if err := p.SetDates(st, et); err != nil {
+			return nil, err
+		}
+	}
+
+	if command.TagBudgets != nil {
+		if err := p.SetTagBudgets(*command.TagBudgets); err != nil {
+			return nil, err
+		}
+	}
+
 	err = s.repository.Update(ctx, p)
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to update project", err)
+	}
+
+	return p, nil
+}
+
+func (s *ProjectServiceImpl) UpdateBudget(ctx context.Context, command UpdateProjectBudgetCommand) (*Project, error) {
+	personID, err := resolveRequesterID(ctx, command.PersonID)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: personID})
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("project not found", err)
+		}
+		return nil, exceptions.NewInternalException("failed to find project", err)
+	}
+
+	if !p.IsOwnedByPerson(personID) {
+		return nil, exceptions.NewForbiddenException("only project owner can update project budget", nil)
+	}
+
+	if err := p.SetTagBudgets(command.TagBudgets); err != nil {
+		return nil, err
+	}
+
+	err = s.repository.Update(ctx, p)
+	if err != nil {
+		return nil, exceptions.NewInternalException("failed to update project budget", err)
 	}
 
 	return p, nil
@@ -133,7 +182,8 @@ func NewProjectService(repository ProjectRepository, peopleService PeopleService
 }
 
 func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCommand) (*Project, error) {
-	if strings.TrimSpace(command.Name) == "" {
+	trimmedName := strings.TrimSpace(command.Name)
+	if trimmedName == "" {
 		return nil, exceptions.NewValidationException("project name is required", nil)
 	}
 
@@ -148,7 +198,7 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 	}
 
 	p, err := s.repository.FindOne(ctx, ProjectFilter{
-		Name:        command.Name,
+		Name:        trimmedName,
 		RequesterID: command.PersonID,
 	})
 
@@ -157,17 +207,31 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 	}
 
 	if errors.Is(err, exceptions.NotFoundError) {
+		startDate := command.StartDate
+		if startDate.IsZero() {
+			startDate = time.Now().UTC()
+		}
+		var endDate time.Time
+		if command.EndDate != nil {
+			endDate = *command.EndDate
+		}
 		p, err = NewProject(
 			core.NewProjectID(),
 			command.Name,
 			command.Description,
 			owner,
-			time.Time{},
-			time.Time{},
+			startDate,
+			endDate,
 			command.MainCurrency,
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		if len(command.TagBudgets) > 0 {
+			if err := p.SetTagBudgets(command.TagBudgets); err != nil {
+				return nil, err
+			}
 		}
 
 		err = s.repository.Create(ctx, p)

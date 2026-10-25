@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIntlayer, useLocale } from 'react-intlayer';
@@ -15,7 +15,11 @@ import {
   TrendingUp,
   Inbox,
   RefreshCw,
+  Plus,
+  Edit2,
+  Calendar,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +31,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { useProjectTags } from '../../hooks/useProjectTags';
+import { EditTagBudgetModal } from './EditTagBudgetModal';
+import { cleanTagName } from '../../models';
 
 function TagKpiCard({ title, value, subtitle, icon: Icon, colorClass }) {
   return (
@@ -62,7 +69,9 @@ TagKpiCard.propTypes = {
   colorClass: PropTypes.string.isRequired,
 };
 
-function TagCard({ tag, currency, onSelectTag, content }) {
+function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
+  const { locale } = useLocale();
+  const intlLocale = (locale && locale.startsWith('uk')) ? 'uk-UA' : 'en-US';
   const hasMoney = tag.resourceTypes.includes('MONEY');
   const hasTime = tag.resourceTypes.includes('TIME');
   const hasGoods = tag.resourceTypes.includes('GOODS');
@@ -70,22 +79,27 @@ function TagCard({ tag, currency, onSelectTag, content }) {
   return (
     <div className="group flex flex-col justify-between rounded-2xl border border-border/70 bg-card p-5 shadow-xs transition-all duration-200 hover:shadow-md hover:border-primary/50">
       <div className="space-y-4">
-        {/* Header: Tag Pill & Count */}
+        {/* Header: Tag Pill, Count & Budget Badge */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-mono text-base font-bold text-primary group-hover:underline">
-              #{tag.name}
+              <span>{`#${tag.name}`}</span>
             </span>
+            {tag.tagBudget && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary">
+                {String(content.frequencies?.[tag.tagBudget.frequency] || tag.tagBudget.frequency)}
+              </Badge>
+            )}
           </div>
           <Badge
             variant="secondary"
             className="text-xs font-semibold px-2 py-0.5 rounded-lg border-border/60 bg-muted/60"
           >
-            {tag.count} {tag.count === 1 ? String(content.singleInvestment || 'investment') : String(content.investmentsCount || 'investments')}
+            <span>{`${tag.count} ${tag.count === 1 ? String(content.singleInvestment || 'investment') : String(content.investmentsCount || 'investments')}`}</span>
           </Badge>
         </div>
 
-        {/* Valuation & Resource types */}
+        {/* Valuation & Budget comparison */}
         <div className="space-y-2">
           <div className="flex items-baseline gap-1.5">
             <span className="text-xl font-extrabold text-foreground tracking-tight">
@@ -96,39 +110,89 @@ function TagCard({ tag, currency, onSelectTag, content }) {
             </span>
           </div>
 
+          {/* Budget progress bar if tag has budget rule */}
+          {tag.tagBudget && (
+            <div className="space-y-1 pt-1 border-t border-border/40">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">
+                  {String(content.plannedAnnualTitle || 'Planned Annual')}:
+                </span>
+                <span className="font-semibold text-foreground">
+                  <span>{`${new Intl.NumberFormat(intlLocale).format(tag.projectedAnnualAmount)} ${currency}`}</span>
+                </span>
+              </div>
+              <div className="w-full bg-muted/60 h-2 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full transition-all rounded-full',
+                    tag.isOverBudget ? 'bg-orange-500' : 'bg-emerald-500',
+                  )}
+                  style={{ width: `${Math.min(tag.budgetUtilization || 0, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className={cn(
+                  'font-bold',
+                  tag.isOverBudget ? 'text-orange-500' : 'text-muted-foreground',
+                )}>
+                  <span>{`${tag.budgetUtilization || 0}%`}</span>
+                  {tag.isOverBudget && (
+                    <span className="ml-1">
+                      <span>{`(${String(content.overbudgetBadge || 'Overbudget')})`}</span>
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Resource types involved */}
           <div className="flex items-center gap-1.5 flex-wrap pt-1">
             {hasMoney && (
               <Badge variant="outline" className="text-[10px] font-medium gap-1 px-1.5 py-0.5 rounded-md text-emerald-600 dark:text-emerald-400 border-emerald-500/20 bg-emerald-500/5">
                 <DollarSign className="h-2.5 w-2.5" />
-                <span>Capital</span>
+                <span>{String(content.capitalBadge || 'Capital')}</span>
               </Badge>
             )}
             {hasTime && (
               <Badge variant="outline" className="text-[10px] font-medium gap-1 px-1.5 py-0.5 rounded-md text-amber-600 dark:text-amber-400 border-amber-500/20 bg-amber-500/5">
                 <Clock className="h-2.5 w-2.5" />
-                <span>Labor</span>
+                <span>{String(content.laborBadge || 'Labor')}</span>
               </Badge>
             )}
             {hasGoods && (
               <Badge variant="outline" className="text-[10px] font-medium gap-1 px-1.5 py-0.5 rounded-md text-violet-600 dark:text-violet-400 border-violet-500/20 bg-violet-500/5">
                 <Briefcase className="h-2.5 w-2.5" />
-                <span>Goods</span>
+                <span>{String(content.goodsBadge || 'Goods')}</span>
               </Badge>
             )}
           </div>
         </div>
       </div>
 
-      {/* Footer Action */}
-      <div className="pt-4 mt-4 border-t border-border/50">
+      {/* Footer Actions */}
+      <div className="pt-3 mt-4 border-t border-border/50 flex items-center justify-between gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onConfigureBudget(tag.name, tag.tagBudget)}
+          className="text-xs font-medium h-8 rounded-xl px-2.5 gap-1 text-muted-foreground hover:text-foreground"
+        >
+          <Edit2 className="h-3 w-3" />
+          <span>
+            {tag.tagBudget
+              ? String(content.editBudgetButton || 'Edit Budget')
+              : String(content.configureBudgetButton || 'Configure Budget')}
+          </span>
+        </Button>
+
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onSelectTag(tag.name)}
-          className="w-full justify-between text-xs font-semibold h-8 rounded-xl text-primary hover:bg-primary/10 transition-colors"
+          className="text-xs font-semibold h-8 rounded-xl text-primary hover:bg-primary/10 transition-colors gap-1 px-2.5"
         >
-          <span>{String(content.viewInvestments || 'View Investments')}</span>
+          <span>{String(content.viewInvestments || 'View')}</span>
           <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
         </Button>
       </div>
@@ -142,10 +206,15 @@ TagCard.propTypes = {
     count: PropTypes.number.isRequired,
     formattedAmount: PropTypes.string.isRequired,
     resourceTypes: PropTypes.arrayOf(PropTypes.string).isRequired,
+    tagBudget: PropTypes.shape({}),
+    projectedAnnualAmount: PropTypes.number,
+    budgetUtilization: PropTypes.number,
+    isOverBudget: PropTypes.bool,
   }).isRequired,
   currency: PropTypes.string.isRequired,
   onSelectTag: PropTypes.func.isRequired,
-  content: PropTypes.object.isRequired,
+  onConfigureBudget: PropTypes.func.isRequired,
+  content: PropTypes.shape({}).isRequired,
 };
 
 function TagEmptyState({ hasSearch, onGoToInvestments, content }) {
@@ -192,7 +261,7 @@ function TagEmptyState({ hasSearch, onGoToInvestments, content }) {
 TagEmptyState.propTypes = {
   hasSearch: PropTypes.bool.isRequired,
   onGoToInvestments: PropTypes.func.isRequired,
-  content: PropTypes.object.isRequired,
+  content: PropTypes.shape({}).isRequired,
 };
 
 export function Tags() {
@@ -204,17 +273,26 @@ export function Tags() {
   const {
     loading,
     currency,
+    project,
     searchQuery,
     setSearchQuery,
     sortBy,
     setSortBy,
     tags,
+    tagBudgets,
     totalTagsCount,
     totalInvestmentsTagged,
     formattedTotalAmountTagged,
     topTag,
+    saveTagBudgets,
     reload,
   } = useProjectTags(projectId);
+
+  const [modalState, setModalState] = useState({
+    open: false,
+    tag: '',
+    existingRule: null,
+  });
 
   const handleSelectTag = (tagName) => {
     const targetUrl = `${getLocalizedUrl(`/projects/${projectId}/investments`, locale)}?tag=${encodeURIComponent(tagName)}`;
@@ -223,6 +301,45 @@ export function Tags() {
 
   const handleGoToInvestments = () => {
     navigate(getLocalizedUrl(`/projects/${projectId}/investments`, locale));
+  };
+
+  const handleOpenBudgetModal = (tagName = '', existingRule = null) => {
+    setModalState({
+      open: true,
+      tag: tagName,
+      existingRule,
+    });
+  };
+
+  const handleCloseBudgetModal = () => {
+    setModalState({
+      open: false,
+      tag: '',
+      existingRule: null,
+    });
+  };
+
+  const handleSaveBudgetRule = async (newRule) => {
+    const cleaned = cleanTagName(modalState.tag || (newRule ? newRule.tag : ''));
+    let updatedRules = [...tagBudgets];
+
+    if (!newRule) {
+      updatedRules = updatedRules.filter((r) => cleanTagName(r.tag) !== cleaned);
+    } else {
+      const idx = updatedRules.findIndex((r) => cleanTagName(r.tag) === cleanTagName(newRule.tag));
+      if (idx >= 0) {
+        updatedRules[idx] = newRule;
+      } else {
+        updatedRules.push(newRule);
+      }
+    }
+
+    try {
+      await saveTagBudgets(updatedRules);
+      toast.success(String(content.budgetSavedSuccess || 'Category budget updated'));
+    } catch (err) {
+      toast.error(`${String(content.budgetSaveError || 'Failed to update category budget')}: ${err.message || ''}`);
+    }
   };
 
   return (
@@ -243,15 +360,27 @@ export function Tags() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={reload}
-          className="rounded-xl gap-2 text-xs font-semibold self-start sm:self-auto h-9"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => handleOpenBudgetModal('')}
+            className="rounded-xl gap-2 text-xs font-semibold h-9 shadow-xs"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{String(content.configureBudgetButton || 'Configure Tag Budget')}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={reload}
+            className="rounded-xl gap-2 text-xs font-semibold h-9"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>{String(content.refreshButton || 'Refresh')}</span>
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -259,28 +388,30 @@ export function Tags() {
         <TagKpiCard
           title={String(content.totalTagsCard || 'Total Tags')}
           value={loading ? '...' : totalTagsCount}
-          subtitle="Distinct taxonomy labels"
+          subtitle={String(content.totalTagsSubtitle || 'Distinct taxonomy labels')}
           icon={TagIcon}
           colorClass="bg-primary/10 text-primary ring-primary/20"
         />
         <TagKpiCard
           title={String(content.taggedInvestmentsCard || 'Tagged Allocations')}
           value={loading ? '...' : totalInvestmentsTagged}
-          subtitle="Resource allocations"
+          subtitle={String(content.taggedInvestmentsSubtitle || 'Resource allocations')}
           icon={Layers}
           colorClass="bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20"
         />
         <TagKpiCard
           title={String(content.totalValuationCard || 'Total Tagged Value')}
           value={loading ? '...' : `${formattedTotalAmountTagged} ${currency}`}
-          subtitle="Across all tags"
+          subtitle={String(content.totalValuationSubtitle || 'Across all tags')}
           icon={DollarSign}
           colorClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20"
         />
         <TagKpiCard
           title={String(content.topTagCard || 'Most Used Tag')}
           value={loading ? '...' : topTag ? `#${topTag.name}` : '—'}
-          subtitle={topTag ? `${topTag.count} investments` : 'No tags'}
+          subtitle={topTag
+            ? `${topTag.count} ${String(content.investmentsCount || 'investments')}`
+            : String(content.noTagsLabel || 'No tags')}
           icon={TrendingUp}
           colorClass="bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/20"
         />
@@ -346,6 +477,7 @@ export function Tags() {
               tag={tag}
               currency={currency}
               onSelectTag={handleSelectTag}
+              onConfigureBudget={(name, rule) => handleOpenBudgetModal(name, rule)}
               content={content}
             />
           ))}
@@ -357,6 +489,18 @@ export function Tags() {
           content={content}
         />
       )}
+
+      {/* Edit / Add Tag Budget Modal */}
+      <EditTagBudgetModal
+        open={modalState.open}
+        tag={modalState.tag}
+        existingRule={modalState.existingRule}
+        currency={currency}
+        startDate={project?.startDate}
+        endDate={project?.endDate}
+        onSave={handleSaveBudgetRule}
+        onClose={handleCloseBudgetModal}
+      />
     </div>
   );
 }

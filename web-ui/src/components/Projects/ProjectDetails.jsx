@@ -22,6 +22,7 @@ import {
   Users,
   Coins,
   User,
+  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -148,6 +149,17 @@ export function ProjectDetails() {
                 <Badge variant="secondary" className="gap-1 text-xs">
                   <Users className="h-3 w-3" />
                   <span>Shared</span>
+                </Badge>
+              )}
+
+              {project?.startDate && (
+                <Badge variant="outline" className="text-xs gap-1 border-border/70 bg-card text-muted-foreground font-normal">
+                  <Calendar className="h-3 w-3 text-muted-foreground" />
+                  <span>
+                    {project.endDate
+                      ? `${project.startDate.split('T')[0]} → ${project.endDate.split('T')[0]}`
+                      : `${project.startDate.split('T')[0]} (${String(content.ongoingBadge || 'Ongoing')})`}
+                  </span>
                 </Badge>
               )}
             </div>

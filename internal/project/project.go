@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -44,6 +45,7 @@ type Project struct {
 	isShared     bool
 	mainCurrency string
 	participants []Participant
+	tagBudgets   []TagBudget
 }
 
 func (p *Project) IsOwnedBy(owner *Owner) bool {
@@ -72,7 +74,7 @@ func (p *Project) AddParticipant(participant Participant) {
 func (p *Project) UpdateDetails(name, description, mainCurrency string) error {
 	trimmedName := strings.TrimSpace(name)
 	if trimmedName != "" {
-		if len(trimmedName) < MinProjectNameLength || len(trimmedName) > MaxProjectNameLength {
+		if utf8.RuneCountInString(trimmedName) < MinProjectNameLength || utf8.RuneCountInString(trimmedName) > MaxProjectNameLength {
 			return exceptions.NewValidationException("project name must be between 3 and 100 characters", nil)
 		}
 		p.name = trimmedName
@@ -125,7 +127,7 @@ func NewProject(id core.ProjectID, name string, description string, owner *Owner
 	}
 
 	trimmedName := strings.TrimSpace(name)
-	if len(trimmedName) < MinProjectNameLength || len(trimmedName) > MaxProjectNameLength {
+	if utf8.RuneCountInString(trimmedName) < MinProjectNameLength || utf8.RuneCountInString(trimmedName) > MaxProjectNameLength {
 		return nil, exceptions.NewValidationException("project name must be between 3 and 100 characters", nil)
 	}
 
@@ -153,6 +155,7 @@ func NewProject(id core.ProjectID, name string, description string, owner *Owner
 		isShared:     false,
 		mainCurrency: curr,
 		participants: make([]Participant, 0),
+		tagBudgets:   make([]TagBudget, 0),
 	}
 
 	if owner != nil && owner.DisplayName != "" {
@@ -162,6 +165,25 @@ func NewProject(id core.ProjectID, name string, description string, owner *Owner
 	}
 
 	return proj, nil
+}
+
+// SetTagBudgets validates and assigns the tag budget rules for the project.
+func (p *Project) SetTagBudgets(inputs []TagBudgetInput) error {
+	budgets := make([]TagBudget, 0, len(inputs))
+	seen := make(map[string]struct{}, len(inputs))
+	for _, in := range inputs {
+		b, err := NewTagBudget(in)
+		if err != nil {
+			return err
+		}
+		if _, exists := seen[b.Tag()]; exists {
+			return exceptions.NewValidationException("duplicate tag budget: "+b.Tag(), nil)
+		}
+		seen[b.Tag()] = struct{}{}
+		budgets = append(budgets, b)
+	}
+	p.tagBudgets = budgets
+	return nil
 }
 
 // ReconstituteProject hydrates a Project entity from persistence storage without executing domain validation.
@@ -176,6 +198,7 @@ func ReconstituteProject(
 	isShared bool,
 	mainCurrency string,
 	participants []Participant,
+	tagBudgets ...[]TagBudget,
 ) *Project {
 	curr := strings.ToUpper(strings.TrimSpace(mainCurrency))
 	if curr == "" {
@@ -190,6 +213,14 @@ func ReconstituteProject(
 		parts = make([]Participant, 0)
 	}
 
+	var tBudgets []TagBudget
+	if len(tagBudgets) > 0 && tagBudgets[0] != nil {
+		tBudgets = make([]TagBudget, len(tagBudgets[0]))
+		copy(tBudgets, tagBudgets[0])
+	} else {
+		tBudgets = make([]TagBudget, 0)
+	}
+
 	return &Project{
 		id:           id,
 		name:         name,
@@ -201,6 +232,7 @@ func ReconstituteProject(
 		isShared:     isShared,
 		mainCurrency: curr,
 		participants: parts,
+		tagBudgets:   tBudgets,
 	}
 }
 
@@ -232,4 +264,21 @@ func (p *Project) Participants() []Participant {
 	cp := make([]Participant, len(p.participants))
 	copy(cp, p.participants)
 	return cp
+}
+
+func (p *Project) TagBudgets() []TagBudget {
+	if p.tagBudgets == nil {
+		return make([]TagBudget, 0)
+	}
+	cp := make([]TagBudget, len(p.tagBudgets))
+	copy(cp, p.tagBudgets)
+	return cp
+}
+
+func (p *Project) AnnualPlannedBudget() int64 {
+	var total int64
+	for _, b := range p.tagBudgets {
+		total += b.AnnualTotal(p.startDate, p.endDate)
+	}
+	return total
 }

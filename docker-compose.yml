@@ -96,6 +96,7 @@ services:
     volumes:
       - ./web-ui:/app
       - /app/node_modules
+      - /app/.intlayer/cache
     depends_on:
       - web
 

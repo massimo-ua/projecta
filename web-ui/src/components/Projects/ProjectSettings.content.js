@@ -23,9 +23,37 @@ const projectSettingsContent = {
       en: 'Save Settings',
       uk: 'Зберегти налаштування',
     }),
+    timelineTitle: t({
+      en: 'Project Timeline',
+      uk: 'Терміни проєкту',
+    }),
+    timelineDesc: t({
+      en: 'Configure the project start date and optional target end date. Ongoing projects have no end date.',
+      uk: 'Налаштуйте дату початку проєкту та необов’язкову цільову дату завершення. Безстрокові проєкти не мають дати завершення.',
+    }),
+    startDateLabel: t({
+      en: 'Start Date',
+      uk: 'Дата початку',
+    }),
+    endDateLabel: t({
+      en: 'Target End Date (Optional)',
+      uk: 'Цільова дата завершення (Необов’язково)',
+    }),
+    clearEndDateButton: t({
+      en: 'Clear end date (Ongoing)',
+      uk: 'Очистити дату (Безстроковий)',
+    }),
+    endDateHint: t({
+      en: 'Leave empty for an ongoing project without a deadline.',
+      uk: 'Залиште порожнім для безстрокового проєкту без фіксованого терміну.',
+    }),
+    invalidEndDateError: t({
+      en: 'End date cannot be earlier than start date.',
+      uk: 'Дата завершення не може бути раніше дати початку.',
+    }),
     settingsUpdatedSuccess: t({
-      en: 'Project home currency updated successfully',
-      uk: 'Основну валюту проєкту успішно оновлено',
+      en: 'Project settings updated successfully',
+      uk: 'Налаштування проєкту успішно оновлено',
     }),
     failedToLoad: t({
       en: 'Failed to load project settings',

@@ -163,6 +163,12 @@ func (m *mockProjectService) Update(_ context.Context, _ project.UpdateProjectCo
 	}
 	return m.project, nil
 }
+func (m *mockProjectService) UpdateBudget(_ context.Context, _ project.UpdateProjectBudgetCommand) (*project.Project, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.project, nil
+}
 func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ core.PersonID) (*project.Project, error) {
 	if m.err != nil {
 		return nil, m.err

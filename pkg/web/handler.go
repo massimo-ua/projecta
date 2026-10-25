@@ -202,6 +202,14 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	if projectEndpoints.UpdateProjectBudget != nil {
+		r.Methods(http.MethodPut).Path("/projects/{project_id}/budget").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), projectEndpoints.UpdateProjectBudget),
+			decodeUpdateProjectBudgetRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}").Handler(ht.NewServer(
 		requireRole(string(people.RoleUser), projectEndpoints.RemoveProject),
 		decodeRemoveProjectRequest,

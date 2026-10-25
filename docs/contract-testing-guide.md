@@ -216,7 +216,27 @@ Content-Type: application/json
 {
   "name": "Commercial Renovation",
   "description": "Office refurbishment and equipment purchase",
-  "mainCurrency": "USD"
+  "mainCurrency": "USD",
+  "start_date": "2026-01-01T00:00:00Z",
+  "tag_budgets": [
+    {
+      "tag": "labor",
+      "frequency": "MONTHLY",
+      "resource_type": "TIME",
+      "amount": 250000,
+      "time_hours": 100,
+      "time_hourly_rate": 2500,
+      "description": "Engineering team hours"
+    },
+    {
+      "tag": "equipment",
+      "frequency": "ONCE",
+      "target_month": 1,
+      "resource_type": "MONEY",
+      "amount": 1000000,
+      "description": "Initial tooling"
+    }
+  ]
 }
 ```
 
@@ -233,6 +253,28 @@ Content-Type: application/json
   "share_token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "is_shared": false,
   "mainCurrency": "USD",
+  "start_date": "2026-01-01T00:00:00Z",
+  "tag_budgets": [
+    {
+      "tag": "labor",
+      "frequency": "MONTHLY",
+      "target_month": 1,
+      "resource_type": "TIME",
+      "amount": 250000,
+      "time_hours": 100,
+      "time_hourly_rate": 2500,
+      "annual_total": 3000000
+    },
+    {
+      "tag": "equipment",
+      "frequency": "ONCE",
+      "target_month": 1,
+      "resource_type": "MONEY",
+      "amount": 1000000,
+      "annual_total": 1000000
+    }
+  ],
+  "annual_planned_budget": 4000000,
   "participants": [
     "Alice Senior Engineer"
   ]
@@ -260,6 +302,9 @@ Content-Type: application/json
       "share_token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "is_shared": false,
       "mainCurrency": "USD",
+      "start_date": "2026-01-01T00:00:00Z",
+      "tag_budgets": [],
+      "annual_planned_budget": 0,
       "participants": ["Alice Senior Engineer"]
     }
   ],
@@ -331,7 +376,70 @@ Content-Type: application/json
 
 ---
 
-#### 3.2.5 Delete Project
+#### 3.2.5 Update Project Tag Budgets
+- **Method / Path**: `PUT /projects/{project_id}/budget`
+- **Auth**: `Bearer <token>` (Role: `User`)
+
+**Request Sample:**
+```http
+PUT /projects/8bb5d12a-0a25-4fe0-86ec-ecad90bc9837/budget HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
+
+{
+  "tag_budgets": [
+    {
+      "tag": "labor",
+      "frequency": "MONTHLY",
+      "resource_type": "TIME",
+      "amount": 300000,
+      "time_hours": 120,
+      "time_hourly_rate": 2500
+    },
+    {
+      "tag": "materials",
+      "frequency": "WEEKLY",
+      "resource_type": "MONEY",
+      "amount": 50000
+    }
+  ]
+}
+```
+
+**Response Sample (`200 OK`):**
+```json
+{
+  "project_id": "8bb5d12a-0a25-4fe0-86ec-ecad90bc9837",
+  "name": "Commercial Renovation Phase 1",
+  "description": "Updated project description",
+  "mainCurrency": "EUR",
+  "tag_budgets": [
+    {
+      "tag": "labor",
+      "frequency": "MONTHLY",
+      "target_month": 1,
+      "resource_type": "TIME",
+      "amount": 300000,
+      "time_hours": 120,
+      "time_hourly_rate": 2500,
+      "annual_total": 3600000
+    },
+    {
+      "tag": "materials",
+      "frequency": "WEEKLY",
+      "target_month": 1,
+      "resource_type": "MONEY",
+      "amount": 50000,
+      "annual_total": 2600000
+    }
+  ],
+  "annual_planned_budget": 6200000
+}
+```
+
+---
+
+#### 3.2.6 Delete Project
 - **Method / Path**: `DELETE /projects/{project_id}`
 - **Auth**: `Bearer <token>` (Role: `User` - Owner only)
 

@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { useIntlayer } from 'react-intlayer';
+import { useIntlayer, useLocale } from 'react-intlayer';
+import { useNavigate } from 'react-router-dom';
+import { getLocalizedUrl } from 'intlayer';
 import HomeLayout from '../../Layout';
 import { useProjects } from '../../hooks/projects';
 import { ProjectCard } from './ProjectCard';
-import { AddProjectModal } from './AddProjectModal';
+import { ProjectSetupWizardModal } from './ProjectSetupWizardModal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FolderPlus, Plus, Sparkles } from 'lucide-react';
+import { FolderPlus, Plus } from 'lucide-react';
 import './Projects.css';
 
 export function Projects() {
   const content = useIntlayer('projects');
+  const { locale } = useLocale();
+  const navigate = useNavigate();
   const [loading, projects, setPagination] = useProjects();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -23,9 +27,13 @@ export function Projects() {
     refreshProjects();
   }, []);
 
-  const handleSuccess = () => {
+  const handleSuccess = (createdProject) => {
     setModalOpen(false);
-    refreshProjects();
+    if (createdProject?.id) {
+      navigate(getLocalizedUrl(`/projects/${createdProject.id}/total`, locale));
+    } else {
+      refreshProjects();
+    }
   };
 
   return (
@@ -103,7 +111,7 @@ export function Projects() {
           </div>
         )}
 
-        <AddProjectModal
+        <ProjectSetupWizardModal
           open={modalOpen}
           onSuccess={handleSuccess}
           onCancel={() => setModalOpen(false)}

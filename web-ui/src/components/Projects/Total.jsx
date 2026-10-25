@@ -21,6 +21,7 @@ import {
   PaymentKindBreakdown,
   TopCostTypes,
   PaymentsVsAssets,
+  ProjectedVsRealSchedule,
 } from './Charts';
 import './Total.css';
 
@@ -129,6 +130,7 @@ export default function Total() {
     payments,
     assets,
     kpis,
+    budgetSchedule,
   } = useProjectAnalytics(projectId);
 
   const timeframeOptions = [
@@ -311,6 +313,13 @@ export default function Total() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Projected vs. Real 12-Month Annual Schedule */}
+            <ProjectedVsRealSchedule
+              budgetSchedule={budgetSchedule}
+              currency={currency}
+              content={content}
+            />
+
             {/* Row 1: Full-width Monthly / Cumulative Investment Trend */}
             <MonthlySpendingTrend
               payments={payments}

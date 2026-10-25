@@ -1,6 +1,8 @@
 package project
 
 import (
+	"time"
+
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
@@ -9,6 +11,9 @@ type CreateProjectCommand struct {
 	Name         string
 	Description  string
 	MainCurrency string
+	StartDate    time.Time
+	EndDate      *time.Time
+	TagBudgets   []TagBudgetInput
 }
 
 type UpdateProjectCommand struct {
@@ -17,6 +22,15 @@ type UpdateProjectCommand struct {
 	Name         string
 	Description  string
 	MainCurrency string
+	StartDate    *time.Time
+	EndDate      *time.Time
+	TagBudgets   *[]TagBudgetInput
+}
+
+type UpdateProjectBudgetCommand struct {
+	ProjectID  core.ProjectID
+	PersonID   core.PersonID
+	TagBudgets []TagBudgetInput
 }
 
 type RemoveProjectCommand struct {
