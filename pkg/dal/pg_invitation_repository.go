@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -36,7 +35,7 @@ type invitationRecord struct {
 }
 
 func (rec *invitationRecord) toInvitation() (*people.Invitation, error) {
-	id, err := uuid.Parse(rec.id)
+	id, err := core.ParseInvitationID(rec.id)
 	if err != nil {
 		return nil, exceptions.NewInternalException("invalid invitation id", err)
 	}
@@ -129,7 +128,7 @@ func (r *PgInvitationRepository) scanInvitation(row pgx.Row) (*people.Invitation
 	return rec.toInvitation()
 }
 
-func (r *PgInvitationRepository) FindByID(ctx context.Context, id uuid.UUID) (*people.Invitation, error) {
+func (r *PgInvitationRepository) FindByID(ctx context.Context, id core.InvitationID) (*people.Invitation, error) {
 	row := r.db.QueryRow(
 		ctx,
 		`SELECT invitation_id, email, code_hash, expires_at, created_by, person_id, status, created_at, completed_at
@@ -191,7 +190,7 @@ func (r *PgInvitationRepository) FindByCreator(ctx context.Context, creatorID co
 	return list, nil
 }
 
-func (r *PgInvitationRepository) Delete(ctx context.Context, id uuid.UUID) error {
+func (r *PgInvitationRepository) Delete(ctx context.Context, id core.InvitationID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM invitations WHERE invitation_id = $1`, id.String())
 	if err != nil {
 		return exceptions.NewInternalException("failed to delete invitation", err)

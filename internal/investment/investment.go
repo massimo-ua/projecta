@@ -132,12 +132,12 @@ func NewInvestment(
 		contributor:    contributor,
 		resourceType:   resourceType,
 		amount:         finalAmount,
-		timeHours:      timeHours,
+		timeHours:      copyFloat64Ptr(timeHours),
 		timeHourlyRate: timeHourlyRate,
-		goodsQuantity:  goodsQuantity,
+		goodsQuantity:  copyFloat64Ptr(goodsQuantity),
 		goodsUnit:      goodsUnit,
 		goodsItemName:  goodsItemName,
-		description:    description,
+		description:    strings.TrimSpace(description),
 		date:           date,
 		tags:           cleanTags,
 	}
@@ -218,7 +218,7 @@ func (i *Investment) Allocate(allocations []InvestmentAssetLink) error {
 // UpdateDetails updates the descriptive information, date, and tags of the investment.
 func (i *Investment) UpdateDetails(description string, date time.Time, tags []string) {
 	if strings.TrimSpace(description) != "" {
-		i.description = description
+		i.description = strings.TrimSpace(description)
 	}
 	if !date.IsZero() {
 		i.date = date
@@ -278,13 +278,13 @@ func (i *Investment) UpdateValuation(
 
 	i.resourceType = targetType
 	if timeHours != nil {
-		i.timeHours = timeHours
+		i.timeHours = copyFloat64Ptr(timeHours)
 	}
 	if timeHourlyRate != nil {
 		i.timeHourlyRate = timeHourlyRate
 	}
 	if goodsQuantity != nil {
-		i.goodsQuantity = goodsQuantity
+		i.goodsQuantity = copyFloat64Ptr(goodsQuantity)
 	}
 	if goodsUnit != "" {
 		i.goodsUnit = goodsUnit
@@ -349,19 +349,22 @@ func ReconstituteInvestment(
 		contributor:      contributor,
 		resourceType:     resourceType,
 		amount:           amount,
-		timeHours:        timeHours,
+		timeHours:        copyFloat64Ptr(timeHours),
 		timeHourlyRate:   timeHourlyRate,
-		goodsQuantity:    goodsQuantity,
+		goodsQuantity:    copyFloat64Ptr(goodsQuantity),
 		goodsUnit:        goodsUnit,
 		goodsItemName:    goodsItemName,
-		description:      description,
+		description:      strings.TrimSpace(description),
 		date:             date,
 		tags:             cleanTags,
 	}
 }
 
 // EvaluateHomeAmount computes and stores the home-currency valuation for this investment.
-func (i *Investment) EvaluateHomeAmount(converter CurrencyConverter) {
+func (i *Investment) EvaluateHomeAmount(converter CurrencyConverter, homeCurrency ...string) {
+	if len(homeCurrency) > 0 && strings.TrimSpace(homeCurrency[0]) != "" {
+		i.homeCurrency = strings.ToUpper(strings.TrimSpace(homeCurrency[0]))
+	}
 	homeCurr := i.HomeCurrency()
 	if i.amount == nil {
 		i.homeAmount = 0
@@ -406,9 +409,9 @@ func (i *Investment) AssetAllocations() []InvestmentAssetLink {
 func (i *Investment) Contributor() ContributorRef { return i.contributor }
 func (i *Investment) ResourceType() ResourceType { return i.resourceType }
 func (i *Investment) Amount() *money.Money       { return i.amount }
-func (i *Investment) TimeHours() *float64        { return i.timeHours }
+func (i *Investment) TimeHours() *float64        { return copyFloat64Ptr(i.timeHours) }
 func (i *Investment) TimeHourlyRate() *money.Money { return i.timeHourlyRate }
-func (i *Investment) GoodsQuantity() *float64    { return i.goodsQuantity }
+func (i *Investment) GoodsQuantity() *float64    { return copyFloat64Ptr(i.goodsQuantity) }
 func (i *Investment) GoodsUnit() string          { return i.goodsUnit }
 func (i *Investment) GoodsItemName() string      { return i.goodsItemName }
 func (i *Investment) Description() string        { return i.description }
@@ -420,6 +423,14 @@ func (i *Investment) Tags() []string {
 	cp := make([]string, len(i.tags))
 	copy(cp, i.tags)
 	return cp
+}
+
+func copyFloat64Ptr(p *float64) *float64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }
 
 func cleanTagsSlice(tags []string) []string {

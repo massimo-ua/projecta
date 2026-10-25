@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -34,11 +33,6 @@ func toInvitationDTO(inv *people.Invitation) InvitationDTO {
 	}
 }
 
-type DeleteInvitationRequest struct {
-	AdminID      core.PersonID
-	InvitationID uuid.UUID
-}
-
 func decodeCreateInvitationRequest(ctx context.Context, r *http.Request) (any, error) {
 	adminID, err := core.AuthGuard(ctx)
 	if err != nil {
@@ -50,10 +44,7 @@ func decodeCreateInvitationRequest(ctx context.Context, r *http.Request) (any, e
 		return nil, exceptions.NewValidationException("invalid request body", err)
 	}
 
-	return struct {
-		AdminID core.PersonID
-		Email   string
-	}{
+	return people.CreateInvitationCommand{
 		AdminID: adminID,
 		Email:   req.Email,
 	}, nil
@@ -75,12 +66,12 @@ func decodeDeleteInvitationRequest(ctx context.Context, r *http.Request) (any, e
 
 	vars := mux.Vars(r)
 	invitationIDStr := vars["invitation_id"]
-	invitationID, err := uuid.Parse(invitationIDStr)
+	invitationID, err := core.ParseInvitationID(invitationIDStr)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid invitation id", err)
 	}
 
-	return DeleteInvitationRequest{
+	return people.DeleteInvitationCommand{
 		AdminID:      adminID,
 		InvitationID: invitationID,
 	}, nil
@@ -97,12 +88,9 @@ func decodeValidateInvitationRequest(_ context.Context, r *http.Request) (any, e
 
 func makeCreateInvitationEndpoint(svc people.InvitationService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req := request.(struct {
-			AdminID core.PersonID
-			Email   string
-		})
+		req := request.(people.CreateInvitationCommand)
 
-		invWithCode, err := svc.Create(ctx, req.AdminID, req.Email)
+		invWithCode, err := svc.Create(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -140,9 +128,9 @@ func makeListInvitationsEndpoint(svc people.InvitationService) endpoint.Endpoint
 
 func makeDeleteInvitationEndpoint(svc people.InvitationService) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req := request.(DeleteInvitationRequest)
+		req := request.(people.DeleteInvitationCommand)
 
-		if err := svc.Delete(ctx, req.AdminID, req.InvitationID); err != nil {
+		if err := svc.Delete(ctx, req); err != nil {
 			return nil, err
 		}
 

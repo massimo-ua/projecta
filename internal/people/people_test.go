@@ -100,7 +100,7 @@ func (m *mockInvitationRepo) Save(ctx context.Context, inv *people.Invitation) e
 	}
 	return m.completeErr
 }
-func (m *mockInvitationRepo) FindByID(ctx context.Context, id uuid.UUID) (*people.Invitation, error) {
+func (m *mockInvitationRepo) FindByID(ctx context.Context, id core.InvitationID) (*people.Invitation, error) {
 	if m.findByIDErr != nil {
 		return nil, m.findByIDErr
 	}
@@ -115,7 +115,7 @@ func (m *mockInvitationRepo) FindByCodeHash(ctx context.Context, codeHash string
 func (m *mockInvitationRepo) FindByCreator(ctx context.Context, creatorID core.PersonID) ([]*people.Invitation, error) {
 	return m.invList, nil
 }
-func (m *mockInvitationRepo) Delete(ctx context.Context, id uuid.UUID) error {
+func (m *mockInvitationRepo) Delete(ctx context.Context, id core.InvitationID) error {
 	return m.deleteErr
 }
 func (m *mockInvitationRepo) EmailExists(ctx context.Context, email string) (bool, error) {
@@ -311,7 +311,7 @@ func TestUserService(t *testing.T) {
 	repo := &mockPeopleRepo{person: p}
 	hasher := &mockHasher{compareRes: true}
 
-	svc := people.NewCustomerService(&mockDb{}, repo, hasher)
+	svc := people.NewUserService(&mockDb{}, repo, hasher)
 
 	// FindByID
 	found, err := svc.FindByID(context.Background(), personID)
@@ -355,7 +355,7 @@ func TestUserService(t *testing.T) {
 	}
 
 	// Hasher error
-	svcHashErr := people.NewCustomerService(&mockDb{}, repo, &mockHasher{hashErr: errors.New("hash err")})
+	svcHashErr := people.NewUserService(&mockDb{}, repo, &mockHasher{hashErr: errors.New("hash err")})
 	err = svcHashErr.Register(context.Background(), regCmdLocal)
 	if err == nil {
 		t.Errorf("expected error when hasher fails")
@@ -378,7 +378,7 @@ func TestUserService(t *testing.T) {
 	}
 
 	// Repo register error
-	svcRepoErr := people.NewCustomerService(&mockDb{}, &mockPeopleRepo{registerErr: errors.New("reg err")}, hasher)
+	svcRepoErr := people.NewUserService(&mockDb{}, &mockPeopleRepo{registerErr: errors.New("reg err")}, hasher)
 	err = svcRepoErr.Register(context.Background(), regCmdLocal)
 	if err == nil {
 		t.Errorf("expected repo error")
@@ -628,7 +628,7 @@ func TestRegisterDefaultUserRole(t *testing.T) {
 	// override Register to capture saved person
 	hasher := &mockHasher{}
 	db := &mockDb{}
-	svc := people.NewCustomerService(db, repo, hasher)
+	svc := people.NewUserService(db, repo, hasher)
 
 	err := svc.Register(context.Background(), people.RegisterCommand{
 		Login:            "test@example.com",
@@ -654,7 +654,7 @@ func TestUserService_FindAll_And_AssignRoles(t *testing.T) {
 		total:      1,
 	}
 	db := &mockDb{}
-	svc := people.NewCustomerService(db, repo, &mockHasher{})
+	svc := people.NewUserService(db, repo, &mockHasher{})
 
 	// FindAll
 	list, total, err := svc.FindAll(context.Background(), core.Pagination{Limit: 10, Offset: 0})
@@ -684,7 +684,7 @@ func TestUserService_FindAll_And_AssignRoles(t *testing.T) {
 	}
 
 	// AssignRoles person not found
-	svcNotFound := people.NewCustomerService(db, &mockPeopleRepo{findIDErr: errors.New("not found")}, &mockHasher{})
+	svcNotFound := people.NewUserService(db, &mockPeopleRepo{findIDErr: errors.New("not found")}, &mockHasher{})
 	err = svcNotFound.AssignRoles(context.Background(), people.AssignRolesCommand{
 		PersonID: core.NewPersonID(),
 		Roles:    []people.Role{people.RoleUser},
@@ -734,14 +734,14 @@ func TestAuthService_TokenRolesPropagation(t *testing.T) {
 	_ = capturedPayload
 }
 
-func TestCustomerService_UpdateDisplayName(t *testing.T) {
+func TestUserService_UpdateDisplayName(t *testing.T) {
 	pID := core.NewPersonID()
 	cred, _ := people.NewCredentials(people.LOCAL, "john@example.com", "pass")
 	p, _ := people.NewPerson(pID, "John", "Doe", "OldName", []people.Credentials{cred})
 
 	t.Run("success updating display name", func(t *testing.T) {
 		repo := &mockPeopleRepo{person: p}
-		svc := people.NewCustomerService(&mockDb{}, repo, &mockHasher{})
+		svc := people.NewUserService(&mockDb{}, repo, &mockHasher{})
 
 		dn, _ := people.NewDisplayName("NewDisplayName")
 		updated, err := svc.UpdateDisplayName(context.Background(), people.UpdateDisplayNameCommand{
@@ -761,7 +761,7 @@ func TestCustomerService_UpdateDisplayName(t *testing.T) {
 
 	t.Run("person not found", func(t *testing.T) {
 		repo := &mockPeopleRepo{findIDErr: errors.New("not found")}
-		svc := people.NewCustomerService(&mockDb{}, repo, &mockHasher{})
+		svc := people.NewUserService(&mockDb{}, repo, &mockHasher{})
 
 		dn, _ := people.NewDisplayName("AnyName")
 		_, err := svc.UpdateDisplayName(context.Background(), people.UpdateDisplayNameCommand{
@@ -775,7 +775,7 @@ func TestCustomerService_UpdateDisplayName(t *testing.T) {
 
 	t.Run("repository error on update", func(t *testing.T) {
 		repo := &mockPeopleRepo{person: p, updateProfileErr: errors.New("db error")}
-		svc := people.NewCustomerService(&mockDb{}, repo, &mockHasher{})
+		svc := people.NewUserService(&mockDb{}, repo, &mockHasher{})
 
 		dn, _ := people.NewDisplayName("AnyName")
 		_, err := svc.UpdateDisplayName(context.Background(), people.UpdateDisplayNameCommand{
@@ -817,6 +817,17 @@ func TestReconstitutePersonAndImmutability(t *testing.T) {
 	idSlice[0] = people.Credentials{}
 	if p.Identities()[0].Identifier() == "" {
 		t.Errorf("Identities() returned mutable slice reference")
+	}
+
+	// Verify NewPerson defensive copy of input identities
+	inputCreds := []people.Credentials{cred}
+	newP, err := people.NewPerson(core.NewPersonID(), "Jane", "Doe", "Jane", inputCreds, people.RoleUser)
+	if err != nil {
+		t.Fatalf("NewPerson failed: %v", err)
+	}
+	inputCreds[0] = people.Credentials{}
+	if newP.Identities()[0].Identifier() == "" {
+		t.Errorf("NewPerson leaked input identities slice")
 	}
 }
 

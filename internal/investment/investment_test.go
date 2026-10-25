@@ -346,3 +346,54 @@ func TestInvestment_Reconstitute(t *testing.T) {
 		}
 	})
 }
+
+func TestInvestment_PointerImmutability(t *testing.T) {
+	projID := core.NewProjectID()
+	contributor := investment.ContributorRef{PersonID: core.NewPersonID(), DisplayName: "Dev"}
+	assetID := core.NewAssetID()
+	hours := 40.0
+	qty := 10.0
+	rate := money.New(50, "USD")
+
+	inv, err := investment.NewInvestment(
+		core.NewInvestmentID(),
+		projID,
+		"USD",
+		assetID,
+		"Asset",
+		contributor,
+		investment.ResourceTypeTime,
+		money.New(2000, "USD"),
+		&hours,
+		rate,
+		&qty,
+		"pcs",
+		"Widget",
+		"Original",
+		time.Now(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewInvestment failed: %v", err)
+	}
+
+	// Mutate input pointer
+	hours = 999.0
+	if *inv.TimeHours() == 999.0 {
+		t.Errorf("NewInvestment leaked input timeHours pointer")
+	}
+
+	// Mutate getter pointer
+	th := inv.TimeHours()
+	*th = 888.0
+	if *inv.TimeHours() == 888.0 {
+		t.Errorf("TimeHours getter leaked internal pointer")
+	}
+
+	// Mutate goods quantity getter pointer
+	gq := inv.GoodsQuantity()
+	*gq = 777.0
+	if *inv.GoodsQuantity() == 777.0 {
+		t.Errorf("GoodsQuantity getter leaked internal pointer")
+	}
+}

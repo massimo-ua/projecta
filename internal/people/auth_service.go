@@ -52,7 +52,7 @@ func NewAuthService(
 func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*core.AuthResponse, error) {
 	strategy, ok := s.strategies[credentials.Provider()]
 	if !ok {
-		return nil, errors.New("unsupported identity provider")
+		return nil, exceptions.NewValidationException("unsupported identity provider", nil)
 	}
 
 	personID, err := strategy.Authenticate(ctx, credentials)
@@ -145,7 +145,7 @@ func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID core.Per
 
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
 		Sub:         personID.String(),
-		DisplayName: customer.FullName(),
+		DisplayName: customer.DisplayName(),
 		Roles:       customer.RoleStrings(),
 	})
 
@@ -187,7 +187,7 @@ func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing
 
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
 		Sub:         person.ID().String(),
-		DisplayName: person.FullName(),
+		DisplayName: person.DisplayName(),
 		Roles:       person.RoleStrings(),
 	})
 

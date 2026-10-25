@@ -111,6 +111,14 @@ func (p *Project) MarkShared() {
 	p.isShared = true
 }
 
+func copyOwner(o *Owner) *Owner {
+	if o == nil {
+		return nil
+	}
+	cp := *o
+	return &cp
+}
+
 func NewProject(id core.ProjectID, name string, description string, owner *Owner, startDate time.Time, endDate time.Time, mainCurrency ...string) (*Project, error) {
 	if id.IsNil() {
 		id = core.NewProjectID()
@@ -138,7 +146,7 @@ func NewProject(id core.ProjectID, name string, description string, owner *Owner
 		id:           id,
 		name:         trimmedName,
 		description:  strings.TrimSpace(description),
-		owner:        owner,
+		owner:        copyOwner(owner),
 		startDate:    startDate,
 		endDate:      endDate,
 		shareToken:   uuid.New(),
@@ -186,7 +194,7 @@ func ReconstituteProject(
 		id:           id,
 		name:         name,
 		description:  description,
-		owner:        owner,
+		owner:        copyOwner(owner),
 		startDate:    startDate,
 		endDate:      endDate,
 		shareToken:   shareToken,
@@ -203,11 +211,7 @@ func (p *Project) ProjectID() core.ProjectID            { return p.id }
 func (p *Project) Name() string                         { return p.name }
 func (p *Project) Description() string                  { return p.description }
 func (p *Project) Owner() *Owner {
-	if p.owner == nil {
-		return nil
-	}
-	cp := *p.owner
-	return &cp
+	return copyOwner(p.owner)
 }
 func (p *Project) OwnerID() core.PersonID {
 	if p.owner != nil {

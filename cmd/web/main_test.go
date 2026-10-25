@@ -108,8 +108,8 @@ func (m *mockAdapterAssetRepo) FindAncestors(ctx context.Context, assetID core.A
 }
 
 func TestCrossContextAdapters(t *testing.T) {
-	ctx := context.Background()
 	pID := core.NewPersonID()
+	ctx := context.WithValue(context.Background(), core.RequesterIDContextKey, pID)
 	cred, _ := people.NewCredentials("LOCAL", "user@example.com", "secret")
 	person, _ := people.NewPerson(pID, "John", "Doe", "J.D.", []people.Credentials{cred})
 
@@ -150,6 +150,13 @@ func TestCrossContextAdapters(t *testing.T) {
 	invProjDesc, err := invProjAdapter.FindProject(ctx, proj.ID())
 	if err != nil || invProjDesc.ID != proj.ID() || invProjDesc.MainCurrency != "USD" {
 		t.Fatalf("unexpected investmentProjectReaderAdapter result: %+v, err: %v", invProjDesc, err)
+	}
+
+	if _, err := assetProjAdapter.FindProject(context.Background(), proj.ID()); err == nil {
+		t.Errorf("expected unauthorized error for unauthenticated context in assetProjectReaderAdapter")
+	}
+	if _, err := invProjAdapter.FindProject(context.Background(), proj.ID()); err == nil {
+		t.Errorf("expected unauthorized error for unauthenticated context in investmentProjectReaderAdapter")
 	}
 
 	ast, _ := asset.CreateAsset(core.NewAssetID(), "Truck", "Desc", proj.ID(), money.New(1000, "USD"), now, ownerRef, asset.AssetStatusActive, nil, nil)

@@ -80,6 +80,7 @@ type ProjectEndpoints struct {
 	ListProjects      endpoint.Endpoint
 	ShowProjectTotals endpoint.Endpoint
 	UpdateProject     endpoint.Endpoint
+	RemoveProject     endpoint.Endpoint
 }
 
 func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, error) {
@@ -281,6 +282,40 @@ func makeUpdateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
 	}
 }
 
+func decodeRemoveProjectRequest(ctx context.Context, r *http.Request) (any, error) {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	vars := mux.Vars(r)
+	projectID, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("project id is required", nil)
+	}
+
+	projectUUID, err := core.ParseProjectID(projectID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project id", err)
+	}
+
+	return project.RemoveProjectCommand{
+		ProjectID: projectUUID,
+		PersonID:  personID,
+	}, nil
+}
+
+func makeRemoveProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		cmd, ok := request.(project.RemoveProjectCommand)
+		if !ok {
+			return nil, exceptions.NewValidationException("invalid request", nil)
+		}
+		err := svc.Remove(ctx, cmd)
+		return nil, err
+	}
+}
+
 func MakeProjectEndpoints(
 	projectService project.ProjectService,
 ) (ProjectEndpoints, error) {
@@ -291,5 +326,6 @@ func MakeProjectEndpoints(
 		ListProjects:      makeListProjectsEndpoint(projectService),
 		ShowProjectTotals: makeShowProjectTotalsEndpoint(projectService),
 		UpdateProject:     makeUpdateProjectEndpoint(projectService),
+		RemoveProject:     makeRemoveProjectEndpoint(projectService),
 	}, nil
 }

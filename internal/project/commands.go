@@ -1,7 +1,6 @@
 package project
 
 import (
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
@@ -23,9 +22,4 @@ type UpdateProjectCommand struct {
 type RemoveProjectCommand struct {
 	ProjectID core.ProjectID
 	PersonID  core.PersonID
-}
-
-type RemoveProjectResourceCommand struct {
-	ProjectID  core.ProjectID
-	ResourceID uuid.UUID
 }

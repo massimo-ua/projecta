@@ -816,7 +816,7 @@ func TestPgInvitationRepositoryAndPeopleUpdates(t *testing.T) {
 
 	pID := core.NewPersonID()
 	adminID := core.NewPersonID()
-	invID := uuid.New()
+	invID := core.NewInvitationID()
 	now := time.Now()
 	codeHash := "sha256_hash_value_123"
 

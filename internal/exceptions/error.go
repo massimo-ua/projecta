@@ -19,8 +19,8 @@ type unwrappable interface {
 }
 
 type Exception struct {
-	Message string    `json:"message"`
-	Code    ErrorCode `json:"code"`
+	Message string
+	Code    ErrorCode
 	err     error
 }
 

@@ -85,6 +85,30 @@ func CreateAsset(
 	return createAsset(id, name, description, projectID, price, startDate, owner, status, completedDate, tags, false)
 }
 
+func copyTimePtr(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	v := *t
+	return &v
+}
+
+func copyInt64Ptr(p *int64) *int64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func copyFloat64Ptr(p *float64) *float64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
 func createAsset(
 	id core.AssetID,
 	name string,
@@ -136,7 +160,7 @@ func createAsset(
 		owner:         owner,
 		status:        status,
 		startDate:     startDate,
-		completedDate: completedDate,
+		completedDate: copyTimePtr(completedDate),
 		targetPrice:   price,
 		children:      make([]ChildAssetLink, 0),
 		parents:       make([]ParentAssetLink, 0),
@@ -332,7 +356,7 @@ func (a *Asset) StartDate() time.Time {
 }
 
 func (a *Asset) CompletedDate() *time.Time {
-	return a.completedDate
+	return copyTimePtr(a.completedDate)
 }
 
 func (a *Asset) TargetPrice() *money.Money {
@@ -371,11 +395,11 @@ func (a *Asset) HomeAmount() int64 {
 }
 
 func (a *Asset) TargetHomeAmount() *int64 {
-	return a.targetHomeAmount
+	return copyInt64Ptr(a.targetHomeAmount)
 }
 
 func (a *Asset) ProgressPercentage() *float64 {
-	return a.progressPercentage
+	return copyFloat64Ptr(a.progressPercentage)
 }
 
 func (a *Asset) Children() []ChildAssetLink {
@@ -561,7 +585,7 @@ func ReconstituteAsset(
 		owner:         owner,
 		status:        status,
 		startDate:     start,
-		completedDate: completedDate,
+		completedDate: copyTimePtr(completedDate),
 		targetPrice:   targetPrice,
 		children:      make([]ChildAssetLink, 0),
 		parents:       make([]ParentAssetLink, 0),

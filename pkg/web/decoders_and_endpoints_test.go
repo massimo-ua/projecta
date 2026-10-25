@@ -122,35 +122,97 @@ func TestDecodersValidationErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("decodeProjectResourceRemoveCommand validation errors", func(t *testing.T) {
-		fn := decodeProjectResourceRemoveCommand("project_id", "resource_id")
+	t.Run("decodeRemoveProjectRequest validation errors", func(t *testing.T) {
+		reqNoAuth, _ := http.NewRequest("DELETE", "/projects/123", nil)
+		_, err := decodeRemoveProjectRequest(context.Background(), reqNoAuth)
+		if err == nil {
+			t.Errorf("expected unauthorized error for missing personID")
+		}
+
+		authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, core.NewPersonID())
+		reqNoVars, _ := http.NewRequest("DELETE", "/projects", nil)
+		_, err = decodeRemoveProjectRequest(authedCtx, reqNoVars)
+		if err == nil {
+			t.Errorf("expected missing project_id error")
+		}
+
+		reqBadUUID, _ := http.NewRequest("DELETE", "/projects/bad", nil)
+		reqBadUUID = mux.SetURLVars(reqBadUUID, map[string]string{"project_id": "bad"})
+		_, err = decodeRemoveProjectRequest(authedCtx, reqBadUUID)
+		if err == nil {
+			t.Errorf("expected invalid project_id error")
+		}
+
+		reqSuccess, _ := http.NewRequest("DELETE", "/projects/123", nil)
+		reqSuccess = mux.SetURLVars(reqSuccess, map[string]string{"project_id": uuid.New().String()})
+		res, err := decodeRemoveProjectRequest(authedCtx, reqSuccess)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, ok := res.(project.RemoveProjectCommand); !ok {
+			t.Errorf("expected project.RemoveProjectCommand, got %T", res)
+		}
+	})
+
+	t.Run("decodeRemoveAssetRequest validation errors", func(t *testing.T) {
 		validUUID := uuid.New().String()
 
 		reqNoProj, _ := http.NewRequest("DELETE", "/", nil)
-		_, err := fn(context.Background(), reqNoProj)
+		_, err := decodeRemoveAssetRequest(context.Background(), reqNoProj)
 		if err == nil {
 			t.Errorf("expected missing project_id")
 		}
 
 		reqBadProj, _ := http.NewRequest("DELETE", "/", nil)
 		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
-		_, err = fn(context.Background(), reqBadProj)
+		_, err = decodeRemoveAssetRequest(context.Background(), reqBadProj)
 		if err == nil {
 			t.Errorf("expected invalid project_id")
 		}
 
 		reqNoRes, _ := http.NewRequest("DELETE", "/", nil)
 		reqNoRes = mux.SetURLVars(reqNoRes, map[string]string{"project_id": validUUID})
-		_, err = fn(context.Background(), reqNoRes)
+		_, err = decodeRemoveAssetRequest(context.Background(), reqNoRes)
 		if err == nil {
-			t.Errorf("expected missing resource_id")
+			t.Errorf("expected missing asset_id")
 		}
 
 		reqBadRes, _ := http.NewRequest("DELETE", "/", nil)
-		reqBadRes = mux.SetURLVars(reqBadRes, map[string]string{"project_id": validUUID, "resource_id": "bad"})
-		_, err = fn(context.Background(), reqBadRes)
+		reqBadRes = mux.SetURLVars(reqBadRes, map[string]string{"project_id": validUUID, "asset_id": "bad"})
+		_, err = decodeRemoveAssetRequest(context.Background(), reqBadRes)
 		if err == nil {
-			t.Errorf("expected invalid resource_id")
+			t.Errorf("expected invalid asset_id")
+		}
+	})
+
+	t.Run("decodeRemoveInvestmentRequest validation errors", func(t *testing.T) {
+		validUUID := uuid.New().String()
+
+		reqNoProj, _ := http.NewRequest("DELETE", "/", nil)
+		_, err := decodeRemoveInvestmentRequest(context.Background(), reqNoProj)
+		if err == nil {
+			t.Errorf("expected missing project_id")
+		}
+
+		reqBadProj, _ := http.NewRequest("DELETE", "/", nil)
+		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad"})
+		_, err = decodeRemoveInvestmentRequest(context.Background(), reqBadProj)
+		if err == nil {
+			t.Errorf("expected invalid project_id")
+		}
+
+		reqNoRes, _ := http.NewRequest("DELETE", "/", nil)
+		reqNoRes = mux.SetURLVars(reqNoRes, map[string]string{"project_id": validUUID})
+		_, err = decodeRemoveInvestmentRequest(context.Background(), reqNoRes)
+		if err == nil {
+			t.Errorf("expected missing investment_id")
+		}
+
+		reqBadRes, _ := http.NewRequest("DELETE", "/", nil)
+		reqBadRes = mux.SetURLVars(reqBadRes, map[string]string{"project_id": validUUID, "investment_id": "bad"})
+		_, err = decodeRemoveInvestmentRequest(context.Background(), reqBadRes)
+		if err == nil {
+			t.Errorf("expected invalid investment_id")
 		}
 	})
 }
@@ -667,6 +729,20 @@ func TestEndpointsErrorBranches(t *testing.T) {
 		}
 	})
 
+	t.Run("makeRemoveProjectEndpoint success and error", func(t *testing.T) {
+		epErr := makeRemoveProjectEndpoint(projSvcErr)
+		_, err := epErr(context.Background(), project.RemoveProjectCommand{})
+		if err == nil {
+			t.Errorf("expected service error")
+		}
+
+		epOk := makeRemoveProjectEndpoint(&mockProjectService{})
+		_, err = epOk(context.Background(), project.RemoveProjectCommand{})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("makeRemoveAssetEndpoint error", func(t *testing.T) {
 		ep := makeRemoveAssetEndpoint(astSvcErr)
 		_, err := ep(context.Background(), "invalid request type")
@@ -1087,7 +1163,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 
 	t.Run("Invitation Endpoints and Decoders", func(t *testing.T) {
 		adminID := core.NewPersonID()
-		invID := uuid.New()
+		invID := core.NewInvitationID()
 		inv, _ := people.NewInvitation(invID, "invited@example.com", "hash123", time.Now().Add(7*24*time.Hour), adminID, nil, people.InvitationStatusPending, time.Now(), nil)
 		invWithCode := &people.InvitationWithCode{Invitation: inv, Code: "raw_code_123"}
 
@@ -1100,10 +1176,10 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		eps := MakeInvitationEndpoints(invSvc)
 
 		// Create
-		resCreate, err := eps.CreateInvitation(context.Background(), struct {
-			AdminID core.PersonID
-			Email   string
-		}{AdminID: adminID, Email: "invited@example.com"})
+		resCreate, err := eps.CreateInvitation(context.Background(), people.CreateInvitationCommand{
+			AdminID: adminID,
+			Email:   "invited@example.com",
+		})
 		if err != nil {
 			t.Fatalf("CreateInvitation failed: %v", err)
 		}
@@ -1123,7 +1199,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		// Delete
-		_, err = eps.DeleteInvitation(context.Background(), DeleteInvitationRequest{AdminID: adminID, InvitationID: invID})
+		_, err = eps.DeleteInvitation(context.Background(), people.DeleteInvitationCommand{AdminID: adminID, InvitationID: invID})
 		if err != nil {
 			t.Fatalf("DeleteInvitation failed: %v", err)
 		}
@@ -1175,10 +1251,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error decoding create invitation: %v", err)
 			}
-			createReq := decCreate.(struct {
-				AdminID core.PersonID
-				Email   string
-			})
+			createReq := decCreate.(people.CreateInvitationCommand)
 			if createReq.Email != "test@example.com" || createReq.AdminID != adminID {
 				t.Errorf("mismatch create invitation request: %+v", createReq)
 			}
@@ -1210,7 +1283,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error decoding delete invitation: %v", err)
 			}
-			delReq := decDel.(DeleteInvitationRequest)
+			delReq := decDel.(people.DeleteInvitationCommand)
 			if delReq.InvitationID != invID || delReq.AdminID != adminID {
 				t.Errorf("mismatch delete invitation request: %+v", delReq)
 			}

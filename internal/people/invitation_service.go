@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -41,12 +40,12 @@ func HashInvitationCode(code string) string {
 	return invCode.Hash()
 }
 
-func (s *InvitationServiceImpl) Create(ctx context.Context, adminID core.PersonID, email string) (*InvitationWithCode, error) {
-	if adminID.IsNil() {
+func (s *InvitationServiceImpl) Create(ctx context.Context, command CreateInvitationCommand) (*InvitationWithCode, error) {
+	if command.AdminID.IsNil() {
 		return nil, exceptions.NewValidationException("admin id is required", nil)
 	}
 
-	emailAddr, err := NewEmailAddress(email)
+	emailAddr, err := NewEmailAddress(command.Email)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid email address", err)
 	}
@@ -74,11 +73,11 @@ func (s *InvitationServiceImpl) Create(ctx context.Context, adminID core.PersonI
 	}
 
 	invitation, err := NewInvitation(
-		uuid.Nil,
+		core.NilInvitationID,
 		cleanEmail,
 		codeHash,
 		expiresAt,
-		adminID,
+		command.AdminID,
 		&personID,
 		InvitationStatusPending,
 		time.Now(),
@@ -117,18 +116,25 @@ func (s *InvitationServiceImpl) FindAllByCreator(ctx context.Context, adminID co
 	return s.invitationRepo.FindByCreator(ctx, adminID)
 }
 
-func (s *InvitationServiceImpl) Delete(ctx context.Context, adminID core.PersonID, invitationID uuid.UUID) error {
-	inv, err := s.invitationRepo.FindByID(ctx, invitationID)
+func (s *InvitationServiceImpl) Delete(ctx context.Context, command DeleteInvitationCommand) error {
+	if command.AdminID.IsNil() {
+		return exceptions.NewValidationException("admin id is required", nil)
+	}
+	if command.InvitationID.IsNil() {
+		return exceptions.NewValidationException("invitation id is required", nil)
+	}
+
+	inv, err := s.invitationRepo.FindByID(ctx, command.InvitationID)
 	if err != nil {
 		return err
 	}
 
-	if inv.CreatedBy() != adminID {
+	if inv.CreatedBy() != command.AdminID {
 		return exceptions.NewForbiddenException("not authorized to delete this invitation", nil)
 	}
 
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
-		if err := s.invitationRepo.Delete(txCtx, invitationID); err != nil {
+		if err := s.invitationRepo.Delete(txCtx, command.InvitationID); err != nil {
 			return nil, err
 		}
 

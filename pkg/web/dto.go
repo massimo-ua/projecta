@@ -1,6 +1,29 @@
 package web
 
-import "time"
+import (
+	"time"
+
+	"gitlab.com/massimo-ua/projecta/internal/core"
+)
+
+type AuthResponseDTO struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	IssuedAt     int64  `json:"issued_at"`
+	ExpiresAt    int64  `json:"expires_at"`
+}
+
+func toAuthResponseDTO(r *core.AuthResponse) AuthResponseDTO {
+	if r == nil {
+		return AuthResponseDTO{}
+	}
+	return AuthResponseDTO{
+		AccessToken:  r.AccessToken,
+		RefreshToken: r.RefreshToken,
+		IssuedAt:     r.IssuedAt,
+		ExpiresAt:    r.ExpiresAt,
+	}
+}
 
 type PaginationDTO struct {
 	Limit  int `json:"limit"`

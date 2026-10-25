@@ -3,11 +3,9 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -144,39 +142,4 @@ func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error)
 	}
 
 	return projectUUID, nil
-}
-
-func decodeProjectResourceRemoveCommand(projectIDKey string, resourceIDKey string) func(context.Context, *http.Request) (any, error) {
-	return func(ctx context.Context, r *http.Request) (any, error) {
-		vars := mux.Vars(r)
-
-		projectID, ok := vars[projectIDKey]
-
-		if !ok {
-			return nil, exceptions.NewValidationException(fmt.Sprintf("missing %s", projectIDKey), nil)
-		}
-
-		projectUUID, err := core.ParseProjectID(projectID)
-
-		if err != nil {
-			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid %s", projectIDKey), err)
-		}
-
-		resourceID, ok := vars[resourceIDKey]
-
-		if !ok {
-			return nil, exceptions.NewValidationException(fmt.Sprintf("missing %s", resourceIDKey), nil)
-		}
-
-		resourceUUID, err := uuid.Parse(resourceID)
-
-		if err != nil {
-			return nil, exceptions.NewValidationException(fmt.Sprintf("invalid %s", resourceIDKey), err)
-		}
-
-		return project.RemoveProjectResourceCommand{
-			ProjectID:  projectUUID,
-			ResourceID: resourceUUID,
-		}, nil
-	}
 }

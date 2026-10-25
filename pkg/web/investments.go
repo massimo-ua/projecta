@@ -13,7 +13,6 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
-	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
 type InvestmentEndpoints struct {
@@ -540,16 +539,37 @@ func makeUpdateInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	}
 }
 
+func decodeRemoveInvestmentRequest(_ context.Context, r *http.Request) (any, error) {
+	vars := mux.Vars(r)
+	projectID, ok := vars["project_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("missing project_id", nil)
+	}
+	projectUUID, err := core.ParseProjectID(projectID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid project_id", err)
+	}
+	investmentID, ok := vars["investment_id"]
+	if !ok {
+		return nil, exceptions.NewValidationException("missing investment_id", nil)
+	}
+	invUUID, err := core.ParseInvestmentID(investmentID)
+	if err != nil {
+		return nil, exceptions.NewValidationException("invalid investment_id", err)
+	}
+	return investment.RemoveInvestmentCommand{
+		ProjectID: projectUUID,
+		ID:        invUUID,
+	}, nil
+}
+
 func makeRemoveInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd, ok := request.(project.RemoveProjectResourceCommand)
+		cmd, ok := request.(investment.RemoveInvestmentCommand)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
-		return nil, svc.Remove(ctx, investment.RemoveInvestmentCommand{
-			ID:        core.InvestmentID(cmd.ResourceID),
-			ProjectID: cmd.ProjectID,
-		})
+		return nil, svc.Remove(ctx, cmd)
 	}
 }
 

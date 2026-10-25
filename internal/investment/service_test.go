@@ -98,6 +98,18 @@ func (m *mockPeopleService) FindContributor(ctx context.Context, id core.PersonI
 	return m.owner, nil
 }
 
+type mockRateConverter struct{}
+
+func (m *mockRateConverter) ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error) {
+	if amount == nil {
+		return money.New(0, targetCurrency), nil
+	}
+	if amount.Currency().Code == "EUR" && targetCurrency == "UAH" {
+		return money.New(amount.Amount()*45, targetCurrency), nil
+	}
+	return money.New(amount.Amount(), targetCurrency), nil
+}
+
 func TestInvestmentService(t *testing.T) {
 	personID := core.NewPersonID()
 	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, personID)
@@ -478,6 +490,95 @@ func TestInvestmentService(t *testing.T) {
 			}
 			if inv.AssetAllocations()[0].SharePercentage != 100.0 {
 				t.Errorf("expected default 100%% share, got %v", inv.AssetAllocations()[0].SharePercentage)
+			}
+		})
+		t.Run("Multi-Currency valuation on Find, FindOne, and Update", func(t *testing.T) {
+			db := &mockDb{}
+			projectID := core.NewProjectID()
+			proj := investment.ProjectDescriptor{ID: projectID, MainCurrency: "UAH"}
+			assetDesc := investment.AssetDescriptor{ID: core.NewAssetID(), Name: "Equipment"}
+			converter := &mockRateConverter{}
+
+			inv, err := investment.NewInvestment(
+				core.NewInvestmentID(),
+				projectID,
+				"EUR",
+				assetDesc.ID,
+				assetDesc.Name,
+				owner,
+				investment.ResourceTypeMoney,
+				money.New(100, "EUR"),
+				nil, nil, nil, "", "",
+				"Euro investment",
+				time.Now(),
+				nil,
+				investment.InvestmentAssetLink{AssetID: assetDesc.ID, AssetName: assetDesc.Name, SharePercentage: 100},
+			)
+			if err != nil {
+				t.Fatalf("failed to create investment: %v", err)
+			}
+
+			col := investment.NewCollection(1)
+			col.Add(inv)
+			repo := &mockInvestmentRepo{
+				inv: inv,
+				col: col,
+			}
+
+			svc := investment.NewService(
+				db,
+				repo,
+				&mockAssetRepo{asset: assetDesc},
+				&mockProjectRepo{project: proj},
+				&mockPeopleService{owner: owner},
+				converter,
+			)
+
+			// 1. Verify FindOne evaluates home amount to UAH
+			foundInv, err := svc.FindOne(authedCtx, investment.Filter{ID: inv.ID(), ProjectID: projectID})
+			if err != nil {
+				t.Fatalf("unexpected error on FindOne: %v", err)
+			}
+			if foundInv.HomeCurrency() != "UAH" {
+				t.Errorf("expected HomeCurrency UAH, got %s", foundInv.HomeCurrency())
+			}
+			if foundInv.HomeAmount() != 4500 {
+				t.Errorf("expected HomeAmount 4500 (100 * 45), got %d", foundInv.HomeAmount())
+			}
+
+			// 2. Verify Find evaluates home amount to UAH
+			foundCol, err := svc.Find(authedCtx, investment.CollectionFilter{ProjectID: projectID})
+			if err != nil {
+				t.Fatalf("unexpected error on Find: %v", err)
+			}
+			if len(foundCol.Elements()) != 1 {
+				t.Fatalf("expected 1 element, got %d", len(foundCol.Elements()))
+			}
+			elem := foundCol.Elements()[0]
+			if elem.HomeCurrency() != "UAH" {
+				t.Errorf("expected HomeCurrency UAH in Find, got %s", elem.HomeCurrency())
+			}
+			if elem.HomeAmount() != 4500 {
+				t.Errorf("expected HomeAmount 4500 in Find, got %d", elem.HomeAmount())
+			}
+
+			// 3. Verify Update evaluates home amount to UAH
+			err = svc.Update(authedCtx, investment.UpdateInvestmentCommand{
+				ID:           inv.ID(),
+				ProjectID:    projectID,
+				ResourceType: investment.ResourceTypeMoney,
+				Amount:       money.New(200, "EUR"),
+				Description:  "Updated Euro investment",
+				Date:         time.Now(),
+			})
+			if err != nil {
+				t.Fatalf("unexpected error on Update: %v", err)
+			}
+			if inv.HomeCurrency() != "UAH" {
+				t.Errorf("expected HomeCurrency UAH after Update, got %s", inv.HomeCurrency())
+			}
+			if inv.HomeAmount() != 9000 {
+				t.Errorf("expected HomeAmount 9000 (200 * 45) after Update, got %d", inv.HomeAmount())
 			}
 		})
 	})

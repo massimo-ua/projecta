@@ -124,7 +124,11 @@ func makeLoginEndpoint(svc people.AuthService) endpoint.Endpoint {
 			if err != nil {
 				return nil, exceptions.NewValidationException("unknown identity provider", err)
 			}
-			return svc.LoginWithInvitation(ctx, req.Token, provider, req.InvitationCode)
+			resp, err := svc.LoginWithInvitation(ctx, req.Token, provider, req.InvitationCode)
+			if err != nil {
+				return nil, err
+			}
+			return toAuthResponseDTO(resp), nil
 		}
 
 		c, err := people.NewCredentials(req.IdentityProvider, req.ID, req.Token)
@@ -139,7 +143,7 @@ func makeLoginEndpoint(svc people.AuthService) endpoint.Endpoint {
 			return nil, err
 		}
 
-		return response, nil
+		return toAuthResponseDTO(response), nil
 	}
 }
 
@@ -189,7 +193,7 @@ func makeRefreshTokenEndpoint(svc people.AuthService) endpoint.Endpoint {
 			return nil, err
 		}
 
-		return response, nil
+		return toAuthResponseDTO(response), nil
 	}
 }
 
@@ -258,9 +262,4 @@ func MakeUserEndpoints(s people.UserService, a people.AuthService) (UserEndpoint
 		ListUsers:     makeListUsersEndpoint(s),
 		AssignRoles:   makeAssignRolesEndpoint(s),
 	}, nil
-}
-
-// Deprecated: Use MakeUserEndpoints instead.
-func MakeCustomerEndpoints(s people.UserService, a people.AuthService) (UserEndpoints, error) {
-	return MakeUserEndpoints(s, a)
 }

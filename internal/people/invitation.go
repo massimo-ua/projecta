@@ -1,11 +1,9 @@
 package people
 
 import (
-	"errors"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -18,7 +16,7 @@ const (
 )
 
 type Invitation struct {
-	id          uuid.UUID
+	id          core.InvitationID
 	email       string
 	codeHash    string
 	expiresAt   time.Time
@@ -34,7 +32,7 @@ type InvitationWithCode struct {
 	Code       string
 }
 
-func (i *Invitation) ID() uuid.UUID {
+func (i *Invitation) ID() core.InvitationID {
 	return i.id
 }
 
@@ -50,12 +48,28 @@ func (i *Invitation) ExpiresAt() time.Time {
 	return i.expiresAt
 }
 
+func copyPersonIDPtr(p *core.PersonID) *core.PersonID {
+	if p == nil {
+		return nil
+	}
+	cp := *p
+	return &cp
+}
+
+func copyTimePtr(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	cp := *t
+	return &cp
+}
+
 func (i *Invitation) CreatedBy() core.PersonID {
 	return i.createdBy
 }
 
 func (i *Invitation) PersonID() *core.PersonID {
-	return i.personID
+	return copyPersonIDPtr(i.personID)
 }
 
 func (i *Invitation) Status() InvitationStatus {
@@ -67,7 +81,7 @@ func (i *Invitation) CreatedAt() time.Time {
 }
 
 func (i *Invitation) CompletedAt() *time.Time {
-	return i.completedAt
+	return copyTimePtr(i.completedAt)
 }
 
 func (i *Invitation) IsExpired() bool {
@@ -100,10 +114,10 @@ func (i *Invitation) ValidateForRedemption(email string) (core.PersonID, error) 
 
 func (i *Invitation) Complete() error {
 	if i.status == InvitationStatusCompleted {
-		return errors.New("invitation is already completed")
+		return exceptions.NewValidationException("invitation is already completed", nil)
 	}
 	if i.IsExpired() {
-		return errors.New("invitation has expired")
+		return exceptions.NewValidationException("invitation has expired", nil)
 	}
 	now := time.Now()
 	i.status = InvitationStatusCompleted
@@ -112,7 +126,7 @@ func (i *Invitation) Complete() error {
 }
 
 func NewInvitation(
-	id uuid.UUID,
+	id core.InvitationID,
 	email string,
 	codeHash string,
 	expiresAt time.Time,
@@ -123,18 +137,18 @@ func NewInvitation(
 	completedAt *time.Time,
 ) (*Invitation, error) {
 	if email == "" {
-		return nil, errors.New("email is required")
+		return nil, exceptions.NewValidationException("email is required", nil)
 	}
 	if codeHash == "" {
-		return nil, errors.New("code hash is required")
+		return nil, exceptions.NewValidationException("code hash is required", nil)
 	}
 	if createdBy.IsNil() {
-		return nil, errors.New("created by is required")
+		return nil, exceptions.NewValidationException("created by is required", nil)
 	}
 
 	invID := id
-	if invID == uuid.Nil {
-		invID = uuid.New()
+	if invID.IsNil() {
+		invID = core.NewInvitationID()
 	}
 
 	cAt := createdAt
@@ -153,15 +167,15 @@ func NewInvitation(
 		codeHash:    codeHash,
 		expiresAt:   expiresAt,
 		createdBy:   createdBy,
-		personID:    personID,
+		personID:    copyPersonIDPtr(personID),
 		status:      s,
 		createdAt:   cAt,
-		completedAt: completedAt,
+		completedAt: copyTimePtr(completedAt),
 	}, nil
 }
 
 func ReconstituteInvitation(
-	id uuid.UUID,
+	id core.InvitationID,
 	email string,
 	codeHash string,
 	expiresAt time.Time,
@@ -177,9 +191,9 @@ func ReconstituteInvitation(
 		codeHash:    codeHash,
 		expiresAt:   expiresAt,
 		createdBy:   createdBy,
-		personID:    personID,
+		personID:    copyPersonIDPtr(personID),
 		status:      status,
 		createdAt:   createdAt,
-		completedAt: completedAt,
+		completedAt: copyTimePtr(completedAt),
 	}
 }

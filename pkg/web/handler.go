@@ -14,7 +14,6 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
-	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"net/http"
 )
 
@@ -35,19 +34,30 @@ func errorCodeToHttpStatus(e exceptions.Exception) int {
 	}
 }
 
+type errorResponseDTO struct {
+	Message string `json:"message"`
+	Code    string `json:"code"`
+}
+
 func encodeErrorResponse(_ context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	var exception exceptions.Exception
 	if ok := errors.As(err, &exception); ok {
 		w.WriteHeader(errorCodeToHttpStatus(exception))
-		_ = json.NewEncoder(w).Encode(exception)
+		_ = json.NewEncoder(w).Encode(errorResponseDTO{
+			Message: exception.Message,
+			Code:    exception.Code,
+		})
 		return
 	}
 
 	w.WriteHeader(http.StatusInternalServerError)
-	_ = json.NewEncoder(w).Encode(exceptions.NewApplicationError("Internal Error", exceptions.Internal, err))
-
+	appErr := exceptions.NewApplicationError("Internal Error", exceptions.Internal, err)
+	_ = json.NewEncoder(w).Encode(errorResponseDTO{
+		Message: appErr.Message,
+		Code:    appErr.Code,
+	})
 }
 
 func MakeHTTPHandler(
@@ -58,7 +68,6 @@ func MakeHTTPHandler(
 	projectService project.ProjectService,
 	statementService statement.Service,
 	assetService asset.Service,
-	rateProvider currency.CurrencyRateProvider,
 	investmentService ...investment.Service,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
@@ -193,6 +202,13 @@ func MakeHTTPHandler(
 		withAuth...,
 	))
 
+	r.Methods(http.MethodDelete).Path("/projects/{project_id}").Handler(ht.NewServer(
+		requireRole(string(people.RoleUser), projectEndpoints.RemoveProject),
+		decodeRemoveProjectRequest,
+		encodeJSON(http.StatusNoContent),
+		withAuth...,
+	))
+
 	r.Methods(http.MethodPost).Path("/projects/share/{share_token}").Handler(ht.NewServer(
 		requireRole(string(people.RoleUser), projectEndpoints.AcceptShare),
 		DecodeAcceptShareRequest,
@@ -246,7 +262,7 @@ func MakeHTTPHandler(
 
 	r.Methods(http.MethodDelete).Path("/projects/{project_id}/assets/{asset_id}").Handler(ht.NewServer(
 		requireRole(string(people.RoleUser), assetEndpoints.RemoveAsset),
-		decodeProjectResourceRemoveCommand("project_id", "asset_id"),
+		decodeRemoveAssetRequest,
 		encodeJSON(http.StatusNoContent),
 		withAuth...,
 	))
@@ -339,7 +355,7 @@ func MakeHTTPHandler(
 
 		r.Methods(http.MethodDelete).Path("/projects/{project_id}/investments/{investment_id}").Handler(ht.NewServer(
 			requireRole(string(people.RoleUser), investmentEndpoints.RemoveInvestment),
-			decodeProjectResourceRemoveCommand("project_id", "investment_id"),
+			decodeRemoveInvestmentRequest,
 			encodeJSON(http.StatusNoContent),
 			withAuth...,
 		))

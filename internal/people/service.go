@@ -20,7 +20,6 @@ func (s *ServiceImpl) FindByID(ctx context.Context, personID core.PersonID) (*Pe
 
 var loginFailedError = errors.New("failed to login")
 var userRegistrationFailedError = errors.New("failed to register user")
-var customerRegistrationFailedError = userRegistrationFailedError
 
 func NewUserService(
 	db core.DbConnection,
@@ -31,14 +30,6 @@ func NewUserService(
 		peopleRepository: repo,
 		hasher:           hasher,
 	}
-}
-
-// Deprecated: Use NewUserService instead.
-func NewCustomerService(
-	db core.DbConnection,
-	repo Repository,
-	hasher core.Hasher) UserService {
-	return NewUserService(db, repo, hasher)
 }
 
 func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) error {
@@ -67,13 +58,13 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 	credentials, err := NewCredentials(command.IdentityProvider, login, token)
 
 	if err != nil {
-		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
+		return exceptions.NewValidationException(userRegistrationFailedError.Error(), err)
 	}
 
 	person, err := NewPerson(core.NilPersonID, command.FirstName, command.LastName, displayName, []Credentials{credentials}, RoleUser)
 
 	if err != nil {
-		return exceptions.NewValidationException(customerRegistrationFailedError.Error(), err)
+		return exceptions.NewValidationException(userRegistrationFailedError.Error(), err)
 	}
 
 	_, err = s.db.Tx(ctx, func(ctx context.Context) (any, error) {
@@ -85,7 +76,7 @@ func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) err
 	})
 
 	if err != nil {
-		return exceptions.NewInternalException(customerRegistrationFailedError.Error(), err)
+		return exceptions.NewInternalException(userRegistrationFailedError.Error(), err)
 	}
 
 	return nil
