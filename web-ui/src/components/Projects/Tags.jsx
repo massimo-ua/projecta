@@ -79,24 +79,24 @@ function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
   return (
     <div className="group flex flex-col justify-between rounded-2xl border border-border/70 bg-card p-5 shadow-xs transition-all duration-200 hover:shadow-md hover:border-primary/50">
       <div className="space-y-4">
-        {/* Header: Tag Pill, Count & Budget Badge */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            <span className="font-mono text-base font-bold text-primary group-hover:underline break-words">
-              <span>{`#${tag.name}`}</span>
-            </span>
+        {/* Header: Tag Name & Badges */}
+        <div className="space-y-2">
+          <div className="font-mono text-base font-bold text-primary group-hover:underline break-words min-w-0">
+            <span>{`#${tag.name}`}</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge
+              variant="secondary"
+              className="text-xs font-semibold px-2 py-0.5 rounded-lg border-border/60 bg-muted/60"
+            >
+              <span>{`${tag.count} ${tag.count === 1 ? String(content.singleInvestment || 'investment') : String(content.investmentsCount || 'investments')}`}</span>
+            </Badge>
             {tag.tagBudget && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary shrink-0">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary">
                 {String(content.frequencies?.[tag.tagBudget.frequency] || tag.tagBudget.frequency)}
               </Badge>
             )}
           </div>
-          <Badge
-            variant="secondary"
-            className="text-xs font-semibold px-2 py-0.5 rounded-lg border-border/60 bg-muted/60 shrink-0"
-          >
-            <span>{`${tag.count} ${tag.count === 1 ? String(content.singleInvestment || 'investment') : String(content.investmentsCount || 'investments')}`}</span>
-          </Badge>
         </div>
 
         {/* Valuation & Budget comparison */}
@@ -460,9 +460,12 @@ export function Tags() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="rounded-2xl border border-border/60 p-5 space-y-4 bg-card">
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-5 w-24 rounded-lg" />
-                <Skeleton className="h-5 w-16 rounded-md" />
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-32 rounded-lg" />
+                <div className="flex gap-1.5">
+                  <Skeleton className="h-5 w-20 rounded-md" />
+                  <Skeleton className="h-5 w-14 rounded-md" />
+                </div>
               </div>
               <Skeleton className="h-7 w-28 rounded-lg" />
               <div className="pt-3 mt-4 border-t border-border/50 space-y-2">
