@@ -93,7 +93,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		investments:  investmentService,
 		rateProvider: rateProvider,
 	}
-	projectService := project.NewProjectService(projectRepository, peopleService, totalsCalculator)
+	projectService := project.NewProjectService(projectRepository, peopleService, totalsCalculator).WithConverter(moneyConverter)
 
 	statementService := statement.NewService(
 		&projectValidator{svc: projectService},

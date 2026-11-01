@@ -16,6 +16,7 @@ const INITIAL_DRAFT = Object.freeze({
   targetMonth: 1,
   resourceType: BUDGET_RESOURCE_TYPES.MONEY,
   amount: '',
+  currency: '',
   timeHours: '',
   timeHourlyRate: '',
   goodsQuantity: '',
@@ -113,6 +114,7 @@ export function useProjectSetupWizard() {
       targetMonth: existing.targetMonth,
       resourceType: existing.resourceType,
       amount: existing.amount ? String(existing.amount) : '',
+      currency: existing.currency || mainCurrency,
       timeHours: existing.timeHours !== null ? String(existing.timeHours) : '',
       timeHourlyRate: existing.timeHourlyRate !== null ? String(existing.timeHourlyRate) : '',
       goodsQuantity: existing.goodsQuantity !== null ? String(existing.goodsQuantity) : '',
@@ -120,7 +122,7 @@ export function useProjectSetupWizard() {
       goodsItemName: existing.goodsItemName || '',
       description: existing.description || '',
     });
-  }, [tagBudgets]);
+  }, [tagBudgets, mainCurrency]);
 
   const addOrUpdateTagRule = useCallback(() => {
     const cleaned = cleanTagName(draftRule.tag);
@@ -142,6 +144,7 @@ export function useProjectSetupWizard() {
       targetMonth: draftRule.targetMonth,
       resourceType: draftRule.resourceType,
       amount: ruleAmount,
+      currency: draftRule.currency || mainCurrency,
       timeHours: hours,
       timeHourlyRate: rate,
       goodsQuantity: parseFloat(draftRule.goodsQuantity) || null,
@@ -164,7 +167,7 @@ export function useProjectSetupWizard() {
 
     resetDraft();
     return true;
-  }, [draftRule, editingTag, resetDraft]);
+  }, [draftRule, editingTag, mainCurrency, resetDraft]);
 
   const nextStep = useCallback(() => {
     if (step === 2 && isDraftValid) {

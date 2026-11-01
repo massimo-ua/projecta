@@ -93,7 +93,9 @@ export function ProjectedVsRealSchedule({ budgetSchedule, currency = 'UAH', cont
     return budgetSchedule.tagComparisons.map((c) => ({
       name: c.isUnplanned ? String(t.unplannedTagLabel || '#unplanned') : c.displayTag,
       tag: c.tag,
-      planned: c.projectedAnnual,
+      currency: c.currency,
+      planned: c.projectedHomeAnnual !== undefined ? c.projectedHomeAnnual : c.projectedAnnual,
+      plannedNative: c.projectedAnnual,
       actual: c.actualAnnual,
       variance: c.variance,
       utilization: c.utilizationPercentage,
@@ -462,10 +464,21 @@ export function ProjectedVsRealSchedule({ budgetSchedule, currency = 'UAH', cont
                   width={90}
                 />
                 <Tooltip
-                  formatter={(value, name) => [
-                    `${new Intl.NumberFormat().format(value)} ${currency}`,
-                    name === 'planned' ? String(t.projectedSeriesLabel || 'Projected') : String(t.actualSeriesLabel || 'Real Invested'),
-                  ]}
+                  formatter={(value, name, item) => {
+                    const isPlanned = name === 'planned';
+                    const entry = item && item.payload;
+                    const label = isPlanned ? String(t.projectedSeriesLabel || 'Projected') : String(t.actualSeriesLabel || 'Real Invested');
+                    if (isPlanned && entry && entry.currency && entry.currency !== currency && entry.plannedNative) {
+                      return [
+                        `${new Intl.NumberFormat().format(entry.plannedNative)} ${entry.currency} (≈ ${new Intl.NumberFormat().format(value)} ${currency})`,
+                        label,
+                      ];
+                    }
+                    return [
+                      `${new Intl.NumberFormat().format(value)} ${currency}`,
+                      label,
+                    ];
+                  }}
                   contentStyle={{
                     borderRadius: '0.75rem',
                     fontSize: '11px',

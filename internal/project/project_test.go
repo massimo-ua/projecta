@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/project"
@@ -408,7 +409,80 @@ func TestTagBudget(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error for non-positive amount")
 		}
+
+		_, err = project.NewTagBudget(project.TagBudgetInput{
+			Tag:       "rent",
+			Frequency: "MONTHLY",
+			Amount:    100,
+			Currency:  "INVALID",
+		})
+		if err == nil {
+			t.Errorf("expected error for unsupported currency")
+		}
 	})
+
+	t.Run("supports multi-currency tag budget and evaluates home amount", func(t *testing.T) {
+		tb, err := project.NewTagBudget(project.TagBudgetInput{
+			Tag:          "consulting",
+			Frequency:    "MONTHLY",
+			ResourceType: "MONEY",
+			Amount:       100000, // 1,000.00 EUR
+			Currency:     "EUR",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tb.Currency() != "EUR" {
+			t.Errorf("expected currency EUR, got %s", tb.Currency())
+		}
+		if tb.Amount() != 100000 {
+			t.Errorf("expected native amount 100000, got %d", tb.Amount())
+		}
+
+		// Initially homeAmount equals amount before converter evaluation
+		if tb.HomeAmount() != 100000 {
+			t.Errorf("expected initial home amount 100000, got %d", tb.HomeAmount())
+		}
+
+		// Converter with EUR -> UAH rate = 45.0
+		conv := &mockRateConverter{
+			rates: map[string]float64{"EUR_UAH": 45.0},
+		}
+		tb.EvaluateHomeAmount(conv, "UAH")
+		expectedHomeAmt := int64(4500000) // 45,000.00 UAH
+		if tb.HomeAmount() != expectedHomeAmt {
+			t.Errorf("expected evaluated home amount %d, got %d", expectedHomeAmt, tb.HomeAmount())
+		}
+
+		// AnnualTotal stays in EUR (12 * 100,000 = 1,200,000)
+		if tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) != 1200000 {
+			t.Errorf("expected annual native total 1200000, got %d", tb.AnnualTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+		}
+
+		// AnnualHomeTotal is converted to UAH (12 * 4,500,000 = 54,000,000)
+		if tb.AnnualHomeTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) != 54000000 {
+			t.Errorf("expected annual home total 54000000, got %d", tb.AnnualHomeTotal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+		}
+	})
+}
+
+type mockRateConverter struct {
+	rates map[string]float64
+}
+
+func (m *mockRateConverter) ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error) {
+	if amount == nil {
+		return money.New(0, targetCurrency), nil
+	}
+	if amount.Currency().Code == targetCurrency {
+		return amount, nil
+	}
+	rate, ok := m.rates[amount.Currency().Code+"_"+targetCurrency]
+	if !ok {
+		return amount, nil
+	}
+	convertedAmount := int64(float64(amount.Amount()) * rate)
+	return money.New(convertedAmount, targetCurrency), nil
 }
 
 func TestProject_TagBudgets(t *testing.T) {
@@ -448,9 +522,41 @@ func TestProject_TagBudgets(t *testing.T) {
 		if len(budgets) == 0 {
 			t.Fatalf("expected non-empty tag budgets")
 		}
-		budgets = append(budgets, project.ReconstituteTagBudget("extra", "MONTHLY", 1, "MONEY", 100, nil, nil, nil, "", "", ""))
+		budgets = append(budgets, project.ReconstituteTagBudget("extra", "MONTHLY", 1, "MONEY", 100, "UAH", nil, nil, nil, "", "", ""))
 		if len(proj.TagBudgets()) == len(budgets) {
 			t.Errorf("TagBudgets() leaked internal slice")
+		}
+	})
+
+	t.Run("calculates multi-currency AnnualPlannedBudget in project main currency", func(t *testing.T) {
+		projUAH, err := project.NewProject(core.NewProjectID(), "UAH Proj", "Desc", owner, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{}, "UAH")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		err = projUAH.SetTagBudgets([]project.TagBudgetInput{
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 10000, Currency: "EUR"}, // 100 EUR/mo
+			{Tag: "supplies", Frequency: "MONTHLY", Amount: 50000, Currency: "PLN"},  // 500 PLN/mo
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		conv := &mockRateConverter{
+			rates: map[string]float64{
+				"EUR_UAH": 45.0,
+				"PLN_UAH": 10.0,
+			},
+		}
+
+		projUAH.EvaluateTagBudgets(conv)
+
+		// materials: 10,000 * 45 = 450,000 UAH/mo => 5,400,000 / yr
+		// supplies: 50,000 * 10 = 500,000 UAH/mo => 6,000,000 / yr
+		// Total planned in UAH: 11,400,000
+		expectedAnnualPlanned := int64(11400000)
+		if projUAH.AnnualPlannedBudget() != expectedAnnualPlanned {
+			t.Errorf("expected annual planned budget %d, got %d", expectedAnnualPlanned, projUAH.AnnualPlannedBudget())
 		}
 	})
 }

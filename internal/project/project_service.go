@@ -15,6 +15,7 @@ type ProjectServiceImpl struct {
 	repository       ProjectRepository
 	peopleService    PeopleService
 	totalsCalculator TotalsCalculator
+	converter        CurrencyConverter
 }
 
 func (s *ProjectServiceImpl) FindOne(ctx context.Context, filter ProjectFilter) (*Project, error) {
@@ -25,7 +26,12 @@ func (s *ProjectServiceImpl) FindOne(ctx context.Context, filter ProjectFilter) 
 		}
 		filter.RequesterID = personID
 	}
-	return s.repository.FindOne(ctx, filter)
+	p, err := s.repository.FindOne(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	p.EvaluateTagBudgets(s.converter)
+	return p, nil
 }
 
 func (s *ProjectServiceImpl) Find(ctx context.Context, filter ProjectCollectionFilter) ([]*Project, error) {
@@ -36,7 +42,14 @@ func (s *ProjectServiceImpl) Find(ctx context.Context, filter ProjectCollectionF
 		}
 		filter.RequesterID = personID
 	}
-	return s.repository.Find(ctx, filter)
+	projects, err := s.repository.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range projects {
+		p.EvaluateTagBudgets(s.converter)
+	}
+	return projects, nil
 }
 
 func resolveRequesterID(ctx context.Context, explicitID core.PersonID) (core.PersonID, error) {
@@ -120,6 +133,8 @@ func (s *ProjectServiceImpl) Update(ctx context.Context, command UpdateProjectCo
 		return nil, exceptions.NewInternalException("failed to update project", err)
 	}
 
+	p.EvaluateTagBudgets(s.converter)
+
 	return p, nil
 }
 
@@ -128,7 +143,7 @@ func (s *ProjectServiceImpl) UpdateBudget(ctx context.Context, command UpdatePro
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: personID})
+	p, err := s.repository.FindOne(ctx, ProjectFilter{ProjectID: command.ProjectID, RequesterID: personID})
 	if err != nil {
 		if errors.Is(err, exceptions.NotFoundError) {
 			return nil, exceptions.NewNotFoundException("project not found", err)
@@ -148,6 +163,8 @@ func (s *ProjectServiceImpl) UpdateBudget(ctx context.Context, command UpdatePro
 	if err != nil {
 		return nil, exceptions.NewInternalException("failed to update project budget", err)
 	}
+
+	p.EvaluateTagBudgets(s.converter)
 
 	return p, nil
 }
@@ -173,12 +190,25 @@ func (s *ProjectServiceImpl) GetTotals(ctx context.Context, projectID core.Proje
 	return s.totalsCalculator.CalculateTotals(ctx, projectID, homeCurrency)
 }
 
-func NewProjectService(repository ProjectRepository, peopleService PeopleService, totalsCalculator ...TotalsCalculator) *ProjectServiceImpl {
+func NewProjectService(
+	repository ProjectRepository,
+	peopleService PeopleService,
+	totalsCalculator ...TotalsCalculator,
+) *ProjectServiceImpl {
 	var tc TotalsCalculator
 	if len(totalsCalculator) > 0 {
 		tc = totalsCalculator[0]
 	}
-	return &ProjectServiceImpl{repository: repository, peopleService: peopleService, totalsCalculator: tc}
+	return &ProjectServiceImpl{
+		repository:       repository,
+		peopleService:    peopleService,
+		totalsCalculator: tc,
+	}
+}
+
+func (s *ProjectServiceImpl) WithConverter(conv CurrencyConverter) *ProjectServiceImpl {
+	s.converter = conv
+	return s
 }
 
 func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCommand) (*Project, error) {
@@ -203,6 +233,7 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 	})
 
 	if p != nil {
+		p.EvaluateTagBudgets(s.converter)
 		return p, nil
 	}
 
@@ -240,6 +271,8 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 			return nil, exceptions.NewInternalException("failed to save project", err)
 		}
 
+		p.EvaluateTagBudgets(s.converter)
+
 		return p, nil
 	}
 
@@ -257,6 +290,7 @@ func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, p
 	}
 
 	if project.IsOwnedByPerson(personID) {
+		project.EvaluateTagBudgets(s.converter)
 		return project, nil
 	}
 
@@ -266,5 +300,6 @@ func (s *ProjectServiceImpl) AcceptShare(ctx context.Context, token uuid.UUID, p
 	}
 
 	project.MarkShared()
+	project.EvaluateTagBudgets(s.converter)
 	return project, nil
 }

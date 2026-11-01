@@ -19,6 +19,13 @@ export const BUDGET_RESOURCE_TYPES = Object.freeze({
   GOODS: 'GOODS',
 });
 
+export const SUPPORTED_CURRENCIES = Object.freeze([
+  'UAH',
+  'USD',
+  'EUR',
+  'PLN',
+]);
+
 export const PRESET_PROJECT_TAGS = Object.freeze([
   'labor',
   'materials',
@@ -125,6 +132,8 @@ export class TagBudgetRule {
     targetMonth = 1,
     resourceType = BUDGET_RESOURCE_TYPES.MONEY,
     amount = 0,
+    currency = 'UAH',
+    homeAmount = null,
     timeHours = null,
     timeHourlyRate = null,
     goodsQuantity = null,
@@ -132,6 +141,7 @@ export class TagBudgetRule {
     goodsItemName = '',
     description = '',
     annualTotal = null,
+    annualHomeTotal = null,
   } = {}) {
     this.tag = cleanTagName(tag);
     this.frequency = String(frequency || BUDGET_FREQUENCIES.MONTHLY).toUpperCase();
@@ -142,6 +152,11 @@ export class TagBudgetRule {
     this.resourceType = String(resourceType || BUDGET_RESOURCE_TYPES.MONEY).toUpperCase();
 
     this.amount = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+    this.currency = currency ? String(currency).trim().toUpperCase() : 'UAH';
+    this.homeAmount = homeAmount !== null && homeAmount !== undefined && homeAmount !== ''
+      ? (typeof homeAmount === 'number' ? homeAmount : parseFloat(homeAmount) || this.amount)
+      : this.amount;
+
     this.timeHours = timeHours !== null && timeHours !== undefined && timeHours !== ''
       ? parseFloat(timeHours)
       : null;
@@ -156,6 +171,9 @@ export class TagBudgetRule {
     this.description = description ? String(description).trim() : '';
     this.cachedAnnualTotal = annualTotal !== null && annualTotal !== undefined
       ? parseFloat(annualTotal)
+      : null;
+    this.cachedAnnualHomeTotal = annualHomeTotal !== null && annualHomeTotal !== undefined
+      ? parseFloat(annualHomeTotal)
       : null;
   }
 
@@ -174,13 +192,29 @@ export class TagBudgetRule {
     return this.amount > 0 ? this.amount : 0;
   }
 
+  get effectiveHomeAmount() {
+    if (this.homeAmount > 0) {
+      if (
+        this.resourceType === BUDGET_RESOURCE_TYPES.TIME
+        && this.timeHours > 0
+        && this.timeHourlyRate > 0
+        && this.amount > 0
+      ) {
+        const ratio = this.homeAmount / this.amount;
+        return Math.round(this.effectiveAmount * ratio * 100) / 100;
+      }
+      return this.homeAmount;
+    }
+    return this.effectiveAmount;
+  }
+
   get isValid() {
     return Boolean(this.tag && this.effectiveAmount > 0);
   }
 
-  getMonthlyProjection(scheduleIndex, year, monthIndex) {
+  #projectForMonth(amount, scheduleIndex, year, monthIndex) {
     const strategy = FREQUENCY_STRATEGIES[this.frequency] || FREQUENCY_STRATEGIES.MONTHLY;
-    return strategy.getMonthlyAmount(this.effectiveAmount, {
+    return strategy.getMonthlyAmount(amount, {
       scheduleIndex,
       targetMonth: this.targetMonth,
       year,
@@ -188,9 +222,9 @@ export class TagBudgetRule {
     });
   }
 
-  getAnnualTotal(startDate = null, endDate = null) {
-    if (this.cachedAnnualTotal !== null && this.cachedAnnualTotal >= 0 && !startDate && !endDate) {
-      return this.cachedAnnualTotal;
+  static #calculateScheduleTotal(projectionFn, cachedTotal, startDate = null, endDate = null) {
+    if (cachedTotal !== null && cachedTotal >= 0 && !startDate && !endDate) {
+      return cachedTotal;
     }
     const validDate = parseDateSafe(startDate);
     const parsedEnd = endDate ? parseDateSafe(endDate) : null;
@@ -202,9 +236,35 @@ export class TagBudgetRule {
       if (parsedEnd && d > parsedEnd) {
         break;
       }
-      total += this.getMonthlyProjection(i + 1, d.getFullYear(), d.getMonth());
+      total += projectionFn(i + 1, d.getFullYear(), d.getMonth());
     }
     return Math.round(total * 100) / 100;
+  }
+
+  getMonthlyProjection(scheduleIndex, year, monthIndex) {
+    return this.#projectForMonth(this.effectiveAmount, scheduleIndex, year, monthIndex);
+  }
+
+  getMonthlyHomeProjection(scheduleIndex, year, monthIndex) {
+    return this.#projectForMonth(this.effectiveHomeAmount, scheduleIndex, year, monthIndex);
+  }
+
+  getAnnualTotal(startDate = null, endDate = null) {
+    return TagBudgetRule.#calculateScheduleTotal(
+      (idx, yr, mo) => this.getMonthlyProjection(idx, yr, mo),
+      this.cachedAnnualTotal,
+      startDate,
+      endDate,
+    );
+  }
+
+  getAnnualHomeTotal(startDate = null, endDate = null) {
+    return TagBudgetRule.#calculateScheduleTotal(
+      (idx, yr, mo) => this.getMonthlyHomeProjection(idx, yr, mo),
+      this.cachedAnnualHomeTotal,
+      startDate,
+      endDate,
+    );
   }
 
   toDTO() {
@@ -214,6 +274,7 @@ export class TagBudgetRule {
       target_month: this.targetMonth,
       resource_type: this.resourceType,
       amount: Math.round(this.effectiveAmount * 100),
+      currency: this.currency,
       time_hours: this.timeHours,
       time_hourly_rate: this.timeHourlyRate !== null ? Math.round(this.timeHourlyRate * 100) : null,
       goods_quantity: this.goodsQuantity,
@@ -231,6 +292,10 @@ export class TagBudgetRule {
       targetMonth: dto.target_month || 1,
       resourceType: dto.resource_type || BUDGET_RESOURCE_TYPES.MONEY,
       amount: typeof dto.amount === 'number' ? dto.amount / 100 : 0,
+      currency: dto.currency || 'UAH',
+      homeAmount: typeof dto.home_amount === 'number'
+        ? dto.home_amount / 100
+        : (typeof dto.amount === 'number' ? dto.amount / 100 : 0),
       timeHours: dto.time_hours ?? null,
       timeHourlyRate: typeof dto.time_hourly_rate === 'number' ? dto.time_hourly_rate / 100 : null,
       goodsQuantity: dto.goods_quantity ?? null,
@@ -238,6 +303,7 @@ export class TagBudgetRule {
       goodsItemName: dto.goods_item_name || '',
       description: dto.description || '',
       annualTotal: typeof dto.annual_total === 'number' ? dto.annual_total / 100 : null,
+      annualHomeTotal: typeof dto.annual_home_total === 'number' ? dto.annual_home_total / 100 : null,
     });
   }
 }
@@ -269,7 +335,7 @@ export class ProjectBudgetSchedule {
 
     this.totalAnnualBudget = Math.round(
       this.tagRules.reduce(
-        (sum, tb) => sum + tb.getAnnualTotal(this.startDate, this.endDate),
+        (sum, tb) => sum + tb.getAnnualHomeTotal(this.startDate, this.endDate),
         0,
       ) * 100,
     ) / 100;
@@ -313,7 +379,7 @@ export class ProjectBudgetSchedule {
     });
   }
 
-  #calculateMonths(parsedPayments) {
+  #getScheduleBounds() {
     const startYear = this.startDate.getFullYear();
     const startMonth = this.startDate.getMonth();
     const startWindow = new Date(startYear, startMonth, 1);
@@ -329,6 +395,23 @@ export class ProjectBudgetSchedule {
         999,
       )
       : null;
+    return {
+      startYear,
+      startMonth,
+      startWindow,
+      endWindow,
+      endCap,
+    };
+  }
+
+  #calculateMonths(parsedPayments) {
+    const {
+      startYear,
+      startMonth,
+      startWindow,
+      endWindow,
+      endCap,
+    } = this.#getScheduleBounds();
     const intlLocale = (this.locale && this.locale.startsWith('uk')) ? 'uk-UA' : 'en-US';
 
     const monthList = [];
@@ -349,7 +432,7 @@ export class ProjectBudgetSchedule {
       const isPastEndDate = this.endDate && d > this.endDate;
 
       this.tagRules.forEach((rule) => {
-        const amt = isPastEndDate ? 0 : rule.getMonthlyProjection(scheduleIndex, year, monthIndex);
+        const amt = isPastEndDate ? 0 : rule.getMonthlyHomeProjection(scheduleIndex, year, monthIndex);
         projectedByTag[rule.tag] = amt;
         projectedSum += amt;
       });
@@ -400,21 +483,7 @@ export class ProjectBudgetSchedule {
   }
 
   #calculateTagComparisons(parsedPayments) {
-    const startYear = this.startDate.getFullYear();
-    const startMonth = this.startDate.getMonth();
-    const startWindow = new Date(startYear, startMonth, 1);
-    const endWindow = new Date(startYear, startMonth + 12, 1);
-    const endCap = this.endDate
-      ? new Date(
-        this.endDate.getFullYear(),
-        this.endDate.getMonth(),
-        this.endDate.getDate(),
-        23,
-        59,
-        59,
-        999,
-      )
-      : null;
+    const { startWindow, endWindow, endCap } = this.#getScheduleBounds();
 
     const tagTotals = new Map();
 
@@ -445,23 +514,26 @@ export class ProjectBudgetSchedule {
     this.tagRules.forEach((rule) => {
       processedTags.add(rule.tag);
       const projected = rule.getAnnualTotal(this.startDate, this.endDate);
+      const projectedHome = rule.getAnnualHomeTotal(this.startDate, this.endDate);
       const actual = Math.round((tagTotals.get(rule.tag) || 0) * 100) / 100;
-      const variance = Math.round((projected - actual) * 100) / 100;
-      const utilizationPercentage = projected > 0
-        ? Math.round((actual / projected) * 100)
+      const variance = Math.round((projectedHome - actual) * 100) / 100;
+      const utilizationPercentage = projectedHome > 0
+        ? Math.round((actual / projectedHome) * 100)
         : 0;
 
       comparisons.push({
         tag: rule.tag,
         displayTag: `#${rule.tag}`,
         rule,
+        currency: rule.currency,
         frequency: rule.frequency,
         resourceType: rule.resourceType,
         projectedAnnual: projected,
+        projectedHomeAnnual: projectedHome,
         actualAnnual: actual,
         variance,
         utilizationPercentage,
-        isOverBudget: actual > projected,
+        isOverBudget: actual > projectedHome,
         isUnplanned: false,
       });
     });
@@ -476,9 +548,11 @@ export class ProjectBudgetSchedule {
         tag,
         displayTag: tag === 'unplanned' ? 'unplanned' : `#${tag}`,
         rule: null,
+        currency: null,
         frequency: BUDGET_FREQUENCIES.ONCE,
         resourceType: BUDGET_RESOURCE_TYPES.MONEY,
         projectedAnnual: 0,
+        projectedHomeAnnual: 0,
         actualAnnual: actual,
         variance: -actual,
         utilizationPercentage: 100,

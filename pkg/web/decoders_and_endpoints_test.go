@@ -1044,7 +1044,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		// Valid request
-		body := `{"tag_budgets":[{"tag":"rent","frequency":"MONTHLY","amount":100000}]}`
+		body := `{"tag_budgets":[{"tag":"rent","frequency":"MONTHLY","amount":100000,"currency":"PLN"}]}`
 		reqValid, _ := http.NewRequest(http.MethodPut, "/", strings.NewReader(body))
 		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": pID.String()})
 		res, err := decodeUpdateProjectBudgetRequest(authedCtx, reqValid)
@@ -1052,27 +1052,40 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		cmd, ok := res.(project.UpdateProjectBudgetCommand)
-		if !ok || len(cmd.TagBudgets) != 1 || cmd.TagBudgets[0].Tag != "rent" {
+		if !ok || len(cmd.TagBudgets) != 1 || cmd.TagBudgets[0].Tag != "rent" || cmd.TagBudgets[0].Currency != "PLN" {
 			t.Errorf("unexpected command: %+v", cmd)
 		}
 	})
 
 	t.Run("toProjectDTO with TagBudgets", func(t *testing.T) {
 		owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner Name"}
-		proj, _ := project.NewProject(core.NewProjectID(), "Project Budget DTO", "Desc", owner, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{}, "EUR")
+		proj, _ := project.NewProject(core.NewProjectID(), "Project Budget DTO", "Desc", owner, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{}, "UAH")
 		_ = proj.SetTagBudgets([]project.TagBudgetInput{
-			{Tag: "materials", Frequency: "MONTHLY", Amount: 50000},
+			{Tag: "materials", Frequency: "MONTHLY", Amount: 100000, Currency: "EUR"},
 		})
+
+		rateProv := &mockRateProvider{}
+		proj.EvaluateTagBudgets(rateProv)
 
 		dto := toProjectDTO(proj)
 		if len(dto.TagBudgets) != 1 {
 			t.Fatalf("expected 1 TagBudgetDTO, got %d", len(dto.TagBudgets))
 		}
-		if dto.TagBudgets[0].Tag != "materials" || dto.TagBudgets[0].AnnualTotal != 600000 {
-			t.Errorf("unexpected TagBudgetDTO: %+v", dto.TagBudgets[0])
+		tbDTO := dto.TagBudgets[0]
+		if tbDTO.Tag != "materials" || tbDTO.Currency != "EUR" || tbDTO.Amount != 100000 {
+			t.Errorf("unexpected native budget in DTO: %+v", tbDTO)
 		}
-		if dto.AnnualPlannedBudget != 600000 {
-			t.Errorf("expected AnnualPlannedBudget 600000, got %d", dto.AnnualPlannedBudget)
+		if tbDTO.HomeAmount != 4000000 {
+			t.Errorf("expected home amount 4000000, got %d", tbDTO.HomeAmount)
+		}
+		if tbDTO.AnnualTotal != 1200000 {
+			t.Errorf("expected annual native total 1200000, got %d", tbDTO.AnnualTotal)
+		}
+		if tbDTO.AnnualHomeTotal != 48000000 {
+			t.Errorf("expected annual home total 48000000, got %d", tbDTO.AnnualHomeTotal)
+		}
+		if dto.AnnualPlannedBudget != 48000000 {
+			t.Errorf("expected AnnualPlannedBudget 48000000, got %d", dto.AnnualPlannedBudget)
 		}
 	})
 

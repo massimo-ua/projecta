@@ -172,6 +172,9 @@ func (p *Project) SetTagBudgets(inputs []TagBudgetInput) error {
 	budgets := make([]TagBudget, 0, len(inputs))
 	seen := make(map[string]struct{}, len(inputs))
 	for _, in := range inputs {
+		if in.Currency == "" {
+			in.Currency = p.mainCurrency
+		}
 		b, err := NewTagBudget(in)
 		if err != nil {
 			return err
@@ -275,10 +278,20 @@ func (p *Project) TagBudgets() []TagBudget {
 	return cp
 }
 
+// EvaluateTagBudgets computes home-currency valuations for all tag budgets against the project main currency.
+func (p *Project) EvaluateTagBudgets(converter CurrencyConverter) {
+	if p == nil {
+		return
+	}
+	for i := range p.tagBudgets {
+		p.tagBudgets[i].EvaluateHomeAmount(converter, p.mainCurrency)
+	}
+}
+
 func (p *Project) AnnualPlannedBudget() int64 {
 	var total int64
 	for _, b := range p.tagBudgets {
-		total += b.AnnualTotal(p.startDate, p.endDate)
+		total += b.AnnualHomeTotal(p.startDate, p.endDate)
 	}
 	return total
 }

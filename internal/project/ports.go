@@ -3,9 +3,15 @@ package project
 import (
 	"context"
 
+	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
+
+// CurrencyConverter is a narrow domain interface for converting monetary amounts to a target currency code.
+type CurrencyConverter interface {
+	ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error)
+}
 
 type PeopleService interface {
 	FindOwner(ctx context.Context, personID core.PersonID) (*Owner, error)

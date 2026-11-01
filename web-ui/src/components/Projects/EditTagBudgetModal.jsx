@@ -24,9 +24,39 @@ import {
   TagBudgetRule,
   BUDGET_FREQUENCIES,
   BUDGET_RESOURCE_TYPES,
+  SUPPORTED_CURRENCIES,
   cleanTagName,
   getActiveCalendarMonths,
 } from '../../models';
+
+function CurrencySelectField({ id, label, value, onChange }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs font-semibold">
+        <span>{label}</span>
+      </Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-9 rounded-xl text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="rounded-xl">
+          {SUPPORTED_CURRENCIES.map((c) => (
+            <SelectItem key={c} value={c} className="text-xs">
+              {c}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+CurrencySelectField.propTypes = {
+  id: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+};
 
 export function EditTagBudgetModal({
   open,
@@ -49,6 +79,7 @@ export function EditTagBudgetModal({
   const isShortPeriod = Boolean(endDate && activeMonths.size < 12);
 
   const [customTag, setCustomTag] = useState(tag || '');
+  const [budgetCurrency, setBudgetCurrency] = useState(currency || 'UAH');
   const [frequency, setFrequency] = useState(BUDGET_FREQUENCIES.MONTHLY);
   const [targetMonth, setTargetMonth] = useState(1);
   const [resourceType, setResourceType] = useState(BUDGET_RESOURCE_TYPES.MONEY);
@@ -63,6 +94,7 @@ export function EditTagBudgetModal({
   useEffect(() => {
     setCustomTag(tag || (existingRule ? existingRule.tag : ''));
     if (existingRule) {
+      setBudgetCurrency(existingRule.currency || currency || 'UAH');
       setFrequency(existingRule.frequency || BUDGET_FREQUENCIES.MONTHLY);
       setTargetMonth(existingRule.targetMonth || 1);
       setResourceType(existingRule.resourceType || BUDGET_RESOURCE_TYPES.MONEY);
@@ -73,6 +105,7 @@ export function EditTagBudgetModal({
       setGoodsUnit(existingRule.goodsUnit || '');
       setGoodsItemName(existingRule.goodsItemName || '');
     } else {
+      setBudgetCurrency(currency || 'UAH');
       setFrequency(BUDGET_FREQUENCIES.MONTHLY);
       setTargetMonth(1);
       setResourceType(BUDGET_RESOURCE_TYPES.MONEY);
@@ -83,7 +116,7 @@ export function EditTagBudgetModal({
       setGoodsUnit('');
       setGoodsItemName('');
     }
-  }, [existingRule, open, tag]);
+  }, [existingRule, open, tag, currency]);
 
   const effectiveTag = tag || customTag;
 
@@ -103,6 +136,9 @@ export function EditTagBudgetModal({
       targetMonth,
       resourceType,
       amount: ruleAmount,
+      currency: budgetCurrency,
+      homeAmount: existingRule && existingRule.currency === budgetCurrency ? existingRule.homeAmount : null,
+      annualHomeTotal: existingRule && existingRule.currency === budgetCurrency ? existingRule.cachedAnnualHomeTotal : null,
       timeHours: hours,
       timeHourlyRate: rate,
       goodsQuantity: parseFloat(goodsQuantity) || null,
@@ -111,6 +147,8 @@ export function EditTagBudgetModal({
     });
   }, [
     effectiveTag,
+    budgetCurrency,
+    existingRule,
     frequency,
     targetMonth,
     resourceType,
@@ -247,56 +285,72 @@ export function EditTagBudgetModal({
           )}
 
           {resourceType === BUDGET_RESOURCE_TYPES.MONEY && (
-            <div className="space-y-1.5">
-              <Label htmlFor="tag-edit-amount" className="text-xs font-semibold">
-                <span>{`${String(content.amountLabel || 'Expected Amount')} (${currency})`}</span>
-              </Label>
-              <Input
-                id="tag-edit-amount"
-                type="number"
-                min="0"
-                step="any"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="h-9 rounded-xl text-xs"
-                required
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="tag-edit-amount" className="text-xs font-semibold">
+                  <span>{String(content.amountLabel || 'Expected Amount')}</span>
+                </Label>
+                <Input
+                  id="tag-edit-amount"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="h-9 rounded-xl text-xs"
+                  required
+                />
+              </div>
+              <CurrencySelectField
+                id="tag-edit-currency"
+                label={String(content.currencyLabel || 'Currency')}
+                value={budgetCurrency}
+                onChange={setBudgetCurrency}
               />
             </div>
           )}
 
           {resourceType === BUDGET_RESOURCE_TYPES.TIME && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="tag-edit-hours" className="text-xs font-semibold">
-                  {String(content.hoursLabel || 'Expected Hours')}
-                </Label>
-                <Input
-                  id="tag-edit-hours"
-                  type="number"
-                  min="0"
-                  step="any"
-                  placeholder="20"
-                  value={timeHours}
-                  onChange={(e) => setTimeHours(e.target.value)}
-                  className="h-9 rounded-xl text-xs"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tag-edit-rate" className="text-xs font-semibold">
-                  <span>{`${String(content.hourlyRateLabel || 'Hourly Rate')} (${currency}${String(content.perHourSuffix || '/h')})`}</span>
-                </Label>
-                <Input
-                  id="tag-edit-rate"
-                  type="number"
-                  min="0"
-                  step="any"
-                  placeholder="25.00"
-                  value={timeHourlyRate}
-                  onChange={(e) => setTimeHourlyRate(e.target.value)}
-                  className="h-9 rounded-xl text-xs"
-                  required
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="tag-edit-hours" className="text-xs font-semibold">
+                    {String(content.hoursLabel || 'Expected Hours')}
+                  </Label>
+                  <Input
+                    id="tag-edit-hours"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="20"
+                    value={timeHours}
+                    onChange={(e) => setTimeHours(e.target.value)}
+                    className="h-9 rounded-xl text-xs"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tag-edit-rate" className="text-xs font-semibold">
+                    <span>{`${String(content.hourlyRateLabel || 'Hourly Rate')} (${budgetCurrency}${String(content.perHourSuffix || '/h')})`}</span>
+                  </Label>
+                  <Input
+                    id="tag-edit-rate"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="25.00"
+                    value={timeHourlyRate}
+                    onChange={(e) => setTimeHourlyRate(e.target.value)}
+                    className="h-9 rounded-xl text-xs"
+                    required
+                  />
+                </div>
+                <CurrencySelectField
+                  id="tag-edit-currency-time"
+                  label={String(content.currencyLabel || 'Currency')}
+                  value={budgetCurrency}
+                  onChange={setBudgetCurrency}
                 />
               </div>
             </div>
@@ -345,20 +399,28 @@ export function EditTagBudgetModal({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tag-edit-goods-amount" className="text-xs font-semibold">
-                  <span>{`${String(content.amountLabel || 'Valuation Amount')} (${currency})`}</span>
-                </Label>
-                <Input
-                  id="tag-edit-goods-amount"
-                  type="number"
-                  min="0"
-                  step="any"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="h-9 rounded-xl text-xs"
-                  required
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1.5">
+                  <Label htmlFor="tag-edit-goods-amount" className="text-xs font-semibold">
+                    <span>{String(content.amountLabel || 'Valuation Amount')}</span>
+                  </Label>
+                  <Input
+                    id="tag-edit-goods-amount"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="h-9 rounded-xl text-xs"
+                    required
+                  />
+                </div>
+                <CurrencySelectField
+                  id="tag-edit-goods-currency"
+                  label={String(content.currencyLabel || 'Currency')}
+                  value={budgetCurrency}
+                  onChange={setBudgetCurrency}
                 />
               </div>
             </div>
@@ -374,7 +436,12 @@ export function EditTagBudgetModal({
               </span>
               <span className="font-extrabold text-primary">
                 <span>
-                  {`${new Intl.NumberFormat(intlLocale).format(previewRule.getAnnualTotal(startDate, endDate))} ${currency}${isShortPeriod ? '' : String(content.perYearSuffix || '/yr')}`}
+                  {`${new Intl.NumberFormat(intlLocale).format(previewRule.getAnnualTotal(startDate, endDate))} ${budgetCurrency}${isShortPeriod ? '' : String(content.perYearSuffix || '/yr')}`}
+                  {budgetCurrency !== currency && existingRule && existingRule.currency === budgetCurrency && existingRule.cachedAnnualHomeTotal ? (
+                    <span className="text-muted-foreground font-normal ml-1.5">
+                      {` (≈ ${new Intl.NumberFormat(intlLocale).format(previewRule.getAnnualHomeTotal(startDate, endDate))} ${currency})`}
+                    </span>
+                  ) : null}
                 </span>
               </span>
             </div>
@@ -434,6 +501,9 @@ EditTagBudgetModal.propTypes = {
     targetMonth: PropTypes.number,
     resourceType: PropTypes.string,
     amount: PropTypes.number,
+    currency: PropTypes.string,
+    homeAmount: PropTypes.number,
+    cachedAnnualHomeTotal: PropTypes.number,
     timeHours: PropTypes.number,
     timeHourlyRate: PropTypes.number,
     goodsQuantity: PropTypes.number,
