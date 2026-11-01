@@ -6,6 +6,10 @@ export default function Footer() {
   const startYear = 2024;
   const currentYear = new Date().getFullYear();
   const devPeriod = startYear === currentYear ? currentYear : `${startYear}–${currentYear}`;
+  const appVersion = import.meta.env.VITE_APP_VERSION;
+  const formattedVersion = appVersion
+    ? (appVersion.startsWith('v') ? appVersion : (/^\d+\.\d+/.test(appVersion) ? `v${appVersion}` : appVersion))
+    : '';
 
   return (
     <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground font-medium">
@@ -14,7 +18,7 @@ export default function Footer() {
         <span>Projecta</span>
       </div>
       <div>
-        {`© ${devPeriod} ${String(content.createdBy)} Massimo UA`}
+        {`© ${devPeriod} ${String(content.createdBy)} Massimo UA${formattedVersion ? ` • ${formattedVersion}` : ''}`}
       </div>
     </div>
   );

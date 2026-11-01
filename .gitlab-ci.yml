@@ -69,11 +69,13 @@ backend-build:
   image: golang:1.26
   stage: build
   rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   script:
     - mkdir -p builds
-    - cd cmd/web && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -X main.Version=${CI_COMMIT_SHA}" -o ../../builds/${BINARY_NAME}-${CI_COMMIT_SHA} . && cd ../..
+    - cd cmd/web && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -X main.Version=${CI_COMMIT_TAG:-$CI_COMMIT_SHA}" -o ../../builds/${BINARY_NAME}-${CI_COMMIT_SHA} . && cd ../..
     - cd cmd/migrate && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o ../../builds/projecta-migrate-${CI_COMMIT_SHA} . && cd ../..
   artifacts:
     paths:
@@ -85,6 +87,8 @@ backend-deploy:
   stage: deploy
   needs: [backend-build]
   rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   script:
@@ -121,12 +125,14 @@ frontend-build:
   image: node:22-alpine
   stage: build
   rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   script:
     - cd web-ui
     - npm install
-    - npm run build
+    - VITE_APP_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}" npm run build
   artifacts:
     paths:
       - web-ui/dist/
@@ -137,6 +143,8 @@ frontend-deploy:
   stage: deploy
   needs: [frontend-build]
   rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   script:

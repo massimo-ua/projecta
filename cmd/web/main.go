@@ -22,6 +22,8 @@ import (
 	"time"
 )
 
+var Version = "dev"
+
 func createErrorHandler(logger core.Logger) func(err error) {
 	return func(err error) {
 		logger.Error("failed to start the application", err, nil)
@@ -160,7 +162,7 @@ func main() {
 	}
 
 	go func() {
-		log.Info("Starting HTTP Server", map[string]any{"uri": config.HttpUri})
+		log.Info("Starting HTTP Server", map[string]any{"uri": config.HttpUri, "version": Version})
 		if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("HTTP Server Failed", err, nil)
 		}

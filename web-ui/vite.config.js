@@ -1,10 +1,27 @@
+import { execSync } from 'child_process';
+import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { intlayer } from 'vite-intlayer';
-import path from 'path';
+
+const getAppVersion = () => {
+  if (process.env.VITE_APP_VERSION) {
+    return process.env.VITE_APP_VERSION;
+  }
+  try {
+    return execSync('git describe --tags --always --dirty', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'dev';
+  }
+};
+
+const appVersion = getAppVersion();
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+  },
   plugins: [react(), intlayer()],
   resolve: {
     alias: {
