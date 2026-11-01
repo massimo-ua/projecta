@@ -74,8 +74,10 @@ backend-build:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   script:
+    - git fetch --tags || true
+    - VERSION="${CI_COMMIT_TAG:-$(git describe --tags --abbrev=0 2>/dev/null || echo $CI_COMMIT_SHA)}"
     - mkdir -p builds
-    - cd cmd/web && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -X main.Version=${CI_COMMIT_TAG:-$CI_COMMIT_SHA}" -o ../../builds/${BINARY_NAME}-${CI_COMMIT_SHA} . && cd ../..
+    - cd cmd/web && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -X main.Version=${VERSION}" -o ../../builds/${BINARY_NAME}-${CI_COMMIT_SHA} . && cd ../..
     - cd cmd/migrate && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o ../../builds/projecta-migrate-${CI_COMMIT_SHA} . && cd ../..
   artifacts:
     paths:
@@ -136,10 +138,14 @@ frontend-build:
       when: manual
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
+  before_script:
+    - apk add --no-cache git
   script:
+    - git fetch --tags || true
+    - export VITE_APP_VERSION="${CI_COMMIT_TAG:-$(git describe --tags --abbrev=0 2>/dev/null || echo $CI_COMMIT_SHORT_SHA)}"
     - cd web-ui
     - npm install
-    - VITE_APP_VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}" npm run build
+    - npm run build
   artifacts:
     paths:
       - web-ui/dist/

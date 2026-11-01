@@ -9,9 +9,13 @@ const getAppVersion = () => {
     return process.env.VITE_APP_VERSION;
   }
   try {
-    return execSync('git describe --tags --always --dirty', { encoding: 'utf8' }).trim();
+    return execSync('git describe --tags --abbrev=0', { encoding: 'utf8' }).trim();
   } catch {
-    return 'dev';
+    try {
+      return execSync('git describe --tags --always --dirty', { encoding: 'utf8' }).trim();
+    } catch {
+      return 'dev';
+    }
   }
 };
 
