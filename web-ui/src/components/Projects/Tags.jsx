@@ -81,19 +81,19 @@ function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
       <div className="space-y-4">
         {/* Header: Tag Pill, Count & Budget Badge */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-mono text-base font-bold text-primary group-hover:underline">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="font-mono text-base font-bold text-primary group-hover:underline break-words">
               <span>{`#${tag.name}`}</span>
             </span>
             {tag.tagBudget && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary shrink-0">
                 {String(content.frequencies?.[tag.tagBudget.frequency] || tag.tagBudget.frequency)}
               </Badge>
             )}
           </div>
           <Badge
             variant="secondary"
-            className="text-xs font-semibold px-2 py-0.5 rounded-lg border-border/60 bg-muted/60"
+            className="text-xs font-semibold px-2 py-0.5 rounded-lg border-border/60 bg-muted/60 shrink-0"
           >
             <span>{`${tag.count} ${tag.count === 1 ? String(content.singleInvestment || 'investment') : String(content.investmentsCount || 'investments')}`}</span>
           </Badge>
@@ -171,12 +171,12 @@ function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
       </div>
 
       {/* Footer Actions */}
-      <div className="pt-3 mt-4 border-t border-border/50 flex items-center justify-between gap-2">
+      <div className="pt-3 mt-4 border-t border-border/50 flex flex-col gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() => onConfigureBudget(tag.name, tag.tagBudget)}
-          className="text-xs font-medium h-8 rounded-xl px-2.5 gap-1 text-muted-foreground hover:text-foreground"
+          className="w-full text-xs font-medium h-8 rounded-xl px-2.5 gap-1.5 text-muted-foreground hover:text-foreground justify-center"
         >
           <Edit2 className="h-3 w-3" />
           <span>
@@ -190,9 +190,9 @@ function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
           variant="ghost"
           size="sm"
           onClick={() => onSelectTag(tag.name)}
-          className="text-xs font-semibold h-8 rounded-xl text-primary hover:bg-primary/10 transition-colors gap-1 px-2.5"
+          className="w-full justify-between text-xs font-semibold h-8 rounded-xl text-primary hover:bg-primary/10 transition-colors px-2.5"
         >
-          <span>{String(content.viewInvestments || 'View')}</span>
+          <span>{String(content.viewInvestments || 'View Investments')}</span>
           <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
         </Button>
       </div>
@@ -457,7 +457,7 @@ export function Tags() {
 
       {/* Tags Grid / List */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="rounded-2xl border border-border/60 p-5 space-y-4 bg-card">
               <div className="flex justify-between items-center">
@@ -465,12 +465,15 @@ export function Tags() {
                 <Skeleton className="h-5 w-16 rounded-md" />
               </div>
               <Skeleton className="h-7 w-28 rounded-lg" />
-              <Skeleton className="h-8 w-full rounded-xl" />
+              <div className="pt-3 mt-4 border-t border-border/50 space-y-2">
+                <Skeleton className="h-8 w-full rounded-xl" />
+                <Skeleton className="h-8 w-full rounded-xl" />
+              </div>
             </div>
           ))}
         </div>
       ) : tags.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {tags.map((tag) => (
             <TagCard
               key={tag.name}
