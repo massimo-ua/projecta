@@ -124,6 +124,7 @@ describe('ProjectBudget Domain Model', () => {
       assert.equal(dto.target_month, 3);
       assert.equal(dto.resource_type, 'GOODS');
       assert.equal(dto.amount, 150050); // Minor units
+      assert.equal(dto.currency, 'UAH');
       assert.equal(dto.goods_quantity, 10);
       assert.equal(dto.goods_unit, 'pcs');
       assert.equal(dto.goods_item_name, 'Concrete');
@@ -132,14 +133,106 @@ describe('ProjectBudget Domain Model', () => {
       const reconstructed = TagBudgetRule.fromDTO(dto);
       assert.equal(reconstructed.tag, 'materials');
       assert.equal(reconstructed.amount, 1500.50);
+      assert.equal(reconstructed.currency, 'UAH');
       assert.equal(reconstructed.targetMonth, 3);
       assert.equal(reconstructed.resourceType, 'GOODS');
       assert.equal(reconstructed.goodsItemName, 'Concrete');
+    });
+
+    it('supports multi-currency with homeAmount and annualHomeTotal', () => {
+      const rule = new TagBudgetRule({
+        tag: 'equipment',
+        frequency: BUDGET_FREQUENCIES.MONTHLY,
+        resourceType: BUDGET_RESOURCE_TYPES.MONEY,
+        amount: 1000, // 1,000 EUR
+        currency: 'EUR',
+        homeAmount: 45000, // Converted to 45,000 UAH
+        annualHomeTotal: 540000, // 540,000 UAH / yr
+      });
+
+      assert.equal(rule.currency, 'EUR');
+      assert.equal(rule.effectiveAmount, 1000);
+      assert.equal(rule.effectiveHomeAmount, 45000);
+      assert.equal(rule.getAnnualTotal(new Date('2026-01-01')), 12000);
+      assert.equal(rule.getAnnualHomeTotal(new Date('2026-01-01')), 540000);
+
+      const dto = rule.toDTO();
+      assert.equal(dto.currency, 'EUR');
+      assert.equal(dto.amount, 100000); // in cents
+
+      const fromBackendDTO = {
+        tag: 'equipment',
+        frequency: 'MONTHLY',
+        resource_type: 'MONEY',
+        amount: 100000,
+        currency: 'EUR',
+        home_amount: 4500000, // 45,000.00 UAH in kopiyok
+        annual_total: 1200000,
+        annual_home_total: 54000000,
+      };
+      const parsed = TagBudgetRule.fromDTO(fromBackendDTO);
+      assert.equal(parsed.currency, 'EUR');
+      assert.equal(parsed.amount, 1000);
+      assert.equal(parsed.homeAmount, 45000);
+      assert.equal(parsed.effectiveHomeAmount, 45000);
+      assert.equal(parsed.getAnnualTotal(), 12000);
+      assert.equal(parsed.getAnnualHomeTotal(), 540000);
     });
   });
 
   describe('ProjectBudgetSchedule', () => {
     const startDate = new Date('2026-01-01');
+
+    it('aggregates multi-currency tag budgets accurately against home currency payments', () => {
+      // Project home currency is UAH
+      // Tag rule: equipment budget is 1,000 EUR/mo => converted to 45,000 UAH/mo
+      const tagBudgets = [
+        new TagBudgetRule({
+          tag: 'equipment',
+          frequency: BUDGET_FREQUENCIES.MONTHLY,
+          amount: 1000,
+          currency: 'EUR',
+          homeAmount: 45000,
+          annualHomeTotal: 540000,
+        }),
+      ];
+
+      // Payment recorded in project home currency (UAH): 40,000 UAH in Jan 2026
+      const payments = [
+        {
+          paymentDate: '2026-01-15',
+          amount: 40000,
+          rawHomeAmount: 4000000,
+          tags: ['equipment'],
+        },
+      ];
+
+      const schedule = new ProjectBudgetSchedule({
+        tagBudgets,
+        payments,
+        startDate,
+      });
+
+      // Total annual budget should be 540,000 (in home currency UAH)
+      assert.equal(schedule.totalAnnualBudget, 540000);
+      assert.equal(schedule.totalActualInvested, 40000);
+      assert.equal(schedule.annualVariance, 500000);
+      assert.equal(schedule.budgetUtilization, 7); // 40000 / 540000 = 7.4% -> 7%
+
+      // Monthly projected should be 45,000 UAH
+      assert.equal(schedule.months[0].projected, 45000);
+      assert.equal(schedule.months[0].actual, 40000);
+      assert.equal(schedule.months[0].isOverBudget, false);
+
+      // Tag comparisons should reflect native planned 12,000 EUR, home planned 540,000 UAH
+      const comp = schedule.tagComparisons[0];
+      assert.equal(comp.tag, 'equipment');
+      assert.equal(comp.currency, 'EUR');
+      assert.equal(comp.projectedAnnual, 12000);
+      assert.equal(comp.projectedHomeAnnual, 540000);
+      assert.equal(comp.actualAnnual, 40000);
+      assert.equal(comp.isOverBudget, false);
+    });
 
     it('generates 12 months with correct projected totals', () => {
       const tagBudgets = [

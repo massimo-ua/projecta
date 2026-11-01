@@ -116,11 +116,15 @@ export function useProjectTags(projectId) {
           ? tagBudget.getAnnualTotal(projectRes?.startDate, projectRes?.endDate)
           : 0;
 
-        const budgetUtilization = projectedAnnualAmount > 0
-          ? Math.round((totalAmount / projectedAnnualAmount) * 100)
+        const projectedHomeAnnualAmount = tagBudget
+          ? tagBudget.getAnnualHomeTotal(projectRes?.startDate, projectRes?.endDate)
+          : 0;
+
+        const budgetUtilization = projectedHomeAnnualAmount > 0
+          ? Math.round((totalAmount / projectedHomeAnnualAmount) * 100)
           : null;
 
-        const isOverBudget = projectedAnnualAmount > 0 && totalAmount > projectedAnnualAmount;
+        const isOverBudget = projectedHomeAnnualAmount > 0 && totalAmount > projectedHomeAnnualAmount;
 
         return {
           name: tag,
@@ -132,7 +136,9 @@ export function useProjectTags(projectId) {
           resourceTypes: Array.from(resourceTypesSet),
           recentDate: latestDate,
           tagBudget,
+          budgetCurrency: tagBudget ? tagBudget.currency : (projectRes?.mainCurrency || 'UAH'),
           projectedAnnualAmount,
+          projectedHomeAnnualAmount,
           budgetUtilization,
           isOverBudget,
         };

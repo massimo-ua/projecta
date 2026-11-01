@@ -17,18 +17,21 @@ import (
 )
 
 type TagBudgetDTO struct {
-	Tag            string   `json:"tag"`
-	Frequency      string   `json:"frequency"`
-	TargetMonth    int      `json:"target_month,omitempty"`
-	ResourceType   string   `json:"resource_type"`
-	Amount         int64    `json:"amount"`
-	TimeHours      *float64 `json:"time_hours,omitempty"`
-	TimeHourlyRate *int64   `json:"time_hourly_rate,omitempty"`
-	GoodsQuantity  *float64 `json:"goods_quantity,omitempty"`
-	GoodsUnit      string   `json:"goods_unit,omitempty"`
-	GoodsItemName  string   `json:"goods_item_name,omitempty"`
-	Description    string   `json:"description,omitempty"`
-	AnnualTotal    int64    `json:"annual_total"`
+	Tag             string   `json:"tag"`
+	Frequency       string   `json:"frequency"`
+	TargetMonth     int      `json:"target_month,omitempty"`
+	ResourceType    string   `json:"resource_type"`
+	Amount          int64    `json:"amount"`
+	Currency        string   `json:"currency,omitempty"`
+	HomeAmount      int64    `json:"home_amount,omitempty"`
+	TimeHours       *float64 `json:"time_hours,omitempty"`
+	TimeHourlyRate  *int64   `json:"time_hourly_rate,omitempty"`
+	GoodsQuantity   *float64 `json:"goods_quantity,omitempty"`
+	GoodsUnit       string   `json:"goods_unit,omitempty"`
+	GoodsItemName   string   `json:"goods_item_name,omitempty"`
+	Description     string   `json:"description,omitempty"`
+	AnnualTotal     int64    `json:"annual_total"`
+	AnnualHomeTotal int64    `json:"annual_home_total,omitempty"`
 }
 
 type CreateProjectDTO struct {
@@ -96,6 +99,7 @@ func toTagBudgetInputs(dtos []TagBudgetDTO) []project.TagBudgetInput {
 			TargetMonth:    d.TargetMonth,
 			ResourceType:   d.ResourceType,
 			Amount:         d.Amount,
+			Currency:       d.Currency,
 			TimeHours:      d.TimeHours,
 			TimeHourlyRate: d.TimeHourlyRate,
 			GoodsQuantity:  d.GoodsQuantity,
@@ -125,18 +129,21 @@ func toProjectDTO(p *project.Project) ProjectDTO {
 	tagBudgets := make([]TagBudgetDTO, 0, len(rawBudgets))
 	for _, b := range rawBudgets {
 		tagBudgets = append(tagBudgets, TagBudgetDTO{
-			Tag:            b.Tag(),
-			Frequency:      b.Frequency().String(),
-			TargetMonth:    b.TargetMonth(),
-			ResourceType:   b.ResourceType().String(),
-			Amount:         b.Amount(),
-			TimeHours:      b.TimeHours(),
-			TimeHourlyRate: b.TimeHourlyRate(),
-			GoodsQuantity:  b.GoodsQuantity(),
-			GoodsUnit:      b.GoodsUnit(),
-			GoodsItemName:  b.GoodsItemName(),
-			Description:    b.Description(),
-			AnnualTotal:    b.AnnualTotal(p.StartDate(), p.EndDate()),
+			Tag:             b.Tag(),
+			Frequency:       b.Frequency().String(),
+			TargetMonth:     b.TargetMonth(),
+			ResourceType:    b.ResourceType().String(),
+			Amount:          b.Amount(),
+			Currency:        b.Currency(),
+			HomeAmount:      b.HomeAmount(),
+			TimeHours:       b.TimeHours(),
+			TimeHourlyRate:  b.TimeHourlyRate(),
+			GoodsQuantity:   b.GoodsQuantity(),
+			GoodsUnit:       b.GoodsUnit(),
+			GoodsItemName:   b.GoodsItemName(),
+			Description:     b.Description(),
+			AnnualTotal:     b.AnnualTotal(p.StartDate(), p.EndDate()),
+			AnnualHomeTotal: b.AnnualHomeTotal(p.StartDate(), p.EndDate()),
 		})
 	}
 

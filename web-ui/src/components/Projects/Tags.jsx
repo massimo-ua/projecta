@@ -92,9 +92,16 @@ function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
               <span>{`${tag.count} ${tag.count === 1 ? String(content.singleInvestment || 'investment') : String(content.investmentsCount || 'investments')}`}</span>
             </Badge>
             {tag.tagBudget && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary">
-                {String(content.frequencies?.[tag.tagBudget.frequency] || tag.tagBudget.frequency)}
-              </Badge>
+              <>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-primary/5 border-primary/20 text-primary">
+                  {String(content.frequencies?.[tag.tagBudget.frequency] || tag.tagBudget.frequency)}
+                </Badge>
+                {tag.budgetCurrency && tag.budgetCurrency !== currency && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400 font-mono">
+                    {tag.budgetCurrency}
+                  </Badge>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -118,7 +125,14 @@ function TagCard({ tag, currency, onSelectTag, onConfigureBudget, content }) {
                   {String(content.plannedAnnualTitle || 'Planned Annual')}:
                 </span>
                 <span className="font-semibold text-foreground">
-                  <span>{`${new Intl.NumberFormat(intlLocale).format(tag.projectedAnnualAmount)} ${currency}`}</span>
+                  <span>
+                    {`${new Intl.NumberFormat(intlLocale).format(tag.projectedAnnualAmount)} ${tag.budgetCurrency || currency}`}
+                    {tag.budgetCurrency && tag.budgetCurrency !== currency && tag.projectedHomeAnnualAmount ? (
+                      <span className="text-muted-foreground font-normal ml-1">
+                        {` (≈ ${new Intl.NumberFormat(intlLocale).format(tag.projectedHomeAnnualAmount)} ${currency})`}
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
               </div>
               <div className="w-full bg-muted/60 h-2 rounded-full overflow-hidden">
@@ -207,7 +221,9 @@ TagCard.propTypes = {
     formattedAmount: PropTypes.string.isRequired,
     resourceTypes: PropTypes.arrayOf(PropTypes.string).isRequired,
     tagBudget: PropTypes.shape({}),
+    budgetCurrency: PropTypes.string,
     projectedAnnualAmount: PropTypes.number,
+    projectedHomeAnnualAmount: PropTypes.number,
     budgetUtilization: PropTypes.number,
     isOverBudget: PropTypes.bool,
   }).isRequired,

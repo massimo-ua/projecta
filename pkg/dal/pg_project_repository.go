@@ -284,6 +284,7 @@ func (r *PgProjectRepository) fetchTagBudgets(ctx context.Context, projectID cor
 		"target_month",
 		"resource_type",
 		"amount",
+		"currency",
 		"time_hours",
 		"time_hourly_rate",
 		"goods_quantity",
@@ -309,6 +310,7 @@ func (r *PgProjectRepository) fetchTagBudgets(ctx context.Context, projectID cor
 			targetMonth    int
 			resourceType   string
 			amount         int64
+			currency       string
 			timeHours      *float64
 			timeHourlyRate *int64
 			goodsQuantity  *float64
@@ -323,6 +325,7 @@ func (r *PgProjectRepository) fetchTagBudgets(ctx context.Context, projectID cor
 			&targetMonth,
 			&resourceType,
 			&amount,
+			&currency,
 			&timeHours,
 			&timeHourlyRate,
 			&goodsQuantity,
@@ -339,6 +342,7 @@ func (r *PgProjectRepository) fetchTagBudgets(ctx context.Context, projectID cor
 			targetMonth,
 			resourceType,
 			amount,
+			currency,
 			timeHours,
 			timeHourlyRate,
 			goodsQuantity,
@@ -362,14 +366,15 @@ func (r *PgProjectRepository) saveTagBudgets(ctx context.Context, proj *project.
 		insertSql := `
 			INSERT INTO projecta_project_tag_budgets (
 				project_id, tag, frequency, target_month, resource_type,
-				amount, time_hours, time_hourly_rate, goods_quantity,
+				amount, currency, time_hours, time_hourly_rate, goods_quantity,
 				goods_unit, goods_item_name, description
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			ON CONFLICT (project_id, tag) DO UPDATE SET
 				frequency = EXCLUDED.frequency,
 				target_month = EXCLUDED.target_month,
 				resource_type = EXCLUDED.resource_type,
 				amount = EXCLUDED.amount,
+				currency = EXCLUDED.currency,
 				time_hours = EXCLUDED.time_hours,
 				time_hourly_rate = EXCLUDED.time_hourly_rate,
 				goods_quantity = EXCLUDED.goods_quantity,
@@ -386,6 +391,7 @@ func (r *PgProjectRepository) saveTagBudgets(ctx context.Context, proj *project.
 			b.TargetMonth(),
 			b.ResourceType().String(),
 			b.Amount(),
+			b.Currency(),
 			b.TimeHours(),
 			b.TimeHourlyRate(),
 			b.GoodsQuantity(),

@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Rhymond/go-money"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
 
@@ -71,6 +72,7 @@ type TagBudgetInput struct {
 	TargetMonth    int
 	ResourceType   string
 	Amount         int64
+	Currency       string
 	TimeHours      *float64
 	TimeHourlyRate *int64
 	GoodsQuantity  *float64
@@ -85,6 +87,8 @@ type TagBudget struct {
 	targetMonth    int
 	resourceType   BudgetResourceType
 	amount         int64
+	currency       string
+	homeAmount     int64
 	timeHours      *float64
 	timeHourlyRate *int64
 	goodsQuantity  *float64
@@ -132,6 +136,11 @@ func NewTagBudget(input TagBudgetInput) (TagBudget, error) {
 		return TagBudget{}, err
 	}
 
+	curr, err := ValidateCurrency(input.Currency)
+	if err != nil {
+		return TagBudget{}, err
+	}
+
 	targetMonth := input.TargetMonth
 	if targetMonth == 0 {
 		targetMonth = 1
@@ -164,6 +173,8 @@ func NewTagBudget(input TagBudgetInput) (TagBudget, error) {
 		targetMonth:    targetMonth,
 		resourceType:   resType,
 		amount:         finalAmount,
+		currency:       curr,
+		homeAmount:     finalAmount,
 		timeHours:      copyFloatPtr(input.TimeHours),
 		timeHourlyRate: copyInt64Ptr(input.TimeHourlyRate),
 		goodsQuantity:  copyFloatPtr(input.GoodsQuantity),
@@ -179,6 +190,7 @@ func ReconstituteTagBudget(
 	targetMonth int,
 	resourceType string,
 	amount int64,
+	currency string,
 	timeHours *float64,
 	timeHourlyRate *int64,
 	goodsQuantity *float64,
@@ -197,12 +209,18 @@ func ReconstituteTagBudget(
 	if targetMonth < 1 || targetMonth > 12 {
 		targetMonth = 1
 	}
+	curr := strings.ToUpper(strings.TrimSpace(currency))
+	if curr == "" {
+		curr = "UAH"
+	}
 	return TagBudget{
 		tag:            sanitizeTagName(tag),
 		frequency:      freq,
 		targetMonth:    targetMonth,
 		resourceType:   resType,
 		amount:         amount,
+		currency:       curr,
+		homeAmount:     amount,
 		timeHours:      copyFloatPtr(timeHours),
 		timeHourlyRate: copyInt64Ptr(timeHourlyRate),
 		goodsQuantity:  copyFloatPtr(goodsQuantity),
@@ -217,6 +235,13 @@ func (b TagBudget) Frequency() BudgetFrequency       { return b.frequency }
 func (b TagBudget) TargetMonth() int                 { return b.targetMonth }
 func (b TagBudget) ResourceType() BudgetResourceType { return b.resourceType }
 func (b TagBudget) Amount() int64                    { return b.amount }
+func (b TagBudget) Currency() string                 { return b.currency }
+func (b TagBudget) HomeAmount() int64 {
+	if b.homeAmount > 0 {
+		return b.homeAmount
+	}
+	return b.amount
+}
 func (b TagBudget) TimeHours() *float64              { return copyFloatPtr(b.timeHours) }
 func (b TagBudget) TimeHourlyRate() *int64           { return copyInt64Ptr(b.timeHourlyRate) }
 func (b TagBudget) GoodsQuantity() *float64          { return copyFloatPtr(b.goodsQuantity) }
@@ -224,32 +249,64 @@ func (b TagBudget) GoodsUnit() string                { return b.goodsUnit }
 func (b TagBudget) GoodsItemName() string            { return b.goodsItemName }
 func (b TagBudget) Description() string              { return b.description }
 
-// ProjectedAmountForMonth returns the projected minor-unit amount for a given 1-based schedule month index (1..12)
-// and the corresponding calendar year/month (used for calendar target month matching and DAILY day count).
-func (b TagBudget) ProjectedAmountForMonth(scheduleIndex int, year int, month time.Month) int64 {
+// EvaluateHomeAmount computes and updates the project home-currency equivalent of the budget amount.
+func (b *TagBudget) EvaluateHomeAmount(converter CurrencyConverter, projectMainCurrency string) {
+	targetCurr := strings.ToUpper(strings.TrimSpace(projectMainCurrency))
+	if targetCurr == "" {
+		targetCurr = "UAH"
+	}
+	b.homeAmount = b.amount
+	if converter != nil && b.currency != "" && b.currency != targetCurr && b.amount > 0 {
+		m := money.New(b.amount, b.currency)
+		if converted, err := converter.ConvertMoney(m, targetCurr); err == nil && converted != nil {
+			b.homeAmount = converted.Amount()
+		}
+	}
+}
+
+func projectBudgetAmount(amt int64, freq BudgetFrequency, targetMonth int, scheduleIndex int, year int, month time.Month) int64 {
 	if scheduleIndex < 1 || scheduleIndex > 12 {
 		return 0
 	}
-	switch b.frequency {
+	switch freq {
 	case FrequencyOnce, FrequencyAnnually:
-		if int(month) == b.targetMonth {
-			return b.amount
+		if int(month) == targetMonth {
+			return amt
 		}
 		return 0
 	case FrequencyMonthly:
-		return b.amount
+		return amt
 	case FrequencyWeekly:
-		return int64(math.Round(float64(b.amount) * 52.0 / 12.0))
+		return int64(math.Round(float64(amt) * 52.0 / 12.0))
 	case FrequencyDaily:
 		daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-		return b.amount * int64(daysInMonth)
+		return amt * int64(daysInMonth)
 	default:
 		return 0
 	}
 }
 
-// AnnualTotal returns the total projected minor-unit amount across a 12-month schedule starting at startDate up to optional endDate.
+// ProjectedAmountForMonth returns the projected minor-unit amount in native budget currency for a given 1-based schedule month index (1..12).
+func (b TagBudget) ProjectedAmountForMonth(scheduleIndex int, year int, month time.Month) int64 {
+	return projectBudgetAmount(b.amount, b.frequency, b.targetMonth, scheduleIndex, year, month)
+}
+
+// ProjectedHomeAmountForMonth returns the projected minor-unit amount converted to the project's home currency.
+func (b TagBudget) ProjectedHomeAmountForMonth(scheduleIndex int, year int, month time.Month) int64 {
+	return projectBudgetAmount(b.HomeAmount(), b.frequency, b.targetMonth, scheduleIndex, year, month)
+}
+
+// AnnualTotal returns the total projected minor-unit amount in native budget currency across a 12-month schedule starting at startDate up to optional endDate.
 func (b TagBudget) AnnualTotal(startDate time.Time, endDate ...time.Time) int64 {
+	return calculateAnnualTagBudgetTotal(b.ProjectedAmountForMonth, startDate, endDate...)
+}
+
+// AnnualHomeTotal returns the total projected minor-unit amount in project home currency across a 12-month schedule starting at startDate up to optional endDate.
+func (b TagBudget) AnnualHomeTotal(startDate time.Time, endDate ...time.Time) int64 {
+	return calculateAnnualTagBudgetTotal(b.ProjectedHomeAmountForMonth, startDate, endDate...)
+}
+
+func calculateAnnualTagBudgetTotal(projFn func(int, int, time.Month) int64, startDate time.Time, endDate ...time.Time) int64 {
 	base := startDate
 	if base.IsZero() {
 		base = time.Now().UTC()
@@ -265,7 +322,7 @@ func (b TagBudget) AnnualTotal(startDate time.Time, endDate ...time.Time) int64 
 		if !end.IsZero() && m.After(end) {
 			break
 		}
-		sum += b.ProjectedAmountForMonth(i+1, m.Year(), m.Month())
+		sum += projFn(i+1, m.Year(), m.Month())
 	}
 	return sum
 }

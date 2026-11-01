@@ -133,6 +133,10 @@ const tagsContent = {
       en: 'Resource Type',
       uk: 'Тип ресурсу',
     }),
+    currencyLabel: t({
+      en: 'Currency',
+      uk: 'Валюта',
+    }),
     amountLabel: t({
       en: 'Expected Amount',
       uk: 'Очікувана сума',

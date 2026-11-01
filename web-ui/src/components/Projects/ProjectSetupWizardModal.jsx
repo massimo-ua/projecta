@@ -47,6 +47,7 @@ import { useProjectSetupWizard } from '../../hooks/useProjectSetupWizard';
 import {
   BUDGET_FREQUENCIES,
   BUDGET_RESOURCE_TYPES,
+  SUPPORTED_CURRENCIES,
   PRESET_PROJECT_TAGS,
 } from '../../models';
 
@@ -56,6 +57,35 @@ const CURRENCIES = [
   { code: 'EUR', label: 'EUR €' },
   { code: 'PLN', label: 'PLN zł' },
 ];
+
+function WizardCurrencySelectField({ id, label, value, onChange }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs font-medium">
+        <span>{label}</span>
+      </Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-9 rounded-xl text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="rounded-xl">
+          {SUPPORTED_CURRENCIES.map((c) => (
+            <SelectItem key={c} value={c} className="text-xs">
+              {c}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+WizardCurrencySelectField.propTypes = {
+  id: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+};
 
 export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
   const content = useIntlayer('projects');
@@ -435,10 +465,10 @@ export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
 
               {/* Dynamic Resource Inputs */}
               {draftRule.resourceType === BUDGET_RESOURCE_TYPES.MONEY && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="space-y-1.5">
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="col-span-2 space-y-1.5">
                     <Label htmlFor="tag-rule-amount" className="text-xs font-medium">
-                      <span>{`${String(w.amountLabel || 'Expected Amount')} (${mainCurrency})`}</span>
+                      <span>{String(w.amountLabel || 'Expected Amount')}</span>
                     </Label>
                     <Input
                       id="tag-rule-amount"
@@ -451,11 +481,17 @@ export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
                       className="h-9 rounded-xl text-xs"
                     />
                   </div>
+                  <WizardCurrencySelectField
+                    id="tag-rule-currency"
+                    label={String(w.currencyLabel || 'Currency')}
+                    value={draftRule.currency || mainCurrency}
+                    onChange={(val) => updateDraft({ currency: val })}
+                  />
                 </div>
               )}
 
               {draftRule.resourceType === BUDGET_RESOURCE_TYPES.TIME && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-3 gap-3 pt-1">
                   <div className="space-y-1.5">
                     <Label htmlFor="tag-rule-hours" className="text-xs font-medium">
                       {String(w.hoursLabel || 'Expected Hours')}
@@ -473,7 +509,7 @@ export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="tag-rule-hourly-rate" className="text-xs font-medium">
-                      <span>{`${String(w.hourlyRateLabel || 'Hourly Rate')} (${mainCurrency}${String(w.perHourSuffix || '/h')})`}</span>
+                      <span>{`${String(w.hourlyRateLabel || 'Hourly Rate')} (${draftRule.currency || mainCurrency}${String(w.perHourSuffix || '/h')})`}</span>
                     </Label>
                     <Input
                       id="tag-rule-hourly-rate"
@@ -486,63 +522,79 @@ export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
                       className="h-9 rounded-xl text-xs"
                     />
                   </div>
+                  <WizardCurrencySelectField
+                    id="tag-rule-currency-time"
+                    label={String(w.currencyLabel || 'Currency')}
+                    value={draftRule.currency || mainCurrency}
+                    onChange={(val) => updateDraft({ currency: val })}
+                  />
                 </div>
               )}
 
               {draftRule.resourceType === BUDGET_RESOURCE_TYPES.GOODS && (
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="tag-rule-goods-name" className="text-xs font-medium">
-                      {String(w.goodsNameLabel || 'Item / Material Name')}
-                    </Label>
-                    <Input
-                      id="tag-rule-goods-name"
-                      placeholder={String(w.goodsItemPlaceholder || 'Concrete, cables...')}
-                      value={draftRule.goodsItemName}
-                      onChange={(e) => updateDraft({ goodsItemName: e.target.value })}
-                      className="h-9 rounded-xl text-xs"
-                    />
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="space-y-1.5 col-span-2">
+                      <Label htmlFor="tag-rule-goods-name" className="text-xs font-medium">
+                        {String(w.goodsNameLabel || 'Item / Material Name')}
+                      </Label>
+                      <Input
+                        id="tag-rule-goods-name"
+                        placeholder={String(w.goodsItemPlaceholder || 'Concrete, cables...')}
+                        value={draftRule.goodsItemName}
+                        onChange={(e) => updateDraft({ goodsItemName: e.target.value })}
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="tag-rule-goods-qty" className="text-xs font-medium">
+                        {String(w.goodsQtyLabel || 'Quantity')}
+                      </Label>
+                      <Input
+                        id="tag-rule-goods-qty"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="10"
+                        value={draftRule.goodsQuantity}
+                        onChange={(e) => updateDraft({ goodsQuantity: e.target.value })}
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="tag-rule-goods-unit" className="text-xs font-medium">
+                        {String(w.goodsUnitLabel || 'Unit')}
+                      </Label>
+                      <Input
+                        id="tag-rule-goods-unit"
+                        placeholder={String(w.goodsUnitPlaceholder || 'pcs, kg...')}
+                        value={draftRule.goodsUnit}
+                        onChange={(e) => updateDraft({ goodsUnit: e.target.value })}
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tag-rule-goods-qty" className="text-xs font-medium">
-                      {String(w.goodsQtyLabel || 'Quantity')}
-                    </Label>
-                    <Input
-                      id="tag-rule-goods-qty"
-                      type="number"
-                      min="0"
-                      step="any"
-                      placeholder="10"
-                      value={draftRule.goodsQuantity}
-                      onChange={(e) => updateDraft({ goodsQuantity: e.target.value })}
-                      className="h-9 rounded-xl text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tag-rule-goods-unit" className="text-xs font-medium">
-                      {String(w.goodsUnitLabel || 'Unit')}
-                    </Label>
-                    <Input
-                      id="tag-rule-goods-unit"
-                      placeholder={String(w.goodsUnitPlaceholder || 'pcs, kg...')}
-                      value={draftRule.goodsUnit}
-                      onChange={(e) => updateDraft({ goodsUnit: e.target.value })}
-                      className="h-9 rounded-xl text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="tag-rule-goods-amount" className="text-xs font-medium">
-                      <span>{`${String(w.amountLabel || 'Valuation Amount')} (${mainCurrency})`}</span>
-                    </Label>
-                    <Input
-                      id="tag-rule-goods-amount"
-                      type="number"
-                      min="0"
-                      step="any"
-                      placeholder="0.00"
-                      value={draftRule.amount}
-                      onChange={(e) => updateDraft({ amount: e.target.value })}
-                      className="h-9 rounded-xl text-xs"
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="tag-rule-goods-amount" className="text-xs font-medium">
+                        <span>{String(w.amountLabel || 'Valuation Amount')}</span>
+                      </Label>
+                      <Input
+                        id="tag-rule-goods-amount"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={draftRule.amount}
+                        onChange={(e) => updateDraft({ amount: e.target.value })}
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
+                    <WizardCurrencySelectField
+                      id="tag-rule-goods-currency"
+                      label={String(w.currencyLabel || 'Currency')}
+                      value={draftRule.currency || mainCurrency}
+                      onChange={(val) => updateDraft({ currency: val })}
                     />
                   </div>
                 </div>
@@ -601,11 +653,16 @@ export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md">
                               {String(w.frequencies?.[tb.frequency] || tb.frequency)}
                             </Badge>
+                            {tb.currency && tb.currency !== mainCurrency && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-md bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400 font-mono">
+                                {tb.currency}
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-[11px] text-muted-foreground">
-                            <span>{`${formattedEff} ${mainCurrency} → `}</span>
+                            <span>{`${formattedEff} ${tb.currency || mainCurrency} → `}</span>
                             <span className="font-semibold text-foreground">
-                              {`${formattedAnn} ${mainCurrency}${String(w.perYearSuffix || '/yr')}`}
+                              {`${formattedAnn} ${tb.currency || mainCurrency}${String(w.perYearSuffix || '/yr')}`}
                             </span>
                           </div>
                         </div>
@@ -739,7 +796,7 @@ export function ProjectSetupWizardModal({ open, onSuccess, onCancel }) {
                           <span className="text-muted-foreground text-[11px]">{`(${pct}%)`}</span>
                         </div>
                         <span className="font-bold text-foreground">
-                          {`${new Intl.NumberFormat().format(annual)} ${mainCurrency}`}
+                          {`${new Intl.NumberFormat().format(annual)} ${tb.currency || mainCurrency}`}
                         </span>
                       </div>
                     );

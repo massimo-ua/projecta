@@ -402,4 +402,26 @@ func TestProjectSharing(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error when share token not found")
 	}
+
+	// Verify WithConverter evaluates multi-currency tag budgets across service operations
+	conv := &mockRateConverter{rates: map[string]float64{"EUR_UAH": 45.0}}
+	svcWithConv := project.NewProjectService(projRepo, &mockPeopleService{owner: owner}).WithConverter(conv)
+	pUpdatedBudget, err := svcWithConv.UpdateBudget(context.Background(), project.UpdateProjectBudgetCommand{
+		PersonID:  ownerID,
+		ProjectID: proj.ID(),
+		TagBudgets: []project.TagBudgetInput{
+			{Tag: "equipment", Frequency: "MONTHLY", Amount: 10000, Currency: "EUR"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateBudget with converter error: %v", err)
+	}
+	if len(pUpdatedBudget.TagBudgets()) != 1 || pUpdatedBudget.TagBudgets()[0].HomeAmount() != 450000 {
+		t.Errorf("expected evaluated home amount 450000, got %+v", pUpdatedBudget.TagBudgets())
+	}
+
+	pSharedEval, err := svcWithConv.AcceptShare(context.Background(), proj.ShareToken(), recipientID)
+	if err != nil || len(pSharedEval.TagBudgets()) != 1 || pSharedEval.TagBudgets()[0].HomeAmount() != 450000 {
+		t.Errorf("expected AcceptShare to evaluate tag budgets, got err=%v, budgets=%+v", err, pSharedEval.TagBudgets())
+	}
 }
