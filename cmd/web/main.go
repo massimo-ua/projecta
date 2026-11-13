@@ -85,7 +85,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		db,
 		assetRepository,
 		&assetOwnerReaderAdapter{people: peopleService},
-		&assetProjectReaderAdapter{projects: projectRepository},
+		&assetProjectReaderAdapter{projects: projectRepository, rateProvider: rateProvider},
 		&investmentSourceAdapter{svc: investmentService},
 		moneyConverter,
 	)

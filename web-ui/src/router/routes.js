@@ -11,6 +11,7 @@ import {
   AuthenticatedOnly,
   AdminOnly,
   Assets,
+  CashFlowBoard,
   Payments,
   UserProfileSettings,
   RolesManagement,
@@ -94,6 +95,11 @@ const createRoutesForPrefix = (prefix) => [
       {
         path: 'total',
         Component: AuthenticatedOnly(Total),
+        errorElement,
+      },
+      {
+        path: 'planning',
+        Component: AuthenticatedOnly(CashFlowBoard),
         errorElement,
       },
       {

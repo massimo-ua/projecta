@@ -40,6 +40,7 @@ export default function AddAssetModal({
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('ACTIVE');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [targetCompletionDate, setTargetCompletionDate] = useState('');
   const [completedDate, setCompletedDate] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
   const [currency, setCurrency] = useState('UAH');
@@ -62,6 +63,7 @@ export default function AddAssetModal({
         description: description.trim(),
         status,
         startDate: new Date(startDate),
+        targetCompletionDate: targetCompletionDate ? new Date(targetCompletionDate) : undefined,
         completedDate: completedDate ? new Date(completedDate) : undefined,
         targetPrice: targetPrice ? Number(targetPrice) : undefined,
         targetCurrency: currency,
@@ -86,6 +88,7 @@ export default function AddAssetModal({
     setDescription('');
     setStatus('ACTIVE');
     setStartDate(new Date().toISOString().split('T')[0]);
+    setTargetCompletionDate('');
     setCompletedDate('');
     setTargetPrice('');
     setCurrency('UAH');
@@ -164,7 +167,7 @@ export default function AddAssetModal({
           </div>
 
           {/* Lifecycle Dates */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="asset-start-date" className="text-xs font-semibold">
                 {String(content?.startDateLabel || 'Start Date')} *
@@ -176,6 +179,20 @@ export default function AddAssetModal({
                 onChange={(e) => setStartDate(e.target.value)}
                 className="rounded-xl"
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="asset-target-date" className="text-xs font-semibold">
+                {String(content?.targetCompletionDateLabel || 'Target Completion')}
+              </Label>
+              <Input
+                id="asset-target-date"
+                type="date"
+                value={targetCompletionDate}
+                onChange={(e) => setTargetCompletionDate(e.target.value)}
+                min={startDate || undefined}
+                className="rounded-xl"
               />
             </div>
 

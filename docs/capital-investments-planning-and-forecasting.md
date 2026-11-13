@@ -1,94 +1,138 @@
-# Capital Investment Planning & Forecasting Specification
+# Asset Cost Accounting, Planning & Cash Flow Forecasting Specification
 
-## 1. Executive Summary & Architecture Overview
+## 1. Executive Summary & Core Concept
 
-This specification defines the functional, mathematical, and architectural blueprints for **Projecta's Capital Investment Planning & Forecasting Engine**.
+This specification defines the mathematical, domain, and UI architecture for **Projecta’s Asset Cost, Burn Rate & Cash Flow Forecasting Engine**.
 
-Projecta is targeted at **individual investors, home renovators, and venture builders** who need to:
-1. **Plan future cash demand visually** across composite asset hierarchies (DAG) without double-counting or losing unallocated parent budgets.
-2. **Track execution** across hard currency (`MONEY`), sweat equity (`TIME`: hours × rate), and materials (`GOODS`), distinguishing out-of-pocket bank liquidity from total economic value.
-3. **Forecast Estimate at Completion (EAC)** and schedule completion dates using Earned Value Management (EVM) with safeguards for early-stage deposits.
+Projecta is a **personal True Cost & Commitment tracker** built around one central question:
+
+> **"What has owning, building, or maintaining *any* asset in my life actually cost me across Money, Time, and Goods—and what will sustaining or completing it cost going forward?"**
+
+Here, an [`Asset`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L49-L70) can represent literally anything a person invests resources into: a physical possession (car, laptop, apartment), a finite acquisition or renovation, an ongoing hobby/health habit, or an open-ended personal commitment (including life areas or relationships).
+
+Because real-life assets vary widely, the architecture rejects heavyweight enterprise project-management assumptions (such as mandatory `0% → 100%` completion percentages, Earned Value `CPI`/`SPI` formulas, or budget-transfer wizards) in favor of two natural asset modes sharing one DAG model:
+
+1. **Ongoing / Open-Ended Assets** (`target_completion_date == NULL`, `target_price` optional):
+   - Never completed and never given fake deadlines.
+   - Tracked by **true cumulative cost** (`MONEY` + `TIME` hours & value + `GOODS`), **historical monthly burn rate**, and optional recurring category allowances via [`TagBudget`](file:///Users/maksym.hryshkov/Code/projecta/internal/project/tag_budget.go#L84-L98).
+2. **Time-Boxed / Planned Assets** (`target_completion_date != NULL` and `target_price > 0`):
+   - Represent planned acquisitions or finite initiatives with a target date and budget.
+   - Spread remaining unspent target budgets cleanly across future months alongside ongoing burn and recurring `TagBudget` ceilings.
 
 ```mermaid
 flowchart TD
-    subgraph Planning ["1. Visual Planning & Scheduling"]
-        Timeline["Interactive Milestone Timeline\n(start_date & target_completion_date)"]
-        CashDemand["Remaining Cash Demand Curve\n(Residual target budget distributed over future duration)"]
-        TagAllowance["TagBudget / Monthly Funding Ceiling\n(Supply & category allowance baseline)"]
+    subgraph Inputs ["1. Multi-Resource Investments (All Currencies)"]
+        MoneyInv["Money (MONEY)\nCash liquidity outflow"]
+        TimeInv["Time (TIME)\nHours x Hourly Rate -> Effort value"]
+        GoodsInv["Goods (GOODS)\nMaterials & in-kind contributions"]
     end
 
-    subgraph Execution ["2. Multi-Resource Execution"]
-        MoneyInv["Hard Cash (MONEY)\n(Drives liquidity & cash outflow)"]
-        TimeInv["Sweat Equity (TIME)\n(Hours × Rate -> Economic value)"]
-        GoodsInv["Materials (GOODS)\n(Evaluated economic value)"]
-        DAG["AssetHierarchy DAG\n(Cost & Physical Progress Rollups)"]
+    subgraph CostTruth ["2. Asset Cost & Burn Engine (AssetHierarchy DAG)"]
+        FXNorm["Per-Investment FX Normalization\nto Project homeCurrency"]
+        ResBreakdown["Resource Breakdown per Asset\nCash + Time Hours/Value + Goods"]
+        BurnRate["Trailing Monthly Burn Rate\nAvg Cash & Effort per Month"]
     end
 
-    subgraph Forecasting ["3. Predictive Analytics (EVM Engine)"]
-        EarnedValue["Earned Value (EV = BAC × physicalProgress)"]
-        CPI["Cost Performance Index (CPI = EV / AC)"]
-        SPI["Schedule Performance Index (SPI = EV / PV)"]
-        EAC["Hybrid EAC Engine\n(Additive early-stage -> Ratio CPI)"]
+    subgraph Planning ["3. Forward Liquidity & Affordability"]
+        Ongoing["Ongoing Assets (No Target Date)\nBurn-rate & TagBudget projection"]
+        Bounded["Time-Boxed Targets (With Target Date)\nResidualTarget - DirectCost spread over window"]
+        Ceiling["Monthly Cash Capacity Ceiling\nProjected MONEY TagBudget per month"]
+        Affordability["Monthly Cashflow & Alert Status\nActual vs Planned vs Capacity"]
     end
 
-    subgraph Governance ["4. Variance Reconciliation"]
-        Reconciliation["Milestone Completion Check-in\n(Absorb vs Expand Root Asset vs Record Overrun)"]
-    end
-
-    Timeline & TagAllowance --> CashDemand
-    MoneyInv & TimeInv & GoodsInv --> DAG
-    DAG & EarnedValue --> CPI & SPI
-    CPI & SPI --> EAC
-    EAC --> Reconciliation
-    Reconciliation -. Re-forecast .-> Timeline
+    MoneyInv & TimeInv & GoodsInv --> FXNorm
+    FXNorm --> ResBreakdown --> BurnRate
+    BurnRate --> Ongoing
+    FXNorm --> Bounded
+    Ongoing & Bounded & Ceiling --> Affordability
 ```
 
 ---
 
-## 2. Feature Decomposition & Relationship to Existing `TagBudget`
+## 2. Capabilities & Coexistence with `TagBudget`
 
-### 2.1. Module Breakdown
+### 2.1. Capability Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│               CAPITAL INVESTMENT PLANNING & FORECASTING                │
-├────────────────────────────────┬───────────────────────────────────────┤
-│ Feature 1: Asset Lifecycle     │ Invariant-protected target dates,     │
-│ Dates & DAG Progress Rollup    │ temporal bounding & weighted progress │
-├────────────────────────────────┼───────────────────────────────────────┤
-│ Feature 2: Remaining Cash Flow │ Residual DAG target distribution,     │
-│ Demand & Liquidity Forecasting │ sunk-cost deduction & peak alerts     │
-├────────────────────────────────┼───────────────────────────────────────┤
-│ Feature 3: Hybrid EVM Engine   │ Mobilization-safe EAC, CPI/SPI, and   │
-│ & EV Velocity Completion Date  │ schedule-driven finish date forecast  │
-├────────────────────────────────┼───────────────────────────────────────┤
-│ Feature 4: Interactive Timeline│ Two-tier visual canvas, 60fps drag    │
-│ & Cash Flow Board (UI)         │ rescheduling, and optimistic updates  │
-├────────────────────────────────┼───────────────────────────────────────┤
-│ Feature 5: Milestone Check-in  │ Post-milestone variance prompts,      │
-│ & Variance Reconciliation      │ contingency absorption & re-baselining│
-└────────────────────────────────┴───────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                 ASSET COST ACCOUNTING, PLANNING & FORECASTING                │
+├─────────────────────────────────┬────────────────────────────────────────────┤
+│ 1. True Cost & Resource Mix     │ Per-investment FX conversion to home       │
+│    (Money / Time / Goods)       │ currency; rolled-up Cash, Time & Goods     │
+├─────────────────────────────────┼────────────────────────────────────────────┤
+│ 2. Ongoing Burn Rate Analytics  │ Trailing monthly cash burn & hour velocity │
+│    (Open-Ended Assets)          │ for perpetual/unbudgeted life assets       │
+├─────────────────────────────────┼────────────────────────────────────────────┤
+│ 3. Optional Target Windows      │ Invariant-guarded target_completion_date,  │
+│    (Time-Boxed Goals)           │ DAG residual budgets, exact cent spread    │
+├─────────────────────────────────┼────────────────────────────────────────────┤
+│ 4. Affordability & Trend Board  │ Stacked Recharts cashflow + effort trend   │
+│    (Frontend UX)                │ vs TagBudget ceilings & inline date edits  │
+└─────────────────────────────────┴────────────────────────────────────────────┘
 ```
 
-### 2.2. Coexistence with `TagBudget` & `ProjectedVsRealSchedule`
+### 2.2. Coexistence of Planning Signals
 
-Projecta already implements tag-based recurring budget rules via [`TagBudget`](file:///Users/maksym.hryshkov/Code/projecta/internal/project/tag_budget.go#L84-L98) and [`ProjectedVsRealSchedule.jsx`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/components/Projects/Charts/ProjectedVsRealSchedule.jsx#L39). The two mechanisms serve complementary roles:
-
-| Dimension | Existing `TagBudget` Schedule (`internal/project`) | New Asset Milestone Timeline (`internal/asset`) |
-| :--- | :--- | :--- |
-| **Mental Model** | **Category Allowance / Funding Supply** (e.g., *"I can afford $2,000/month on `#materials` and $500/month on `#labor`"*). | **Deliverable Capital Demand** (e.g., *"Roofing runs Aug 1–Aug 20 and requires $8,500"*). |
-| **Time Horizon** | Rolling 12-month recurring frequencies (`DAILY`, `WEEKLY`, `MONTHLY`, `ANNUALLY`, `ONCE`). | Explicit asset lifecycle windows (`[start_date, target_completion_date]`). |
-| **Integration** | The sum of monthly `MONEY` `TagBudget` projections (or an explicit project monthly limit) serves as the **Monthly Funding Capacity Ceiling ($C_{\text{monthly}}$)** on the Cash Flow Demand chart. | Provides the draggable Gantt bars and demand bars compared against $C_{\text{monthly}}$. |
+| Signal Source | Mental Model | When It Applies | Role in Monthly Forecast |
+| :--- | :--- | :--- | :--- |
+| **`TagBudget` (`internal/project`)** | **Recurring Category Allowance / Funding Ceiling** (*"I allocate $1,500/mo to `#housing` and $400/mo to `#car`"*). | Recurring frequencies (`DAILY`, `WEEKLY`, `MONTHLY`, `ANNUALLY`, `ONCE`), bounded by `Project.StartDate`/`EndDate`. | Supplies per-month **Cash Capacity Ceiling ($C_{\text{monthly}}(M)$)** from `MONEY` rules. |
+| **Time-Boxed Asset Target (`internal/asset`)** | **Finite Acquisition / Goal Outflow** (*"Buy & equip X by Oct 15 for $8,000; $3,000 spent so far"*). | Only when an active asset has `ResidualTarget > 0` **and** explicit `targetCompletionDate != nil`. | Projects `RemainingTarget(A)` evenly across `[max(Today, S_A), E_A]` (or current month if overdue). |
+| **Ongoing Asset Burn (`internal/asset`)** | **Observed Lifestyle / Ownership Run-Rate** (*"Asset Y has averaged $420 + 8h/mo over the last 6 months"*). | Active open-ended assets (`targetCompletionDate == nil`), budgeted or unbudgeted. | Surfaces informational **Estimated Ongoing Burn** without triggering fake 30-day deficit cliffs. |
 
 ---
 
-## 3. Feature 1: Asset Lifecycle Dates & DAG Progress Rollup
+## 3. Feature 1: Accurate Multi-Resource Cost Truth & Monthly Burn Rate
 
-### 3.1. Domain Model Extensions (`internal/asset/asset.go`)
+### 3.1. Fixing Multi-Currency Aggregation in `AssetHierarchy`
 
-[`Asset`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L49-L70) is extended with unexported fields and read-only getters in strict compliance with [`docs/ddd-development-guidelines.md`](file:///Users/maksym.hryshkov/Code/projecta/docs/ddd-development-guidelines.md#L59-L63):
-- `targetCompletionDate *time.Time`: Planned finish milestone (defensively copied via `copyTimePtr`).
-- `physicalProgress float64`: Explicit physical completion fraction ($0.0 \le p \le 1.0$), decoupled from financial spend.
+Currently, [`PgAssetRepository.loadCompositionsAndRollup`](file:///Users/maksym.hryshkov/Code/projecta/pkg/dal/pg_asset_repository.go#L444-L465) sums raw `inv.amount * ia.share_percentage / 100.0` in SQL using `COALESCE(MAX(inv.currency), 'UAH')`—incorrectly adding minor units across mixed currencies (`USD` + `UAH` + `EUR`) and leaving [`Asset`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L49-L70) without `directCostHomeAmount` or a resource-type split.
+
+For all cost truth, burn, and forecast calculations:
+1. Read all allocated investments from `projecta_investments` joined with `projecta_investment_assets` (`share_percentage`).
+2. Compute each allocated share (`round(inv.Amount * sharePercentage / 100.0)` and proportional `timeHours * sharePercentage / 100.0`).
+3. Convert every monetary share into the project's `homeCurrency` using [`CurrencyConverter`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/valuation.go#L8-L10) **before** summing direct costs and rolling up [`AssetHierarchy`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/hierarchy.go#L28-L32).
+
+### 3.2. Resource Breakdown (`MONEY` vs. `TIME` vs. `GOODS`)
+
+Every asset computes both **direct** and **rolled-up** totals in `homeCurrency`, preserving non-monetary dimensions that define personal cost:
+
+```go
+type ResourceBreakdown struct {
+    CashCents       int64   // MONEY investments converted to homeCurrency
+    TimeCents       int64   // TIME valuation (hours * rate) converted to homeCurrency
+    TimeHours       float64 // Total hours invested across TIME records
+    GoodsCents      int64   // GOODS valuation converted to homeCurrency
+    TotalCostCents  int64   // CashCents + TimeCents + GoodsCents
+}
+```
+
+- **Why keep `TIME` hours explicit**: Knowing a personal asset or relationship cost `180 hours` alongside `$2,400` in cash gives the user the real picture without muddling bank liquidity forecasts.
+- **Unbudgeted assets stay first-class**: An asset with `TargetPrice == nil` (including legacy `'General Operations'` rows from [`000032`](file:///Users/maksym.hryshkov/Code/projecta/migrations/000032_asset_investments_redesign.up.sql#L95-L111) and ongoing assets) computes full `ResourceBreakdown` and burn metrics cleanly.
+
+### 3.3. Trailing Monthly Burn Rate ($\text{Burn}(A)$)
+
+To answer *"What does maintaining X cost me per month?"* without extrapolating a single Day-1 expense to 30× its size:
+
+Let lookback window $K = 6$ calendar months ending at the current month $M_{\text{now}}$:
+1. Normalize timestamps to UTC calendar months.
+2. Let $S_A^{\text{eff}}$ be $\min(\text{toUTCDate}(S_A), \text{earliestInvestmentDate}(A))$ converted to its calendar month $M_{\text{start}}(A)$, and let active span months $N_{\text{elapsed}}(A)$ be the count of calendar months in $[\max(M_{\text{start}}(A), M_{\text{now}} - K + 1), M_{\text{now}}]$ inclusive (bounded to $[1, K]$).
+   - *(Notice: dividing by full calendar months `max(1, N_elapsed)`—rather than elapsed days—prevents spending `$200` on Day 1 of the month from displaying a `$6,000/month` run-rate.)*
+3. Sum direct investments allocated to $A$ within those $N_{\text{elapsed}}(A)$ months (`CashLookback`, `TimeLookback`, `TimeHoursLookback`, `GoodsLookback`):
+   $$\text{MonthlyCashBurn}(A) = \text{round}\left(\frac{\text{CashLookback}(A)}{N_{\text{elapsed}}(A)}\right)$$
+   $$\text{MonthlyTotalBurn}(A) = \text{round}\left(\frac{\text{TotalLookback}(A)}{N_{\text{elapsed}}(A)}\right), \quad \text{MonthlyHoursBurn}(A) = \frac{\text{TimeHoursLookback}(A)}{N_{\text{elapsed}}(A)}$$
+
+*(For composite parents, rolled-up burn sums `Burn(A) + sum_{C in Children(A)} Burn(C) * Share(A, C) / 100`, preventing DAG double-counting.)*
+
+---
+
+## 4. Feature 2: Optional Lifecycle Window (`targetCompletionDate`)
+
+### 4.1. Domain Model Extensions (`internal/asset/asset.go`)
+
+[`Asset`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L49-L70) is extended minimally with unexported fields and defensive-copy getters per [`docs/ddd-development-guidelines.md`](file:///Users/maksym.hryshkov/Code/projecta/docs/ddd-development-guidelines.md#L59-L63):
+- `targetCompletionDate *time.Time`: Optional planned finish date (`nil` for ongoing/perpetual assets; defensively copied via `copyTimePtr`).
+- `directCostHomeAmount int64`: Home-currency sum of direct investments allocated to this asset.
+- Existing financial budget ratio `progressPercentage *float64` (`TotalCost / TargetPrice * 100`) stays intact; **no manual `physicalProgress` field is added**.
 
 ```go
 type Asset struct {
@@ -101,438 +145,336 @@ type Asset struct {
     owner                OwnerRef
     status               AssetStatus
     startDate            time.Time
-    targetCompletionDate *time.Time  // Planned completion date (nil if open-ended)
+    targetCompletionDate *time.Time  // Optional deadline (nil for ongoing/perpetual assets)
     completedDate        *time.Time  // Actual completion date
-    physicalProgress     float64     // 0.0 (0%) to 1.0 (100%)
     targetPrice          *money.Money
     directCost           *money.Money
     totalCost            *money.Money
-    // ... home currency, progress, DAG links, tags ...
+    homeCurrency         string
+    homeAmount           int64
+    directCostHomeAmount int64       // Computed direct investments converted to homeCurrency
+    targetHomeAmount     *int64
+    progressPercentage   *float64    // Financial spend %: (TotalCost / TargetPrice) * 100
+    children             []ChildAssetLink
+    parents              []ParentAssetLink
+    tags                 []string
 }
 ```
 
-### 3.2. Business Invariants & DAG Rollup Rules
+### 4.2. Business Invariants
 
 1. **Temporal Sequence Invariant**:
-   - If `targetCompletionDate != nil` and `!startDate.IsZero()`, then `!targetCompletionDate.Before(startDate)`.
-   - Violating this invariant in `CreateAsset`, `UpdateDetails`, or `Reschedule` returns `exceptions.NewValidationException("target completion date cannot be before start date", nil)`.
-2. **Physical Progress Invariant**:
-   - `0.0 <= physicalProgress <= 1.0`. Values outside $[0.0, 1.0]$ return a validation exception.
-   - Calling `Complete(completedAt)` sets `status = AssetStatusCompleted`, `completedDate = &completedAt`, and forces `physicalProgress = 1.0`.
-   - Calling `Reopen()` sets `status = AssetStatusActive`, `completedDate = nil`, and preserves `physicalProgress` (clamped to `< 1.0` if previously `1.0`, or reset to `0.0` if specified).
-3. **Composite Parent `physicalProgress` Rollup (`AssetHierarchy.ApplyToAssets`)**:
-   - For **leaf assets** (no children), `physicalProgress` is directly user-managed.
-   - For **composite parent assets** (with children), [`AssetHierarchy.ApplyToAssets`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/hierarchy.go#L157) computes an effective rolled-up physical progress weighted by target budgets (or equal weights if target budgets are not set):
-     $$\text{Progress}_{\text{effective}}(P) = \frac{\text{ResidualTarget}(P) \times p_{\text{direct}}(P) + \sum_{C \in \text{Children}(P)} \left(\text{TargetHome}(C) \times \frac{\text{Share}(P,C)}{100} \times \text{Progress}_{\text{effective}}(C)\right)}{\text{ResidualTarget}(P) + \sum_{C \in \text{Children}(P)} \left(\text{TargetHome}(C) \times \frac{\text{Share}(P,C)}{100}\right)}$$
-4. **Temporal Bounding Warning Across DAG**:
-   - A parent asset's planned window $[S_P, E_P]$ should envelope all child windows $[S_C, E_C]$:
-     $$S_P \le \min_{C \in \text{Children}(P)} (S_C), \quad E_P \ge \max_{C \in \text{Children}(P)} (E_C)$$
-   - If a child asset is dragged outside its parent's window, the service flags a non-blocking schedule warning (or optionally auto-expands the parent's window).
-
-### 3.3. Application Commands (`internal/asset/commands.go`)
+   - Let $\text{toUTCDate}(t) = \text{time.Date}(t.\text{UTC}().\text{Date}(), 0, 0, 0, 0, \text{time.UTC})$.
+   - If `targetCompletionDate != nil` and `!startDate.IsZero()`, then `toUTCDate(*targetCompletionDate)` must not be before `toUTCDate(startDate)`.
+   - Violations return `exceptions.NewValidationException("target completion date cannot be before start date", nil)`.
+2. **Ongoing Assets Stay Undated**:
+   - Creating or updating an ongoing asset with `targetCompletionDate == nil` is valid. Transitioning via `Complete(completedAt)` sets `status = COMPLETED`, `completedDate = &completedAt`, removing it from active future cash demand.
+3. **Zero-Target & `AssetGroup` Compatibility**:
+   - Existing [`CreateAssetGroup`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L282-L305) creates `0 UAH` group parents, and migrated `'General Operations'` rows have `targetPrice == nil`. Updating schedule dates via `PATCH /schedule` must work for both budgeted and unbudgeted/group assets, and `UpdateDetails` / [`decodeUpdateAssetRequest`](file:///Users/maksym.hryshkov/Code/projecta/pkg/web/assets.go#L480-L486) should allow preserving `0` / `nil` targets on unbudgeted or group assets.
+4. **DAG Schedule Bounding Warnings (Non-Blocking)**:
+   - If a child asset $C$ has a parent $P$ with bounded window $[S_P, E_P]$, flag a non-blocking warning when $S_C < S_P$ or ($E_P \neq \text{nil}$ and ($E_C == \text{nil}$ or $E_C > E_P$)).
+5. **Backwards-Compatible Schedule Command**:
+   - Existing [`Asset.Reschedule(startDate)`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L521-L526) is called by [`ServiceImpl.Update`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/service.go#L348-L352). Add `UpdateSchedule(startDate *time.Time, targetCompletionDate *time.Time, clearTargetDate bool) error` on `Asset` (keeping `Reschedule` delegating safely to preserve existing callers and tests):
 
 ```go
 type RescheduleAssetCommand struct {
     AssetID              core.AssetID
     ProjectID            core.ProjectID
-    StartDate            time.Time
+    StartDate            *time.Time
     TargetCompletionDate *time.Time
-    PhysicalProgress     *float64
+    ClearTargetDate      bool
 }
 ```
 
 ---
 
-## 4. Feature 2: Remaining Cash Flow Demand & Liquidity Forecasting
+## 5. Feature 3: Residual Cash Demand & Affordability Forecasting
 
-### 4.1. Mathematical Formulation
+### 5.1. Residual DAG Target ($\text{ResidualTarget}(A)$)
 
-To answer **"How much hard currency do I need to fund this project each future month?"**, the engine must solve two classic problems:
-1. **No DAG Double-Counting or Dropped Parent Budgets**: A parent asset may have a `$20,000` target budget while only `$3,000` of child assets have been broken out so far.
-2. **No Sunk-Cost Projection**: Money already spent in the past must not be re-projected into future months.
+To support hierarchical asset breakdowns without double-counting child targets inside parent budgets or losing unallocated parent buffers:
 
-#### 1. Residual Target Budget ($\text{ResidualTarget}(A)$)
-For every asset $A$ in the [`AssetHierarchy`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/hierarchy.go#L28-L32), its unallocated target budget in project home currency is:
-$$\text{AllocatedToChildren}(A) = \sum_{C \in \text{Children}(A)} \text{ round}\left(\text{TargetPrice}_{\text{home}}(C) \times \frac{\text{Share}(A, C)}{100}\right)$$
+For every asset $A$ in [`AssetHierarchy`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/hierarchy.go#L28-L32), convert `TargetPrice(A)` into project `homeCurrency` ($\text{TargetPrice}_{\text{home}}(A) = 0$ if `nil` or `<= 0`):
+$$\text{AllocatedToChildren}(A) = \sum_{C \in \text{Children}(A)} \text{round}\left(\text{TargetPrice}_{\text{home}}(C) \times \frac{\text{Share}(A, C)}{100}\right)$$
 $$\text{ResidualTarget}(A) = \max\left(0, \text{TargetPrice}_{\text{home}}(A) - \text{AllocatedToChildren}(A)\right)$$
-- For a **leaf asset**, $\text{Children}(A) = \emptyset \implies \text{ResidualTarget}(A) = \text{TargetPrice}_{\text{home}}(A)$.
-- For a **fully decomposed parent asset**, $\text{ResidualTarget}(A) = 0$ (all demand comes from its children's schedules).
-- For a **partially decomposed parent asset**, $\text{ResidualTarget}(A)$ captures the remaining unallocated parent budget across the parent's own timeline!
 
-#### 2. Deducting Sunk Direct Costs ($\text{RemainingDemand}(A)$)
-Let $\text{DirectCost}_{\text{home}}(A)$ be the direct investments already logged on asset $A$. For future planning starting from $\text{RefDate} = \max(\text{Today}, S_A)$:
-$$\text{RemainingDemand}(A) = \begin{cases}
-0, & \text{if } \text{status}(A) == \text{COMPLETED} \\
-\max\left(0, \text{ResidualTarget}(A) - \text{DirectCost}_{\text{home}}(A)\right), & \text{if } \text{status}(A) == \text{ACTIVE}
-\end{cases}$$
+- **DAG Share Partition Invariant**: When child $C$ sits under budgeted parents ($\text{TargetPrice}_{\text{home}}(P) > 0$), parent shares $\sum_{P \in \text{Parents}(C)} \text{Share}(P, C)$ should total $100\%$ (if `< 100%`, only the linked share is deducted from the parent while $C$'s full residual remains counted; zero-target `AssetGroup` parents always yield $\text{ResidualTarget} = 0$).
 
-#### 3. Remaining Active Window & Daily Outlay Rate ($r_A$)
-Let the remaining active window of asset $A$ be $[S_A^{\text{rem}}, E_A^{\text{rem}}]$:
-- $S_A^{\text{rem}} = \max(\text{Today}, S_A)$
-- $E_A^{\text{rem}} = \begin{cases} E_A, & \text{if } E_A \neq \text{nil and } E_A \ge S_A^{\text{rem}} \\ S_A^{\text{rem}} + 30\text{ days}, & \text{otherwise (default 30-day rolling horizon)} \end{cases}$
-- Remaining duration in inclusive calendar days:
-  $$D_{\text{rem}}(A) = \max\left(1, \left\lfloor \frac{E_A^{\text{rem}} - S_A^{\text{rem}}}{\text{24h}} \right\rfloor + 1\right)$$
-- Daily future capital outlay rate:
-  $$r_A = \frac{\text{RemainingDemand}(A)}{D_{\text{rem}}(A)}$$
+### 5.2. Scheduled Deliverable Cash Demand (Strictly for Dated Targets)
 
-#### 4. Monthly Cash Flow Aggregation ($\text{Demand}(M)$)
-For any calendar month $M$ with day boundaries $[T_{\text{start}}^M, T_{\text{end}}^M]$:
-- **Actual Cash Outflow ($\text{ActualCash}(M)$)**: Sum of `MONEY` investments with transaction date in month $M$.
-- **Actual Sweat Equity & Goods ($\text{ActualNonCash}(M)$)**: Sum of `TIME` and `GOODS` investments in month $M$.
-- **Planned Remaining Demand ($\text{ProjectedDemand}(M)$)**:
-  $$\text{OverlapDays}(A, M) = \max\left(0, \min(E_A^{\text{rem}}, T_{\text{end}}^M) - \max(S_A^{\text{rem}}, T_{\text{start}}^M) + 1\right)$$
-  $$\text{ProjectedDemand}(M) = \sum_{A \in \text{Hierarchy}} \text{round}\left(r_A \times \text{OverlapDays}(A, M)\right)$$
+Only assets with an **explicit planned target date** (`targetCompletionDate != nil`), `status == ACTIVE`, and $\text{ResidualTarget}(A) > 0$ generate future target-spread cash demand:
 
-#### 5. Peak Spend Alert Status
-Given monthly funding capacity $C_{\text{monthly}} > 0$ (derived from the project's monthly `MONEY` `TagBudget` allowance or user-specified ceiling):
-$$\text{TotalMonthOutflow}(M) = \text{ActualCash}(M) + \text{ProjectedDemand}(M)$$
-$$\text{AlertStatus}(M) = \begin{cases}
-\text{NORMAL}, & \text{TotalMonthOutflow}(M) \le C_{\text{monthly}} \\
-\text{PEAK\_SPEND\_WARNING}, & C_{\text{monthly}} < \text{TotalMonthOutflow}(M) \le 1.25 \times C_{\text{monthly}} \\
-\text{CRITICAL\_DEFICIT}, & \text{TotalMonthOutflow}(M) > 1.25 \times C_{\text{monthly}}
-\end{cases}$$
+$$\text{RemainingTarget}(A) = \max\left(0, \text{ResidualTarget}(A) - \text{DirectCost}_{\text{home}}(A)\right)$$
 
-### 4.2. Domain Service Specification (`internal/asset/valuation.go`)
+*(Ongoing assets with `targetCompletionDate == nil` are intentionally excluded here so lifetime targets never create synthetic 30-day cliffs; their monthly expectations appear via ongoing burn and `TagBudget` rules.)*
 
-Uses the existing [`CurrencyConverter`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/valuation.go#L8-L10) port in `internal/asset/valuation.go`:
+Let $T_{\text{today}} = \text{toUTCDate}(\text{Now})$ and $E_A = \text{toUTCDate}(*\text{targetCompletionDate}_A)$:
+- **Overdue Dated Target ($E_A < T_{\text{today}}$ with $\text{RemainingTarget}(A) > 0$)**:
+  - Flag `is_overdue = true` in the monthly breakdown and assign $\text{RemainingTarget}(A)$ entirely to the **current month $M_{\text{now}}$** (explicit past-due balance rather than disappearing into the past or fabricating a 30-day extension).
+- **Active Future/Current Window ($E_A \ge T_{\text{today}}$)**:
+  - $S_A^{\text{rem}} = \max(T_{\text{today}}, \text{toUTCDate}(S_A))$, $E_A^{\text{rem}} = E_A$.
+  - Total inclusive remaining calendar days: $D_{\text{rem}}(A) = \text{daysBetween}(S_A^{\text{rem}}, E_A^{\text{rem}}) + 1 \ge 1$.
+  - Overlap days with month $M = [T_{\text{start}}^M, T_{\text{end}}^M]$ (UTC dates):
+    $$\text{OverlapDays}(A, M) = \begin{cases} \text{daysBetween}(\max(S_A^{\text{rem}}, T_{\text{start}}^M), \min(E_A^{\text{rem}}, T_{\text{end}}^M)) + 1, & \text{if } \max \le \min \\ 0, & \text{otherwise} \end{cases}$$
+  - **Exact Cumulative Cent Conservation** across ordered overlapping months $M_1, \dots, M_k$:
+    $$\text{CumulAllocated}(A, M_j) = \text{round}\left(\text{RemainingTarget}(A) \times \frac{\sum_{i=1}^{j} \text{OverlapDays}(A, M_i)}{D_{\text{rem}}(A)}\right)$$
+    $$\text{AssetMonthDemand}(A, M_j) = \text{CumulAllocated}(A, M_j) - \text{CumulAllocated}(A, M_{j-1})$$
+    *(Guarantees $\sum_M \text{AssetMonthDemand}(A, M) == \text{RemainingTarget}(A)$ with zero rounding drift.)*
+
+### 5.3. Ongoing Burn Projection, Monthly Horizon & Peak Alert Status
+
+Output months span $[M_{\text{start}}, M_{\text{end}}]$, covering all months with historical investments, the current month $M_{\text{now}}$, bounded project dates, and the farthest active `targetCompletionDate` (capped at a safe horizon, e.g., 60 months forward; defaulting to 6 months forward if only ongoing assets exist).
+
+For each month $M$:
+- **Historical Actuals**: `ActualCashCents(M)` (`MONEY`), `ActualTimeCents(M)` (`TIME`), `ActualTimeHours(M)`, `ActualGoodsCents(M)` (`GOODS`) summed from allocated investments in month $M$.
+- **Scheduled Demand**: $\text{ScheduledDemand}(M) = \sum_{A \in \text{DatedTargets}} \text{AssetMonthDemand}(A, M)$.
+- **Informational Ongoing Burn Projection** (for future months $M > M_{\text{now}}$):
+  $$\text{EstimatedOngoingCash}(M) = \sum_{A \in \text{OngoingActive}} \text{MonthlyCashBurn}(A)$$
+  Surfaced separately on the chart (toggleable) so sustained lifestyle/maintenance costs can be viewed alongside scheduled goals without corrupting current-month `ActualCash`.
+- **Per-Month Capacity Ceiling ($C_{\text{monthly}}(M)$)**: Sum of `ProjectedHomeAmountForMonth` across active `MONEY` [`TagBudget`](file:///Users/maksym.hryshkov/Code/projecta/internal/project/tag_budget.go#L295-L297) rules in month $M$ (respecting `Project.StartDate`/`EndDate` and `ONCE`/`DAILY`/`WEEKLY`/`MONTHLY`/`ANNUALLY` schedules).
+- **Affordability Alert Status**:
+  $$\text{CommittedCashOutflow}(M) = \text{ActualCash}(M) + \text{ScheduledDemand}(M)$$
+  $$\text{AlertStatus}(M) = \begin{cases}
+  \text{NORMAL}, & \text{if } C_{\text{monthly}}(M) == \text{nil or } \le 0 \text{ or } \text{CommittedCashOutflow}(M) \le C_{\text{monthly}}(M) \\
+  \text{PEAK\_SPEND\_WARNING}, & \text{if } C_{\text{monthly}}(M) < \text{CommittedCashOutflow}(M) \le 1.25 \times C_{\text{monthly}}(M) \\
+  \text{CRITICAL\_DEFICIT}, & \text{if } \text{CommittedCashOutflow}(M) > 1.25 \times C_{\text{monthly}}(M)
+  \end{cases}$$
+
+### 5.4. Reality vs. Target Variance (Honest Accounting)
+
+- **No silent target mutation**: Existing `Complete()` / `Reopen()` lifecycle transitions in [`internal/asset/asset.go`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L540-L549) preserve `TargetPrice` untouched so expected cost vs. realized `TotalCost` stays honest (`Variance = TargetHome - TotalCostHome`).
+- Over-target completed or active assets continue using Projecta's existing over-budget visual indicator (`progressPercentage > 100%` in [`Asset.js`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/models/Asset.js#L80-L94)).
+
+### 5.5. Domain Service Specification (`internal/asset/valuation.go`)
 
 ```go
-type MonthCashFlow struct {
-    YearMonth           string            // e.g. "2026-08"
-    ActualCashCents     int64             // MONEY investments in this month
-    ActualNonCashCents  int64             // TIME + GOODS investments in this month
-    ProjectedDemandCents int64            // Remaining planned asset demand in this month
-    MonthlyLimitCents   *int64            // Optional funding capacity ceiling
-    AlertStatus         string            // "NORMAL" | "PEAK_SPEND_WARNING" | "CRITICAL_DEFICIT"
-    AssetBreakdown      []AssetDemandItem
+type MonthActualSummary struct {
+    CashCents  int64
+    TimeCents  int64
+    TimeHours  float64
+    GoodsCents int64
 }
 
 type AssetDemandItem struct {
     AssetID     core.AssetID
     AssetName   string
     AmountCents int64
+    IsOverdue   bool
 }
 
-func CalculateCashFlowSchedule(
-    hierarchy *AssetHierarchy,
-    directCosts map[core.AssetID]*money.Money,
-    monthlyActuals map[string]MonthActualSummary,
-    homeCurrency string,
-    monthlyLimitCents *int64,
-    now time.Time,
-    converter CurrencyConverter,
-) ([]MonthCashFlow, error)
+type MonthCashFlow struct {
+    YearMonth                string            // e.g. "2026-08"
+    ActualCashCents          int64
+    ActualTimeCents          int64
+    ActualTimeHours          float64
+    ActualGoodsCents         int64
+    ScheduledDemandCents     int64             // Finite dated assets
+    EstimatedOngoingCashCents int64            // Future-month trailing burn of undated active assets
+    MonthlyLimitCents        *int64            // Per-month MONEY TagBudget ceiling (nil if unset)
+    AlertStatus              string            // "NORMAL" | "PEAK_SPEND_WARNING" | "CRITICAL_DEFICIT"
+    AssetBreakdown           []AssetDemandItem
+}
 ```
 
 ---
 
-## 5. Feature 3: Predictive Cost-to-Complete & Burn Velocity (Hybrid EVM Engine)
+## 6. Feature 4: Frontend Experience & Layered Architecture
 
-### 5.1. Solving Raw EVM Failure Modes in Personal Projects
+Following [`docs/frontend-design-principals.md`](file:///Users/maksym.hryshkov/Code/projecta/docs/frontend-design-principals.md) and Projecta's existing UI stack (`React 19`, `Recharts`, `intlayer`, Tailwind/Radix in [`web-ui/package.json`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/package.json)):
 
-Raw corporate EVM ($\text{EAC} = \text{BAC} / \text{CPI}$) fails in personal projects in two scenarios:
-1. **Upfront Deposits / Material Purchases**: Paying a 50% deposit on Day 1 when `physicalProgress == 0%` results in $\text{EV} = 0 \implies \text{CPI} = 0 \implies \text{EAC} = \infty$.
-2. **Spend Rate vs. Progress Velocity Confusion**: Dividing remaining cost by financial burn rate ($B = \text{AC} / \text{Days}$) makes overpaying look like faster schedule completion.
-
-Projecta solves both with a **Mobilization-Safe Hybrid EVM Engine** and **SPI-Driven Completion Forecasting**.
+### 6.1. Integrated Project Planning & Cost View
 
 ```
-       Financial Spend / Value ($)
-         ^                                              * Projected EAC
-         |                                           *  (Hybrid EVM Forecast)
-         |                                        *
-         |                                     *------- Planned Budget (BAC)
-         |                              *  * Actual Cost (AC = Cash + Time + Goods)
-         |                        *  *
-         |                  *  *  (AC > EV: CPI < 1.0)
-         |             *  *
-         |        *  * Earned Value (EV = BAC × Progress)
-         |   *  *
-         +---------------------------------------------> Time
-             Project Start          Today               Forecasted Finish (via SPI)
++---------------------------------------------------------------------------------------------------+
+|  PROJECT COST TRUTH & CASH FLOW FORECAST                        [ Include Time/Goods ] [ Ongoing ]|
++---------------------------------------------------------------------------------------------------+
+|  SUMMARY CARDS:                                                                                   |
+|  Total Realized: $14,200 + 84h | Cash Burn Avg: $1,150/mo | Scheduled Remaining: $5,000 | vs Plan |
++---------------------------------------------------------------------------------------------------+
+|  TIER 1: ASSET COST, BURN & SCHEDULE TABLE (All Assets — Bounded & Ongoing)                       |
+|  Asset                Mode        Total (Cash / Time / Goods)   Burn/mo   Target Window   Variance|
+|  ├─ Daily Operations  Ongoing     $4,200 ($2.9k / 32h / $0.4k)  $700/mo   [Set end date]  —       |
+|  ├─ Primary Vehicle   Ongoing     $3,500 ($3.2k / 8h  / $0.1k)  $450/mo   [Set end date]  -$500   |
+|  └─ Kitchen Remodel   Scheduled   $6,500 ($5.1k / 44h / $0.5k)  —         Aug 1 → Oct 15  $2k left|
++---------------------------------------------------------------------------------------------------+
+|  TIER 2: MONTHLY CASH FLOW & RESOURCE TREND (Recharts ComposedChart)                              |
+|  Stacked Bars: Actual Cash | Actual Time/Goods (opt) | Scheduled Target Demand | Ongoing Burn Est |
+|  Reference Line: Per-Month MONEY TagBudget Ceiling (Alert highlights on PEAK_SPEND / DEFICIT)     |
++---------------------------------------------------------------------------------------------------+
 ```
 
-### 5.2. Mathematical Formulas
+- **Simple inline date editing instead of bespoke drag-and-drop Gantt physics**: Clicking `Target Window` lets users set, adjust, or clear `target_completion_date` cleanly (immediately recalculating remaining monthly spread via pure JS `CashFlowCalculator.js` before saving via `PATCH /schedule`).
+- **Router & Navigation Integration**:
+  - Register a child route (`planning`) under `/projects/:projectId` in [`web-ui/src/router/routes.js`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/router/routes.js#L69-L100).
+  - Add a navigation item and localized label in [`ProjectDetails.jsx`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/components/Projects/ProjectDetails.jsx#L61-L86).
+- **Unpaginated Asset Fetch**: [`decodeListAssetsRequest`](file:///Users/maksym.hryshkov/Code/projecta/pkg/web/assets.go#L560) defaults `limit=10`; `CashFlowBoard` uses the dedicated `GET /cashflow-forecast` endpoint (or explicit unpaginated fetch) so client recalculations always see the full DAG.
 
-#### 1. Core Project-Level EVM Aggregations
-Across all project assets using residual targets to prevent DAG double-counting:
-- **Budget at Completion ($\text{BAC}$)**:
-  $$\text{BAC} = \sum_{A \in \text{Hierarchy}} \text{ResidualTarget}(A)$$
-- **Actual Cost ($\text{AC}$)**:
-  - $\text{AC}_{\text{total}} = \text{TotalInvested}_{\text{home}}$ (includes `MONEY`, `TIME`, `GOODS`).
-  - $\text{AC}_{\text{cash}} = \sum \text{Investments}_{\text{MONEY}}$ (out-of-pocket cash).
-  - $\text{AC}_{\text{sweat}} = \sum \text{Investments}_{\text{TIME + GOODS}}$ (sweat equity & materials contributed).
-- **Earned Value ($\text{EV}$)**:
-  $$\text{EV} = \sum_{A \in \text{Hierarchy}} \text{round}\left(\text{ResidualTarget}(A) \times \text{physicalProgress}(A)\right)$$
-- **Overall Physical Progress ($P_{\text{project}}$)**:
-  $$P_{\text{project}} = \begin{cases} \frac{\text{EV}}{\text{BAC}}, & \text{if } \text{BAC} > 0 \\ 0.0, & \text{otherwise} \end{cases}$$
-
-#### 2. Guarded Cost Performance Index ($\text{CPI}$)
-$$\text{CPI} = \begin{cases}
-1.0, & \text{if } \text{AC}_{\text{total}} == 0 \\
-\frac{\text{EV}}{\text{AC}_{\text{total}}}, & \text{if } \text{AC}_{\text{total}} > 0
-\end{cases}$$
-
-#### 3. Mobilization-Safe Hybrid Estimate at Completion ($\text{EAC}$)
-Let $\tau = 0.15$ ($15\%$ physical progress) be the mobilization threshold:
-1. **Additive EAC ($\text{EAC}_{\text{add}}$)** — assumes remaining work will cost its planned budget (best during initial deposits):
-   $$\text{EAC}_{\text{add}} = \text{AC}_{\text{total}} + \max(0, \text{BAC} - \text{EV})$$
-2. **Ratio EAC ($\text{EAC}_{\text{ratio}}$)** — scales remaining work by current cost efficiency (clamping $\text{CPI}_{\text{eff}} = \max(0.25, \text{CPI})$ to prevent runaway asymptotes):
-   $$\text{EAC}_{\text{ratio}} = \text{AC}_{\text{total}} + \frac{\max(0, \text{BAC} - \text{EV})}{\text{CPI}_{\text{eff}}}$$
-3. **Blended Hybrid EAC**:
-   - If $P_{\text{project}} < \tau$ (early mobilization / deposit phase):
-     $$\text{EAC} = \text{EAC}_{\text{add}}$$
-   - If $P_{\text{project}} \ge \tau$ (active execution phase):
-     $$\text{EAC} = \text{EAC}_{\text{ratio}}$$
-- **Variance at Completion ($\text{VAC}$)**:
-  $$\text{VAC} = \text{BAC} - \text{EAC}$$
-  - $\text{VAC} < 0$: Projected overrun of $|\text{VAC}|$.
-  - $\text{VAC} \ge 0$: Projected savings/buffer of $\text{VAC}$.
-
-#### 4. Schedule Performance Index ($\text{SPI}$) & Completion Date Forecast
-Completion date must be driven by **physical progress velocity**, not cash burn speed:
-- **Planned Value to Date ($\text{PV}$)**:
-  $$\text{PV} = \sum_{A \in \text{Hierarchy}} \text{ResidualTarget}(A) \times \text{clamp}\left(\frac{\text{Now} - S_A}{E_A - S_A}, 0.0, 1.0\right)$$
-- **Schedule Performance Index ($\text{SPI}$)**:
-  $$\text{SPI} = \begin{cases} 1.0, & \text{if } \text{PV} == 0 \\ \frac{\text{EV}}{\text{PV}}, & \text{if } \text{PV} > 0 \end{cases}$$
-- **Earned Value Velocity ($V_{\text{EV}}$ in cents/day)**:
-  $$V_{\text{EV}} = \frac{\text{EV}}{\max(1, \text{ElapsedProjectDays})}$$
-- **Forecasted Completion Date ($T_{\text{forecast}}$)**:
-  - If $V_{\text{EV}} > 0$ and $\text{BAC} > \text{EV}$:
-    $$\text{RemainingDays} = \left\lceil \frac{\text{BAC} - \text{EV}}{V_{\text{EV}}} \right\rceil, \quad T_{\text{forecast}} = \text{Today} + \text{RemainingDays}$$
-  - If $V_{\text{EV}} == 0$ (not yet progressed): $T_{\text{forecast}} = \max_{A}(E_A)$ (planned finish date).
-
-### 5.3. Visual Risk States
-
-| Condition | Risk Status | UI Badge | System Recommendation |
-| :--- | :--- | :--- | :--- |
-| $P_{\text{project}} < 0.15$ and $\text{AC}_{\text{total}} \le \text{BAC}$ | **Blue / Neutral** | `MOBILIZING` | Early stage / deposit phase. EAC uses additive baseline until 15% progress. |
-| $\text{EAC} \le 1.02 \times \text{BAC}$ | **Green** | `ON TRACK` | Project proceeding within planned budget margin. |
-| $1.02 \times \text{BAC} < \text{EAC} \le 1.10 \times \text{BAC}$ | **Yellow** | `BUDGET WATCH` | Moderate overrun trend ($2\%–10\%$). Review recent material or contractor costs. |
-| $\text{EAC} > 1.10 \times \text{BAC}$ or $\text{AC}_{\text{total}} > \text{BAC}$ | **Orange** | `OVERRUN PROJECTED` | Severe overrun trend ($>10\%$). Prompt user to re-scope downstream assets or adjust budget. |
-
----
-
-## 6. Feature 4: Interactive Timeline & Cash Flow Board (Frontend UX)
-
-### 6.1. Two-Tier Split-Screen Layout
-
-```
-+-------------------------------------------------------------------------------------------------------+
-|  PROJECT TIMELINE & CASH FLOW BOARD                                          [ Month | Quarter | Year ]|
-+-------------------------------------------------------------------------------------------------------+
-|  TIER 1: MILESTONE TIMELINE (Interactive Canvas)                                                      |
-|                                                                                                       |
-|  Asset / Milestone (Progress)      JUL 2026          AUG 2026          SEP 2026          OCT 2026      |
-|  ├─ Groundwork & Demo (100%)       [========] ($3.2k)                                                  |
-|  ├─ Structural Framing (41%)                [==============] ($8.5k)                                  |
-|  │  ├─ Timber & Studs (100%)                [======] ($3.5k)                                          |
-|  │  └─ Roof Trusses (0%)                           [=======] ($5.0k)                                  |
-|  └─ Rough-in Plumbing (0%)                                    [==========] ($4.2k)                    |
-+-------------------------------------------------------------------------------------------------------+
-|  TIER 2: DYNAMIC MONTHLY CASH DEMAND (Synchronized Bar Chart)                                         |
-|  $10k |                                                                                               |
-|   $8k |                                     |████|                                                    |
-|   $6k |                                     |████|                             |░░░░|                 |
-|   $4k |                   |████|            |░░░░|            |░░░░|           |░░░░|                 |
-|   $2k |                   |████|            |░░░░|            |░░░░|           |░░░░|                 |
-|    $0 +-------------------+----+------------+----+------------+----+-----------+----+-----------------|
-|       Actual Cash:        $3,200            $3,500            $0               $0                     |
-|       Remaining Demand:   $0                $5,000            $4,200           $6,000                 |
-|       Monthly Limit:      $5,000            $5,000            $5,000           $5,000                 |
-|       Status:             [OK]              [PEAK ALERT +$3.5k] [OK]           [PEAK ALERT +$1.0k]    |
-+-------------------------------------------------------------------------------------------------------+
-```
-
-### 6.2. UX Interaction & State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle: View timeline
-    Idle --> Dragging: User grabs asset bar (move) or edge handle (resize)
-    Dragging --> Dragging: Pointer move (compute delta days)
-    note right of Dragging
-        1. Optimistically update asset [startDate, targetCompletionDate]
-        2. Run pure JS CashFlowCalculator in-memory (<2ms for 200 assets)
-        3. Re-render Tier 2 MonthlyDemandChart at 60fps
-        4. Highlight temporal parent-child bounding warnings
-    end note
-    Dragging --> Idle: Esc key or invalid drop (Cancel & Revert to snapshot)
-    Dragging --> Committing: Pointer release on valid date range
-    Committing --> Idle: PATCH /api/projects/:id/assets/:id/schedule returns 200 OK
-    Committing --> ErrorRevert: PATCH fails
-    note right of ErrorRevert
-        Show localized toast notification
-        Restore pre-drag state snapshot
-    end note
-    ErrorRevert --> Idle
-```
-
-### 6.3. Layered Frontend Component Architecture
-
-Following [`docs/frontend-design-principals.md`](file:///Users/maksym.hryshkov/Code/projecta/docs/frontend-design-principals.md):
+### 6.2. Frontend File Layout
 
 ```
 web-ui/src/components/Projects/CashFlow/
-├── CashFlowBoard.jsx             # Container & Split Layout
-├── TimelineCanvas.jsx            # Humble View: Draggable/resizable DAG milestone bars
-├── MonthlyDemandChart.jsx        # Humble View: Stacked BarChart (Actual Cash + Remaining Demand + Limit Line)
-├── ForecastSummaryCard.jsx       # Humble View: BAC, AC (Cash vs Sweat Equity), EAC, CPI/SPI, ETA
-└── MilestoneCheckinModal.jsx     # Humble View: Variance reconciliation dialog
+├── CashFlowBoard.jsx             # Container & summary KPI cards
+├── CashFlowBoard.content.js      # Intlayer i18n dictionary
+├── AssetCostBurnTable.jsx        # Humble View: Total Cost, Cash/Time/Goods mix, Burn/mo, inline date editor
+└── MonthlyCashFlowChart.jsx      # Humble View: Recharts ComposedChart (Actual + Scheduled + Burn + Limit)
 
 web-ui/src/hooks/
-├── useCashFlowTimeline.js        # State Machine: drag state, optimistic updates, rollback
-└── useProjectForecast.js         # State Machine: forecast query & reconciliation dispatch
+└── useProjectCashFlow.js         # State Machine: loads forecast, optimistic inline schedule edits & rollback
 
 web-ui/src/models/
-├── CashFlowCalculator.js         # Pure JS Domain: ResidualTarget & daily overlap distribution
-└── EVMForecastModel.js           # Pure JS Domain: Hybrid EAC, CPI, SPI, and EV velocity
+└── CashFlowCalculator.js         # Pure JS Domain: ResidualTarget, UTC cent-conserved overlap, burn helper
 ```
 
 ---
 
-## 7. Feature 5: Milestone Check-in & Variance Reconciliation
+## 7. Technical Architecture, Migration & API Contracts
 
-To preserve Bounded Context isolation ([`docs/ddd-development-guidelines.md`](file:///Users/maksym.hryshkov/Code/projecta/docs/ddd-development-guidelines.md#L17-L18)), variance reconciliation operates **entirely within `internal/asset`** without mutating `internal/project`.
+### 7.1. Database Schema Migration & Deployment Notes
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as Web UI (CashFlowBoard)
-    participant Modal as MilestoneCheckinModal
-    participant Backend as Asset Application Service (internal/asset)
+Latest existing migration: [`migrations/000036_add_currency_to_project_tag_budgets.up.sql`](file:///Users/maksym.hryshkov/Code/projecta/migrations/000036_add_currency_to_project_tag_budgets.up.sql). New migration `000037` adds only `target_completion_date` on **`projecta_assets`** using **`TIMESTAMP`** (matching `000001`–`000036`):
 
-    User->>UI: Marks Asset as COMPLETED
-    UI->>UI: Checks if TotalCost != TargetPrice
-    alt Variance Detected (Δ = TotalCost - TargetPrice != 0)
-        UI->>Modal: Open Variance Dialog showing Δ
-        User->>Modal: Chooses Reconciliation Strategy (Absorb / Re-baseline Parent / Keep Baseline)
-        Modal->>Backend: POST /api/projects/:id/assets/:id/complete (with strategy & targetAssetId)
-    else No Variance
-        UI->>Backend: POST /api/projects/:id/assets/:id/complete (strategy = KEEP_BASELINE)
-    end
-    Backend-->>UI: Updated AssetHierarchy & ForecastMetrics
-    UI->>User: Refresh Timeline, Cash Demand & EAC Card
-```
-
-### Reconciliation Strategies (Inside `internal/asset`)
-
-1. **Strategy `ABSORB_FROM_ASSET` (Contingency / Sibling Absorption)**:
-   - User selects a designated contingency or downstream sibling asset $A_{\text{buffer}}$ in the same project.
-   - $A_{\text{buffer}}$'s `targetPrice` is reduced by $\Delta = \text{TotalCost}(A) - \text{TargetPrice}(A)$ (clamped at 0), and $A$'s `targetPrice` is updated to match $\text{TotalCost}(A)$.
-   - Total project $\text{BAC}$ remains unchanged.
-2. **Strategy `EXPAND_PARENT_BUDGET` (Re-baseline Hierarchy)**:
-   - Updates completed asset $A$'s `targetPrice` to $\text{TotalCost}(A)$ and propagates $+\Delta \times \frac{\text{Share}(P, A)}{100}$ upward to ancestor assets' `targetPrice` in [`AssetHierarchy`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/hierarchy.go).
-3. **Strategy `KEEP_BASELINE` (Acknowledge Overrun)**:
-   - Keeps original `targetPrice` untouched. Asset completes with `IsOverBudget = true` (`OVERBUDGET` orange badge), and project $\text{EAC}$ reflects the realized overrun.
-
----
-
-## 8. Technical Architecture & Implementation Details
-
-### 8.1. Database Schema Migration
-
-The latest existing migration is [`migrations/000036_add_currency_to_project_tag_budgets.up.sql`](file:///Users/maksym.hryshkov/Code/projecta/migrations/000036_add_currency_to_project_tag_budgets.up.sql). New migration files use sequence number `000037`:
-
-- **Up Migration**: `migrations/000037_add_asset_schedule_and_progress.up.sql`
+- **Up Migration**: `migrations/000037_add_asset_target_completion_date.up.sql`
   ```sql
-  ALTER TABLE assets
-      ADD COLUMN target_completion_date TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-      ADD COLUMN physical_progress DOUBLE PRECISION NOT NULL DEFAULT 0.0
-          CONSTRAINT chk_assets_physical_progress CHECK (physical_progress >= 0.0 AND physical_progress <= 1.0);
+  ALTER TABLE projecta_assets
+      ADD COLUMN IF NOT EXISTS target_completion_date TIMESTAMP DEFAULT NULL;
 
-  UPDATE assets SET physical_progress = 1.0 WHERE status = 'COMPLETED';
-
-  CREATE INDEX idx_assets_project_schedule ON assets (project_id, start_date, target_completion_date);
+  CREATE INDEX IF NOT EXISTS idx_projecta_assets_project_schedule
+      ON projecta_assets (project_id, start_date, target_completion_date);
   ```
 
-- **Down Migration**: `migrations/000037_add_asset_schedule_and_progress.down.sql`
+- **Down Migration**: `migrations/000037_add_asset_target_completion_date.down.sql`
   ```sql
-  DROP INDEX IF EXISTS idx_assets_project_schedule;
+  DROP INDEX IF EXISTS idx_projecta_assets_project_schedule;
 
-  ALTER TABLE assets
-      DROP COLUMN IF EXISTS physical_progress,
+  ALTER TABLE projecta_assets
       DROP COLUMN IF EXISTS target_completion_date;
   ```
 
-### 8.2. Cross-Context Port in `internal/asset/ports.go`
+- **Deploy Safety, Legacy Compatibility & DAL Ripple**:
+  1. **Zero-Downtime CI/CD Safety**: [`.gitlab-ci.yml`](file:///Users/maksym.hryshkov/Code/projecta/.gitlab-ci.yml#L127-L130) runs `./projecta-migrate` **before** restarting `projecta`. A nullable `DEFAULT NULL` column is backwards-compatible with the prior binary during deployment.
+  2. **Zero Legacy Backfill Shock**: All existing `ACTIVE`, `COMPLETED`, `'General Operations'`, and `AssetGroup` rows start cleanly with `target_completion_date = NULL` (no synthetic progress numbers or guessed deadlines needed).
+  3. **DAL & Test Lockstep**: Update [`PgAssetRepository`](file:///Users/maksym.hryshkov/Code/projecta/pkg/dal/pg_asset_repository.go) (`Save`, `setupSelectQueryBuilder` moving from 13 to 14 columns, `FindOne`, `Find`, `toAssetFromPg`), `ReconstituteAsset`, and hardcoded 13-element row slices in [`pkg/dal/dal_test.go`](file:///Users/maksym.hryshkov/Code/projecta/pkg/dal/dal_test.go#L714-L740).
 
-To obtain the project's home currency and optional monthly funding capacity ceiling from `internal/project` without importing `internal/project`:
+### 7.2. Cross-Context Ports in `internal/asset/ports.go`
+
+Extend existing [`ProjectReader`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/ports.go#L68-L71) (avoiding duplicate reader interfaces) and bridge via [`cmd/web/adapters.go`](file:///Users/maksym.hryshkov/Code/projecta/cmd/web/adapters.go):
 
 ```go
-// ProjectBudgetContext represents read-only project settings needed for cash flow forecasting.
-type ProjectBudgetContext struct {
-    MainCurrency      string
-    MonthlyLimitCents *int64 // Derived from monthly MONEY TagBudgets in cmd/web/adapters.go
+type ProjectDescriptor struct {
+    ID           core.ProjectID
+    MainCurrency string
+    StartDate    time.Time
+    EndDate      time.Time
 }
 
-type ProjectContextReader interface {
-    GetProjectBudgetContext(ctx context.Context, projectID core.ProjectID) (ProjectBudgetContext, error)
+type ProjectReader interface {
+    FindProject(ctx context.Context, projectID core.ProjectID) (ProjectDescriptor, error)
+    // FindMonthlyCashCeilings returns per-month MONEY TagBudget totals in home currency ("YYYY-MM" -> cents).
+    FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error)
 }
 ```
 
-And in [`internal/asset/ports.go`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/ports.go), extend `InvestmentSource` with resource-type awareness for separating cash vs. sweat equity:
+Extend [`InvestmentSource`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/ports.go#L56-L60) with an unpaginated project allocation query so all multi-currency conversions happen accurately per investment share:
 
 ```go
+type InvestmentAllocation struct {
+    AssetID         core.AssetID
+    SharePercentage float64
+}
+
 type InvestmentRecordSummary struct {
+    ID           core.InvestmentID
     Amount       *money.Money
-    ResourceType string    // "MONEY" | "TIME" | "GOODS"
+    ResourceType string                 // "MONEY" | "TIME" | "GOODS"
+    TimeHours    *float64
     Date         time.Time
+    Allocations  []InvestmentAllocation // From projecta_investment_assets
+}
+
+type InvestmentSource interface {
+    // ... existing methods ...
+    ListProjectInvestments(ctx context.Context, projectID core.ProjectID) ([]InvestmentRecordSummary, error)
 }
 ```
 
-### 8.3. REST API Contracts (`pkg/web/`)
+### 7.3. REST API Contracts (`pkg/web/`)
 
-#### 1. Reschedule / Update Asset Progress
-- **Endpoint**: `PATCH /api/projects/{projectId}/assets/{assetId}/schedule`
+> **Routing Note**: [`pkg/web/handler.go`](file:///Users/maksym.hryshkov/Code/projecta/pkg/web/handler.go#L257-L333) mounts backend routes **without** the `/api` prefix; [`docker/nginx.conf`](file:///Users/maksym.hryshkov/Code/projecta/docker/nginx.conf#L12-L14) strips `/api/` before forwarding from the frontend. Update [`AssetDTO`](file:///Users/maksym.hryshkov/Code/projecta/pkg/web/assets.go#L66-L89) with `target_completion_date`, `direct_cost_home_amount`, `resource_breakdown`, and `schedule_warnings`.
+
+#### 1. Update Asset Schedule Window
+- **Endpoint**: `PATCH /projects/{project_id}/assets/{asset_id}/schedule` *(UI calls `/api/projects/...`)*
 - **Request Body**:
   ```json
   {
     "start_date": "2026-08-01T00:00:00Z",
-    "target_completion_date": "2026-09-15T00:00:00Z",
-    "physical_progress": 0.45
+    "target_completion_date": "2026-10-15T00:00:00Z",
+    "clear_target_date": false
   }
   ```
-- **Response**: `200 OK` (Updated Asset DTO including rolled-up progress and temporal warnings).
+- **Response**: `200 OK` (Updated `AssetDTO` including non-blocking `schedule_warnings`).
 
-#### 2. Get Cash Flow & Forecast Summary
-- **Endpoint**: `GET /api/projects/{projectId}/cashflow-forecast`
+#### 2. Get Project Cost Breakdown, Burn & Cash Flow Forecast
+- **Endpoint**: `GET /projects/{project_id}/cashflow-forecast` *(optional `?from=YYYY-MM&to=YYYY-MM&burn_months=6`)*
 - **Response**:
   ```json
   {
     "home_currency": "USD",
-    "monthly_limit_cents": 500000,
-    "forecast": {
-      "budget_at_completion_cents": 2500000,
-      "actual_total_cost_cents": 1250000,
-      "actual_cash_cost_cents": 950000,
-      "actual_sweat_equity_cents": 300000,
-      "earned_value_cents": 1050000,
-      "overall_physical_progress": 0.42,
-      "cost_performance_index": 0.84,
-      "schedule_performance_index": 0.91,
-      "estimate_at_completion_cents": 2976190,
-      "variance_at_completion_cents": -476190,
-      "risk_status": "OVERRUN_PROJECTED",
-      "projected_completion_date": "2026-11-20T00:00:00Z"
+    "summary": {
+      "total_realized_cents": 1420000,
+      "total_cash_cents": 1120000,
+      "total_time_cents": 200000,
+      "total_time_hours": 84.0,
+      "total_goods_cents": 100000,
+      "scheduled_target_total_cents": 850000,
+      "scheduled_remaining_cents": 200000,
+      "ongoing_monthly_cash_burn_cents": 115000,
+      "ongoing_monthly_total_burn_cents": 145000
     },
-    "months": [
+    "assets": [
       {
-        "year_month": "2026-07",
-        "actual_cash_cents": 320000,
-        "actual_non_cash_cents": 80000,
-        "projected_demand_cents": 0,
-        "alert_status": "NORMAL",
-        "assets": []
-      },
+        "asset_id": "...",
+        "name": "Kitchen Remodel",
+        "status": "ACTIVE",
+        "start_date": "2026-08-01T00:00:00Z",
+        "target_completion_date": "2026-10-15T00:00:00Z",
+        "target_home_amount": 850000,
+        "residual_target_cents": 850000,
+        "remaining_target_cents": 200000,
+        "direct_breakdown": {
+          "cash_cents": 510000,
+          "time_cents": 90000,
+          "time_hours": 44.0,
+          "goods_cents": 50000,
+          "total_cost_cents": 650000
+        },
+        "total_breakdown": {
+          "cash_cents": 510000,
+          "time_cents": 90000,
+          "time_hours": 44.0,
+          "goods_cents": 50000,
+          "total_cost_cents": 650000
+        },
+        "monthly_burn": {
+          "cash_cents": 0,
+          "total_cents": 0,
+          "time_hours": 0.0
+        },
+        "schedule_warnings": []
+      }
+    ],
+    "months": [
       {
         "year_month": "2026-08",
         "actual_cash_cents": 350000,
-        "actual_non_cash_cents": 0,
-        "projected_demand_cents": 500000,
-        "alert_status": "CRITICAL_DEFICIT",
+        "actual_time_cents": 45000,
+        "actual_time_hours": 22.0,
+        "actual_goods_cents": 0,
+        "scheduled_demand_cents": 100000,
+        "estimated_ongoing_cash_cents": 0,
+        "monthly_limit_cents": 500000,
+        "alert_status": "NORMAL",
         "assets": [
-          { "asset_id": "...", "asset_name": "Roof Trusses", "amount_cents": 500000 }
+          { "asset_id": "...", "asset_name": "Kitchen Remodel", "amount_cents": 100000, "is_overdue": false }
         ]
       }
     ]
@@ -541,38 +483,44 @@ type InvestmentRecordSummary struct {
 
 ---
 
-## 9. Phased Implementation & Verification Plan
+## 8. Phased Implementation & Verification Plan
 
 ```
-Phase 1: Domain & DB Foundations ──> Phase 2: Cash Demand & Hybrid EVM Engine
-               │                                         │
-               ▼                                         ▼
-Phase 3: Interactive Web UI Board ──> Phase 4: Variance Reconciliation Flow
+Phase 1: Schema, Currency-Safe Cost Truth & Schedule Dates
+                       │
+                       ▼
+Phase 2: Burn Rate, Residual Cash Flow & API Endpoints
+                       │
+                       ▼
+Phase 3: Project Planning & Cash Flow Dashboard (Web UI)
 ```
 
-### Phase 1: Domain & DB Foundations
-1. Add migrations `000037_add_asset_schedule_and_progress.up.sql` and `.down.sql` in [`migrations/`](file:///Users/maksym.hryshkov/Code/projecta/migrations/).
-2. Extend [`Asset`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go) with `targetCompletionDate` and `physicalProgress`, invariant checks, and composite progress rollup in [`AssetHierarchy.ApplyToAssets`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/hierarchy.go#L157).
-3. Update [`PgAssetRepository`](file:///Users/maksym.hryshkov/Code/projecta/pkg/dal/pg_asset_repository.go) to persist and reconstitute the new fields.
-- **Verify**: `go test -v ./internal/asset/... ./pkg/dal/...`
+### Phase 1: Schema, Cost Truth & Optional Target Dates
+1. Add `000037_add_asset_target_completion_date.up.sql` and `.down.sql` in [`migrations/`](file:///Users/maksym.hryshkov/Code/projecta/migrations/).
+2. Extend [`Asset`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/asset.go#L49-L70) with `targetCompletionDate`, temporal validation, `UpdateSchedule`, and [`PgAssetRepository`](file:///Users/maksym.hryshkov/Code/projecta/pkg/dal/pg_asset_repository.go) + [`pkg/dal/dal_test.go`](file:///Users/maksym.hryshkov/Code/projecta/pkg/dal/dal_test.go#L714-L740) updates.
+3. Add per-investment FX normalization and `ResourceBreakdown` (`MONEY` / `TIME` hours + value / `GOODS`) rollup in [`internal/asset/`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/) via [`InvestmentSource.ListProjectInvestments`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/ports.go#L56-L60) (and resolve `PgAssetRepository` mixed-currency aggregation).
+- **Verify**: `go test -race -count=1 ./internal/asset/... ./pkg/dal/...`
 
-### Phase 2: Remaining Cash Demand & Hybrid EVM Engine
-1. Implement `ResidualTarget`, `CalculateCashFlowSchedule`, and `CalculateProjectForecast` in [`internal/asset/valuation.go`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/valuation.go) using [`CurrencyConverter`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/valuation.go#L8-L10).
-2. Bridge `ProjectBudgetContext` in [`cmd/web/adapters.go`](file:///Users/maksym.hryshkov/Code/projecta/cmd/web/adapters.go) to supply the monthly `TagBudget` allowance as `MonthlyLimitCents`.
-3. Expose `PATCH /schedule` and `GET /cashflow-forecast` in [`pkg/web/`](file:///Users/maksym.hryshkov/Code/projecta/pkg/web/).
-- **Verify**: Table-driven unit tests covering:
-  - Partially decomposed parent assets (no double-counting, no dropped unallocated parent budget).
-  - Sunk cost deduction for in-progress assets.
-  - Upfront deposit at $0\%$ progress (verifying `MOBILIZING` state and additive EAC without division-by-zero).
-  - SPI-driven completion date projection.
+### Phase 2: Burn Rate, Residual Demand Forecast & Web Contracts
+1. Implement `CalculateResidualTargets`, trailing `CalculateAssetBurnRates`, and UTC exact-cent `CalculateCashFlowSchedule` in [`internal/asset/valuation.go`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/valuation.go).
+2. Extend [`ProjectReader`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/ports.go#L68-L71) and [`cmd/web/adapters.go`](file:///Users/maksym.hryshkov/Code/projecta/cmd/web/adapters.go) to supply per-month `MONEY` `TagBudget` ceilings (`map[string]int64`).
+3. Expose `PATCH /projects/{project_id}/assets/{asset_id}/schedule` and `GET /projects/{project_id}/cashflow-forecast` in [`pkg/web/`](file:///Users/maksym.hryshkov/Code/projecta/pkg/web/), updating `AssetDTO` (`target_completion_date`, `direct_cost_home_amount`, `resource_breakdown`).
+- **Verify**:
+  - Table-driven unit tests covering mixed-currency DAG rollups, unbudgeted/ongoing assets with burn calculation, partially decomposed parents (no double-counting, no dropped unallocated buffer), overdue dated targets, and exact cumulative cent conservation.
+  - DDD boundary checks (`go list` / `grep` rules) and `go test -v -coverprofile=coverage.out ./internal/... ./pkg/... ./cmd/...` meeting [`.gitlab-ci.yml`](file:///Users/maksym.hryshkov/Code/projecta/.gitlab-ci.yml#L59-L65) `>= 95.0%` coverage.
 
-### Phase 3: Interactive Drag-and-Drop Timeline Board (Frontend)
-1. Implement pure domain calculators `CashFlowCalculator.js` and `EVMForecastModel.js` in `web-ui/src/models/`.
-2. Build `TimelineCanvas.jsx`, `MonthlyDemandChart.jsx`, and `ForecastSummaryCard.jsx` under `web-ui/src/components/Projects/CashFlow/`.
-3. Implement `useCashFlowTimeline.js` hook for 60fps optimistic drag-and-drop rescheduling.
-- **Verify**: Vitest unit tests for `CashFlowCalculator` & `EVMForecastModel` + Playwright tests for timeline drag rescheduling.
+### Phase 3: Cost Truth, Burn & Cash Flow Dashboard (Frontend)
+1. Implement pure JS `CashFlowCalculator.js` in `web-ui/src/models/` mirroring residual target, UTC overlap, and burn math.
+2. Build `CashFlowBoard.jsx`, `AssetCostBurnTable.jsx`, `MonthlyCashFlowChart.jsx` (`Recharts`), and `CashFlowBoard.content.js` (`intlayer`), wired into [`routes.js`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/router/routes.js#L69-L100) and [`ProjectDetails.jsx`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/components/Projects/ProjectDetails.jsx#L61-L86).
+3. Implement `useProjectCashFlow.js` hook for inline schedule updates with optimistic chart refresh & rollback.
+- **Verify**:
+  - `node --test web-ui/src/models/CashFlowCalculator.test.js` (matching [`ProjectBudget.test.js`](file:///Users/maksym.hryshkov/Code/projecta/web-ui/src/models/ProjectBudget.test.js#L1-L3) and [`docs/ddd-development-guidelines.md`](file:///Users/maksym.hryshkov/Code/projecta/docs/ddd-development-guidelines.md#L303)).
+  - `npm --prefix web-ui run lint && npm --prefix web-ui run build`.
 
-### Phase 4: Milestone Check-in & Variance Reconciliation
-1. Implement `CompleteAssetWithReconciliation` command in [`internal/asset/service.go`](file:///Users/maksym.hryshkov/Code/projecta/internal/asset/service.go) supporting `ABSORB_FROM_ASSET`, `EXPAND_PARENT_BUDGET`, and `KEEP_BASELINE`.
-2. Build `MilestoneCheckinModal.jsx` and wire it into the asset completion workflow.
-- **Verify**: End-to-end verification of completing an overbudget milestone and verifying both sibling contingency absorption and parent budget expansion.
+---
+
+## 9. Optional Future Extension: Bounded Project Execution Mode
+
+If Projecta later adds an explicit project-management mode for multi-phase builds (e.g., construction/renovation workflows needing `%` completion tracking or Earned Value projections), that layer can be added non-invasively on top of this foundation without affecting perpetual asset tracking:
+- Store `physical_progress DOUBLE PRECISION DEFAULT NULL` (only enabled when a user opts a dated deliverable into progress tracking).
+- Scope `EV`, `PV`, `SPI`, and `EAC` strictly to opted-in dated deliverables (`target_completion_date != nil && physical_progress != nil`), leaving ongoing life/cost-center assets completely unaffected.

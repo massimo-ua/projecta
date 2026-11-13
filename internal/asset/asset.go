@@ -60,13 +60,15 @@ type Asset struct {
 	targetPrice        *money.Money
 	directCost         *money.Money
 	totalCost          *money.Money
-	homeCurrency       string
-	homeAmount         int64
-	targetHomeAmount   *int64
-	progressPercentage *float64
-	children           []ChildAssetLink
-	parents            []ParentAssetLink
-	tags               []string
+	homeCurrency         string
+	homeAmount           int64
+	directCostHomeAmount int64
+	targetHomeAmount     *int64
+	progressPercentage   *float64
+	targetCompletionDate *time.Time
+	children             []ChildAssetLink
+	parents              []ParentAssetLink
+	tags                 []string
 }
 
 // CreateAsset validates business invariants and constructs a new Asset entity.
@@ -132,14 +134,14 @@ func createAsset(
 	if trimmedName == "" {
 		return nil, exceptions.NewValidationException("name is required", nil)
 	}
-	if !isGroup {
-		if price == nil || price.Amount() <= 0 {
+	if price != nil {
+		if !isGroup && price.Amount() <= 0 {
 			return nil, exceptions.NewValidationException("price must be greater than 0", nil)
 		}
 		if price.Currency() == nil || strings.TrimSpace(price.Currency().Code) == "" {
 			return nil, exceptions.NewValidationException("currency is required", nil)
 		}
-	} else if price == nil {
+	} else if isGroup {
 		price = money.New(0, "UAH")
 	}
 	if startDate.IsZero() {
@@ -359,8 +361,16 @@ func (a *Asset) CompletedDate() *time.Time {
 	return copyTimePtr(a.completedDate)
 }
 
+func (a *Asset) TargetCompletionDate() *time.Time {
+	return copyTimePtr(a.targetCompletionDate)
+}
+
 func (a *Asset) TargetPrice() *money.Money {
 	return a.targetPrice
+}
+
+func (a *Asset) HasTargetBudget() bool {
+	return a.targetPrice != nil && a.targetPrice.Amount() > 0
 }
 
 func (a *Asset) DirectCost() *money.Money {
@@ -390,6 +400,16 @@ func (a *Asset) HomeAmount() int64 {
 	}
 	if a.Price() != nil {
 		return a.Price().Amount()
+	}
+	return 0
+}
+
+func (a *Asset) DirectCostHomeAmount() int64 {
+	if a.directCostHomeAmount != 0 {
+		return a.directCostHomeAmount
+	}
+	if a.directCost != nil {
+		return a.directCost.Amount()
 	}
 	return 0
 }
@@ -455,6 +475,17 @@ func (a *Asset) EvaluateValuation(homeCurrency string, converter CurrencyConvert
 	}
 	a.homeAmount = homeAmount
 
+	directAmount := int64(0)
+	if a.directCost != nil {
+		directAmount = a.directCost.Amount()
+		if converter != nil && a.directCost.Currency() != nil && a.directCost.Currency().Code != homeCurrency && directAmount > 0 {
+			if converted, err := converter.ConvertMoney(a.directCost, homeCurrency); err == nil && converted != nil {
+				directAmount = converted.Amount()
+			}
+		}
+	}
+	a.directCostHomeAmount = directAmount
+
 	var totalCostVal int64
 	var totalCostCurr string
 	if a.TotalCost() != nil {
@@ -517,12 +548,43 @@ func (a *Asset) UpdateDetails(name, description string, targetPrice *money.Money
 	return nil
 }
 
+func utcCalendarDay(t time.Time) time.Time {
+	u := t.UTC()
+	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC)
+}
+
 // Reschedule updates the start/acquisition date of the asset.
 func (a *Asset) Reschedule(startDate time.Time) {
 	if !startDate.IsZero() {
 		a.startDate = startDate
 		a.acquiredAt = startDate
 	}
+}
+
+// UpdateSchedule atomically updates start_date and/or target_completion_date, validating chronological ordering in UTC.
+func (a *Asset) UpdateSchedule(startDate *time.Time, targetCompletionDate *time.Time, clearTargetDate bool) error {
+	nextStart := a.StartDate()
+	if startDate != nil && !startDate.IsZero() {
+		nextStart = *startDate
+	}
+
+	nextTarget := copyTimePtr(a.targetCompletionDate)
+	if clearTargetDate {
+		nextTarget = nil
+	} else if targetCompletionDate != nil && !targetCompletionDate.IsZero() {
+		nextTarget = copyTimePtr(targetCompletionDate)
+	}
+
+	if nextTarget != nil && !nextStart.IsZero() {
+		if utcCalendarDay(*nextTarget).Before(utcCalendarDay(nextStart)) {
+			return exceptions.NewValidationException("target_completion_date must be on or after start_date", nil)
+		}
+	}
+
+	a.startDate = nextStart
+	a.acquiredAt = nextStart
+	a.targetCompletionDate = nextTarget
+	return nil
 }
 
 // TransitionStatus applies lifecycle status transitions (Complete, Reopen, or explicit status).
@@ -560,6 +622,7 @@ func ReconstituteAsset(
 	status AssetStatus,
 	startDate time.Time,
 	completedDate *time.Time,
+	targetCompletionDate *time.Time,
 	targetPrice *money.Money,
 	tags []string,
 ) *Asset {
@@ -576,20 +639,21 @@ func ReconstituteAsset(
 		status = AssetStatusActive
 	}
 	a := &Asset{
-		id:            id,
-		name:          name,
-		description:   description,
-		projectID:     projectID,
-		price:         price,
-		acquiredAt:    start,
-		owner:         owner,
-		status:        status,
-		startDate:     start,
-		completedDate: copyTimePtr(completedDate),
-		targetPrice:   targetPrice,
-		children:      make([]ChildAssetLink, 0),
-		parents:       make([]ParentAssetLink, 0),
-		tags:          tagsCopy,
+		id:                   id,
+		name:                 name,
+		description:          description,
+		projectID:            projectID,
+		price:                price,
+		acquiredAt:           start,
+		owner:                owner,
+		status:               status,
+		startDate:            start,
+		completedDate:        copyTimePtr(completedDate),
+		targetCompletionDate: copyTimePtr(targetCompletionDate),
+		targetPrice:          targetPrice,
+		children:             make([]ChildAssetLink, 0),
+		parents:              make([]ParentAssetLink, 0),
+		tags:                 tagsCopy,
 	}
 	a.EvaluateValuation("UAH", nil)
 	return a

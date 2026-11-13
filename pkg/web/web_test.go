@@ -238,6 +238,12 @@ func (m *mockAssetService) Group(_ context.Context, _ asset.GroupAssetsCommand) 
 func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenCommand) error {
 	return m.err
 }
+func (m *mockAssetService) UpdateSchedule(_ context.Context, _ asset.RescheduleAssetCommand) (*asset.Asset, []string, error) {
+	return m.asset, nil, m.err
+}
+func (m *mockAssetService) GetCashFlowForecast(_ context.Context, _ asset.GetCashFlowForecastQuery) (*asset.CashFlowForecast, error) {
+	return &asset.CashFlowForecast{}, m.err
+}
 
 func TestWebHandlersAndEndpoints(t *testing.T) {
 	personID := core.NewPersonID()

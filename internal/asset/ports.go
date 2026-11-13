@@ -21,6 +21,8 @@ type Service interface {
 	AssignInvestments(ctx context.Context, command AssignInvestmentsCommand) error
 	Group(ctx context.Context, command GroupAssetsCommand) (*Asset, error)
 	LinkChildren(ctx context.Context, command LinkChildrenCommand) error
+	UpdateSchedule(ctx context.Context, command RescheduleAssetCommand) (*Asset, []string, error)
+	GetCashFlowForecast(ctx context.Context, query GetCashFlowForecastQuery) (*CashFlowForecast, error)
 }
 
 type Repository interface {
@@ -53,8 +55,23 @@ type InitialInvestment struct {
 	Tags          []string
 }
 
+type InvestmentAllocation struct {
+	AssetID         core.AssetID
+	SharePercentage float64
+}
+
+type InvestmentRecordSummary struct {
+	ID               core.InvestmentID
+	ResourceType     string
+	Amount           *money.Money
+	TimeHours        float64
+	Date             time.Time
+	AssetAllocations []InvestmentAllocation
+}
+
 type InvestmentSource interface {
 	FindInvestments(ctx context.Context, projectID core.ProjectID, ids []core.InvestmentID) ([]InvestmentItem, error)
+	ListProjectInvestments(ctx context.Context, projectID core.ProjectID) ([]InvestmentRecordSummary, error)
 	AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error
 	CreateInitialInvestment(ctx context.Context, item InitialInvestment) error
 }
@@ -63,11 +80,14 @@ type InvestmentSource interface {
 type ProjectDescriptor struct {
 	ID           core.ProjectID
 	MainCurrency string
+	StartDate    time.Time
+	EndDate      time.Time
 }
 
 // ProjectReader is a consumer-owned interface providing read access to projects.
 type ProjectReader interface {
 	FindProject(ctx context.Context, projectID core.ProjectID) (ProjectDescriptor, error)
+	FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error)
 }
 
 // OwnerReader is a consumer-owned interface providing read access to asset owners.

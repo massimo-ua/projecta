@@ -715,12 +715,12 @@ func TestPgAssetRepository(t *testing.T) {
 			rowVal: []any{
 				astID.String(), "Laptop", "Desc", pID.String(),
 				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
-				&targetPrice, &targetCurr, []string{"tag1"},
+				&targetPrice, &targetCurr, []string{"tag1"}, nil,
 			},
 			rowsData: [][]any{{
 				astID.String(), "Laptop", "Desc", pID.String(),
 				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
-				&targetPrice, &targetCurr, []string{"tag1"},
+				&targetPrice, &targetCurr, []string{"tag1"}, nil,
 			}},
 		}
 		ctx := withMockDb(authedCtx, mockDb)
@@ -735,7 +735,7 @@ func TestPgAssetRepository(t *testing.T) {
 			rowVal: []any{
 				astID.String(), "Laptop", "Desc", pID.String(),
 				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
-				&targetPrice, &targetCurr, []string{"tag1"},
+				&targetPrice, &targetCurr, []string{"tag1"}, nil,
 			},
 			execErr: errors.New("exec update error"),
 		}
@@ -793,9 +793,14 @@ func TestPgAssetRepository(t *testing.T) {
 	t.Run("toAssetFromPg test", func(t *testing.T) {
 		tp := int64(1000)
 		tc := "USD"
-		a, err := toAssetFromPg(astID.String(), "Laptop", "Desc", pID.String(), now, ownerID.String(), "J.D.", "ACTIVE", now, nil, &tp, &tc, []string{"tag1"})
-		if err != nil || a == nil {
+		tcd := now.Add(30 * 24 * time.Hour)
+		a, err := toAssetFromPg(astID.String(), "Laptop", "Desc", pID.String(), now, ownerID.String(), "J.D.", "ACTIVE", now, nil, &tcd, &tp, &tc, []string{"tag1"})
+		if err != nil || a == nil || a.TargetCompletionDate() == nil {
 			t.Errorf("toAssetFromPg error: %v", err)
+		}
+		unbudgeted, err := toAssetFromPg(astID.String(), "Ongoing", "Desc", pID.String(), now, ownerID.String(), "J.D.", "ACTIVE", now, nil, nil, nil, nil, nil)
+		if err != nil || unbudgeted == nil || unbudgeted.TargetPrice() != nil {
+			t.Errorf("toAssetFromPg unbudgeted error: %v", err)
 		}
 	})
 
@@ -837,7 +842,7 @@ func TestPgAssetRepository(t *testing.T) {
 		mockDbAst := &mockPgDb{rowVal: []any{
 			astID.String(), "Laptop", "Desc", pID.String(),
 			now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
-			&targetPriceVal, &targetCurrVal, []string{"tag1"},
+			&targetPriceVal, &targetCurrVal, []string{"tag1"}, nil,
 		}}
 		ctxAst := withMockDb(authedCtx, mockDbAst)
 		astOne, err := astRepo.FindOne(ctxAst, asset.Filter{ID: astID, ProjectID: pID, Name: "Laptop"})

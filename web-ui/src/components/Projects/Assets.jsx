@@ -191,6 +191,11 @@ function AssetDetails({ asset, onUnlinkChild, onViewInvestments, content }) {
         <DetailItem label="Start Date">
           <span className="text-sm">{asset.startDate || asset.acquiredAt}</span>
         </DetailItem>
+        {asset.targetCompletionDate && (
+          <DetailItem label={String(content?.targetCompletionDateLabel || 'Target Completion')}>
+            <span className="text-sm">{asset.targetCompletionDate}</span>
+          </DetailItem>
+        )}
         {asset.completedDate && (
           <DetailItem label="Completed Date">
             <span className="text-sm">{asset.completedDate}</span>

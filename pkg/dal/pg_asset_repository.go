@@ -33,9 +33,6 @@ func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) erro
 	if anAsset.TargetPrice() != nil {
 		targetPriceVal = anAsset.TargetPrice().Amount()
 		targetCurrVal = anAsset.TargetPrice().Currency().Code
-	} else if anAsset.Price() != nil {
-		targetPriceVal = anAsset.Price().Amount()
-		targetCurrVal = anAsset.Price().Currency().Code
 	}
 
 	tags := anAsset.Tags()
@@ -46,15 +43,16 @@ func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) erro
 	sql := `
 		INSERT INTO projecta_assets (
 			asset_id, name, description, project_id, owner_id,
-			status, start_date, completed_date, target_price,
-			target_currency, acquired_at, tags
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			status, start_date, completed_date, target_completion_date,
+			target_price, target_currency, acquired_at, tags
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (asset_id) DO UPDATE SET
 			name = EXCLUDED.name,
 			description = EXCLUDED.description,
 			status = EXCLUDED.status,
 			start_date = EXCLUDED.start_date,
 			completed_date = EXCLUDED.completed_date,
+			target_completion_date = EXCLUDED.target_completion_date,
 			target_price = EXCLUDED.target_price,
 			target_currency = EXCLUDED.target_currency,
 			acquired_at = EXCLUDED.acquired_at,
@@ -72,6 +70,7 @@ func (r *PgAssetRepository) Save(ctx context.Context, anAsset *asset.Asset) erro
 		anAsset.Status().String(),
 		anAsset.StartDate(),
 		anAsset.CompletedDate(),
+		anAsset.TargetCompletionDate(),
 		targetPriceVal,
 		targetCurrVal,
 		anAsset.AcquiredAt(),
@@ -233,19 +232,20 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	sql, args := qb.Build()
 
 	var (
-		assetID          string
-		name             string
-		description      string
-		projectID        string
-		acquiredAt       time.Time
-		ownerID          string
-		ownerDisplayName string
-		status           string
-		startDate        time.Time
-		completedDate    *time.Time
-		targetPrice      *int64
-		targetCurrency   *string
-		tags             []string
+		assetID              string
+		name                 string
+		description          string
+		projectID            string
+		acquiredAt           time.Time
+		ownerID              string
+		ownerDisplayName     string
+		status               string
+		startDate            time.Time
+		completedDate        *time.Time
+		targetPrice          *int64
+		targetCurrency       *string
+		tags                 []string
+		targetCompletionDate *time.Time
 	)
 
 	if err := r.db.QueryRow(
@@ -266,6 +266,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		&targetPrice,
 		&targetCurrency,
 		&tags,
+		&targetCompletionDate,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrAssetNotFound
@@ -285,6 +286,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		status,
 		startDate,
 		completedDate,
+		targetCompletionDate,
 		targetPrice,
 		targetCurrency,
 		tags,
@@ -329,7 +331,9 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	setupSelectQueryBuilder(qb)
 
 	qb.Offset(filter.Offset)
-	qb.Limit(filter.Limit)
+	if filter.Limit > 0 {
+		qb.Limit(filter.Limit)
+	}
 
 	validAssetOrderBy := map[string]bool{
 		"name":           true,
@@ -358,19 +362,20 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 
 	for rows.Next() {
 		var (
-			assetID          string
-			name             string
-			description      string
-			projectID        string
-			acquiredAt       time.Time
-			ownerID          string
-			ownerDisplayName string
-			status           string
-			startDate        time.Time
-			completedDate    *time.Time
-			targetPrice      *int64
-			targetCurrency   *string
-			tags             []string
+			assetID              string
+			name                 string
+			description          string
+			projectID            string
+			acquiredAt           time.Time
+			ownerID              string
+			ownerDisplayName     string
+			status               string
+			startDate            time.Time
+			completedDate        *time.Time
+			targetPrice          *int64
+			targetCurrency       *string
+			tags                 []string
+			targetCompletionDate *time.Time
 		)
 
 		if err = rows.Scan(
@@ -387,6 +392,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			&targetPrice,
 			&targetCurrency,
 			&tags,
+			&targetCompletionDate,
 		); err != nil {
 			return nil, err
 		}
@@ -402,6 +408,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 			status,
 			startDate,
 			completedDate,
+			targetCompletionDate,
 			targetPrice,
 			targetCurrency,
 			tags,
@@ -537,6 +544,7 @@ func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {
 		"projecta_assets.target_price",
 		"projecta_assets.target_currency",
 		"projecta_assets.tags",
+		"projecta_assets.target_completion_date",
 	)
 
 	qb.Join("people", "people.person_id = projecta_assets.owner_id")
@@ -553,6 +561,7 @@ func toAssetFromPg(
 	status string,
 	startDate time.Time,
 	completedDate *time.Time,
+	targetCompletionDate *time.Time,
 	targetPrice *int64,
 	targetCurrency *string,
 	tags []string,
@@ -578,6 +587,7 @@ func toAssetFromPg(
 		asset.ToAssetStatus(status),
 		startDate,
 		completedDate,
+		targetCompletionDate,
 		targetPriceMoney,
 		tags,
 	), nil

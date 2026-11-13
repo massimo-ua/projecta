@@ -332,6 +332,24 @@ func MakeHTTPHandler(
 		))
 	}
 
+	if assetEndpoints.UpdateSchedule != nil {
+		r.Methods(http.MethodPatch).Path("/projects/{project_id}/assets/{asset_id}/schedule").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), assetEndpoints.UpdateSchedule),
+			decodeUpdateScheduleRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
+
+	if assetEndpoints.GetCashFlowForecast != nil {
+		r.Methods(http.MethodGet).Path("/projects/{project_id}/cashflow-forecast").Handler(ht.NewServer(
+			requireRole(string(people.RoleUser), assetEndpoints.GetCashFlowForecast),
+			decodeGetCashFlowForecastRequest,
+			encodeJSON(http.StatusOK),
+			withAuth...,
+		))
+	}
+
 	if investmentEndpoints.CreateInvestment != nil {
 		r.Methods(http.MethodPost).Path("/projects/{project_id}/investments").Handler(ht.NewServer(
 			requireRole(string(people.RoleUser), investmentEndpoints.CreateInvestment),
