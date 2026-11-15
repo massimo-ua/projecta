@@ -31,7 +31,7 @@
     "lucide-react": "^1.70.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-intlayer": "^9.6.0",
+    "react-intlayer": "^9.8.0",
     "react-router-dom": "^7.18.5",
     "recharts": "^3.10.1",
     "sonner": "^2.0.8",
