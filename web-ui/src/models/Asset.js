@@ -9,6 +9,8 @@ export class Asset {
     rawStartDate,
     completedDate,
     rawCompletedDate,
+    targetCompletionDate,
+    rawTargetCompletionDate,
     targetPrice,
     rawTargetPrice,
     targetCurrency,
@@ -17,6 +19,7 @@ export class Asset {
     progressPercentage,
     directCost,
     rawDirectCost,
+    directCostHomeAmount,
     totalCost,
     rawTotalCost,
     price,
@@ -41,6 +44,8 @@ export class Asset {
     this.rawStartDate = rawStartDate || rawAcquiredAt;
     this.completedDate = completedDate;
     this.rawCompletedDate = rawCompletedDate;
+    this.targetCompletionDate = targetCompletionDate;
+    this.rawTargetCompletionDate = rawTargetCompletionDate;
     this.targetPrice = targetPrice;
     this.rawTargetPrice = rawTargetPrice;
     this.targetCurrency = targetCurrency || currency;
@@ -49,6 +54,7 @@ export class Asset {
     this.progressPercentage = progressPercentage;
     this.directCost = directCost;
     this.rawDirectCost = rawDirectCost;
+    this.directCostHomeAmount = directCostHomeAmount;
     this.totalCost = totalCost !== undefined ? totalCost : price;
     this.rawTotalCost = rawTotalCost !== undefined ? rawTotalCost : rawPrice;
     this.price = this.totalCost;

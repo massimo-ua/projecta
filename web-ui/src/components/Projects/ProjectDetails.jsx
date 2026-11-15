@@ -23,6 +23,7 @@ import {
   Coins,
   User,
   Calendar,
+  TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -64,6 +65,7 @@ export function ProjectDetails() {
       items: [
         { key: 'assets', label: String(content.assets), icon: Package },
         { key: 'investments', label: String(content.investments || content.payments), icon: DollarSign },
+        { key: 'planning', label: String(content.planning || 'Planning'), icon: TrendingUp },
         { key: 'total', label: String(content.total), icon: FileText },
       ],
     },
@@ -77,7 +79,7 @@ export function ProjectDetails() {
   ];
 
   // Determine active tab properly
-  const validKeys = ['assets', 'investments', 'payments', 'total', 'tags', 'settings'];
+  const validKeys = ['assets', 'investments', 'payments', 'planning', 'total', 'tags', 'settings'];
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const lastSegment = pathSegments[pathSegments.length - 1];
   let currentTab = validKeys.includes(lastSegment) ? lastSegment : 'assets';

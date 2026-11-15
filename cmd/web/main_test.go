@@ -153,6 +153,17 @@ func TestCrossContextAdapters(t *testing.T) {
 		t.Fatalf("unexpected assetProjectReaderAdapter result: %+v, err: %v", assetProjDesc, err)
 	}
 
+	_ = proj.SetTagBudgets([]project.TagBudgetInput{
+		{Tag: "home", Frequency: "MONTHLY", TargetMonth: 1, ResourceType: "MONEY", Amount: 5000, Currency: "USD", Description: "monthly"},
+	})
+	ceilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), []string{now.UTC().Format("2006-01")})
+	if err != nil || ceilings[now.UTC().Format("2006-01")] != 5000 {
+		t.Fatalf("unexpected FindMonthlyCashCeilings: %+v err=%v", ceilings, err)
+	}
+	if _, err := assetProjAdapter.FindMonthlyCashCeilings(context.Background(), proj.ID(), nil); err == nil {
+		t.Errorf("expected unauthorized error in FindMonthlyCashCeilings")
+	}
+
 	invProjAdapter := &investmentProjectReaderAdapter{projects: projRepo}
 	invProjDesc, err := invProjAdapter.FindProject(ctx, proj.ID())
 	if err != nil || invProjDesc.ID != proj.ID() || invProjDesc.MainCurrency != "USD" {
@@ -307,6 +318,12 @@ func (m *mockAssetService) Group(context.Context, asset.GroupAssetsCommand) (*as
 func (m *mockAssetService) LinkChildren(context.Context, asset.LinkChildrenCommand) error {
 	return m.err
 }
+func (m *mockAssetService) UpdateSchedule(context.Context, asset.RescheduleAssetCommand) (*asset.Asset, []string, error) {
+	return m.ast, nil, m.err
+}
+func (m *mockAssetService) GetCashFlowForecast(context.Context, asset.GetCashFlowForecastQuery) (*asset.CashFlowForecast, error) {
+	return nil, m.err
+}
 
 type mockProjectServiceForAdapter struct {
 	proj *project.Project
@@ -434,6 +451,12 @@ func TestAdapters_Step7(t *testing.T) {
 			Amount:    money.New(500, "UAH"),
 		}); err != nil {
 			t.Errorf("unexpected error in CreateInitialInvestment: %v", err)
+		}
+
+		// ListProjectInvestments
+		summaries, err := adapter.ListProjectInvestments(ctx, projID)
+		if err != nil || len(summaries) != 2 {
+			t.Errorf("unexpected ListProjectInvestments result: len=%d err=%v", len(summaries), err)
 		}
 	})
 

@@ -39,6 +39,7 @@ export default function EditAssetModal({
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('ACTIVE');
   const [startDate, setStartDate] = useState('');
+  const [targetCompletionDate, setTargetCompletionDate] = useState('');
   const [completedDate, setCompletedDate] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
   const [currency, setCurrency] = useState('UAH');
@@ -72,6 +73,14 @@ export default function EditAssetModal({
         } else {
           setCompletedDate('');
         }
+        if (asset.targetCompletionDate) {
+          const td = new Date(asset.targetCompletionDate);
+          if (!isNaN(td.getTime())) {
+            setTargetCompletionDate(td.toISOString().split('T')[0]);
+          }
+        } else {
+          setTargetCompletionDate('');
+        }
       })
       .catch((err) => {
         toast.error(`${String(content?.failedToLoadDetails || 'Failed to load asset details')}: ${err.message}`);
@@ -93,6 +102,8 @@ export default function EditAssetModal({
         description: description.trim(),
         status,
         startDate: startDate ? new Date(startDate) : new Date(),
+        targetCompletionDate: targetCompletionDate ? new Date(targetCompletionDate) : undefined,
+        clearTargetDate: !targetCompletionDate,
         completedDate: completedDate ? new Date(completedDate) : undefined,
         targetPrice: targetPrice ? Number(targetPrice) : undefined,
         targetCurrency: currency,
@@ -176,7 +187,7 @@ export default function EditAssetModal({
           </div>
 
           {/* Lifecycle Dates */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-asset-start-date" className="text-xs font-semibold">
                 {String(content?.startDateLabel || 'Start Date')} *
@@ -188,6 +199,20 @@ export default function EditAssetModal({
                 onChange={(e) => setStartDate(e.target.value)}
                 className="rounded-xl"
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-asset-target-date" className="text-xs font-semibold">
+                {String(content?.targetCompletionDateLabel || 'Target Completion')}
+              </Label>
+              <Input
+                id="edit-asset-target-date"
+                type="date"
+                value={targetCompletionDate}
+                onChange={(e) => setTargetCompletionDate(e.target.value)}
+                min={startDate || undefined}
+                className="rounded-xl"
               />
             </div>
 

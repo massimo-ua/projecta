@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -74,14 +75,8 @@ func (s *ServiceImpl) Find(ctx context.Context, filter CollectionFilter) (*Colle
 		if !filter.ProjectID.IsNil() {
 			defaultHomeCurrency = s.resolveProjectCurrency(ctx, filter.ProjectID)
 		}
-		for _, a := range collection.Elements() {
-			if a != nil {
-				homeCurrency := defaultHomeCurrency
-				if homeCurrency == "" {
-					homeCurrency = s.resolveProjectCurrency(ctx, a.ProjectID())
-				}
-				a.EvaluateValuation(homeCurrency, s.rateProvider)
-			}
+		if err := s.reconcileAndEvaluateAssets(ctx, personID, filter.ProjectID, defaultHomeCurrency, collection.Elements()); err != nil {
+			return nil, preserveOrWrapError(err, failedToFindAsset)
 		}
 	}
 
@@ -104,12 +99,13 @@ func (s *ServiceImpl) FindOne(ctx context.Context, filter Filter) (*Asset, error
 		return nil, exceptions.NewNotFoundException("asset not found", nil)
 	}
 
-	if anAsset != nil {
-		projID := filter.ProjectID
-		if projID.IsNil() {
-			projID = anAsset.ProjectID()
-		}
-		anAsset.EvaluateValuation(s.resolveProjectCurrency(ctx, projID), s.rateProvider)
+	projID := filter.ProjectID
+	if projID.IsNil() {
+		projID = anAsset.ProjectID()
+	}
+	homeCurrency := s.resolveProjectCurrency(ctx, projID)
+	if err := s.reconcileAndEvaluateAssets(ctx, personID, projID, homeCurrency, []*Asset{anAsset}); err != nil {
+		return nil, preserveOrWrapError(err, failedToFindAsset)
 	}
 
 	return anAsset, nil
@@ -155,6 +151,16 @@ func (s *ServiceImpl) Create(ctx context.Context, command CreateAssetCommand) (*
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if command.TargetCompletionDate != nil {
+		if err := anAsset.UpdateSchedule(nil, command.TargetCompletionDate, false); err != nil {
+			return nil, err
+		}
+	}
+
+	if command.WithPayment && (price == nil || price.Amount() <= 0) {
+		return nil, exceptions.NewValidationException("price must be greater than 0 when creating an asset with payment", nil)
 	}
 
 	homeCurrency := "UAH"
@@ -345,10 +351,16 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateAssetCommand) er
 	}
 	anAsset.TransitionStatus(command.Status, command.CompletedDate)
 
+	var schedStart *time.Time
 	if !command.StartDate.IsZero() {
-		anAsset.Reschedule(command.StartDate)
+		sDate := command.StartDate
+		schedStart = &sDate
 	} else if !command.AcquiredAt.IsZero() {
-		anAsset.Reschedule(command.AcquiredAt)
+		aDate := command.AcquiredAt
+		schedStart = &aDate
+	}
+	if err := anAsset.UpdateSchedule(schedStart, command.TargetCompletionDate, command.ClearTargetDate); err != nil {
+		return err
 	}
 
 	homeCurrency := "UAH"
@@ -549,6 +561,222 @@ func (s *ServiceImpl) LinkChildren(ctx context.Context, command LinkChildrenComm
 		return nil, nil
 	})
 	return err
+}
+
+// UpdateSchedule updates start_date and/or target_completion_date for an asset, returning non-blocking DAG schedule warnings.
+func (s *ServiceImpl) UpdateSchedule(ctx context.Context, command RescheduleAssetCommand) (*Asset, []string, error) {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, nil, exceptions.NewUnauthorizedException(failedToUpdateAsset, err)
+	}
+
+	proj, err := s.projects.FindProject(ctx, command.ProjectID)
+	if err != nil {
+		return nil, nil, preserveOrWrapError(err, failedToUpdateAsset)
+	}
+
+	anAsset, err := s.assets.FindOne(ctx, Filter{ID: command.AssetID, ProjectID: command.ProjectID, OwnerID: personID})
+	if err != nil {
+		return nil, nil, preserveOrWrapError(err, failedToUpdateAsset)
+	}
+	if anAsset == nil {
+		return nil, nil, exceptions.NewNotFoundException("asset not found", nil)
+	}
+
+	if err := anAsset.UpdateSchedule(command.StartDate, command.TargetCompletionDate, command.ClearTargetDate); err != nil {
+		return nil, nil, err
+	}
+
+	homeCurrency := "UAH"
+	if proj.MainCurrency != "" {
+		homeCurrency = proj.MainCurrency
+	}
+	if err := s.reconcileAndEvaluateAssets(ctx, personID, command.ProjectID, homeCurrency, []*Asset{anAsset}); err != nil {
+		return nil, nil, preserveOrWrapError(err, failedToUpdateAsset)
+	}
+
+	if err := s.assets.Save(ctx, anAsset); err != nil {
+		return nil, nil, preserveOrWrapError(err, failedToUpdateAsset)
+	}
+
+	warnings := s.computeScheduleWarnings(ctx, personID, anAsset)
+	return anAsset, warnings, nil
+}
+
+// GetCashFlowForecast calculates historical resource consumption, future cash demand, and ceiling alerts for a project.
+func (s *ServiceImpl) GetCashFlowForecast(ctx context.Context, query GetCashFlowForecastQuery) (*CashFlowForecast, error) {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to calculate cash flow forecast", err)
+	}
+	if query.ProjectID.IsNil() {
+		return nil, exceptions.NewValidationException("project id is required", nil)
+	}
+
+	proj, err := s.projects.FindProject(ctx, query.ProjectID)
+	if err != nil {
+		return nil, preserveOrWrapError(err, "failed to calculate cash flow forecast")
+	}
+
+	col, err := s.assets.Find(ctx, CollectionFilter{
+		OwnerID:   personID,
+		ProjectID: query.ProjectID,
+	})
+	if err != nil {
+		return nil, preserveOrWrapError(err, "failed to calculate cash flow forecast")
+	}
+	var assets []*Asset
+	if col != nil {
+		assets = col.Elements()
+	}
+
+	var investments []InvestmentRecordSummary
+	if s.investments != nil {
+		investments, err = s.investments.ListProjectInvestments(ctx, query.ProjectID)
+		if err != nil {
+			return nil, preserveOrWrapError(err, "failed to calculate cash flow forecast")
+		}
+	}
+
+	months, _, _, err := ResolveForecastMonths(proj, assets, query)
+	if err != nil {
+		return nil, err
+	}
+
+	ceilings, err := s.projects.FindMonthlyCashCeilings(ctx, query.ProjectID, months)
+	if err != nil {
+		return nil, preserveOrWrapError(err, "failed to calculate cash flow forecast")
+	}
+
+	return CalculateProjectCashFlowForecast(proj, assets, investments, ceilings, months, query, s.rateProvider), nil
+}
+
+func (s *ServiceImpl) reconcileAndEvaluateAssets(
+	ctx context.Context,
+	personID core.PersonID,
+	defaultProjID core.ProjectID,
+	defaultHomeCurrency string,
+	targets []*Asset,
+) error {
+	if len(targets) == 0 {
+		return nil
+	}
+
+	if s.investments == nil {
+		for _, a := range targets {
+			if a == nil {
+				continue
+			}
+			hc := defaultHomeCurrency
+			if hc == "" {
+				hc = s.resolveProjectCurrency(ctx, a.ProjectID())
+			}
+			a.EvaluateValuation(hc, s.rateProvider)
+		}
+		return nil
+	}
+
+	// Group targets by projectID so multi-project Find loads each project's investments once.
+	projAssetsMap := make(map[core.ProjectID][]*Asset)
+	for _, a := range targets {
+		if a == nil {
+			continue
+		}
+		pid := a.ProjectID()
+		if pid.IsNil() {
+			pid = defaultProjID
+		}
+		projAssetsMap[pid] = append(projAssetsMap[pid], a)
+	}
+
+	for pid, projTargets := range projAssetsMap {
+		hc := defaultHomeCurrency
+		if hc == "" || pid != defaultProjID {
+			hc = s.resolveProjectCurrency(ctx, pid)
+		}
+
+		invs, err := s.investments.ListProjectInvestments(ctx, pid)
+		if err != nil {
+			return err
+		}
+		if len(invs) > 0 {
+			allProjectCol, err := s.assets.Find(ctx, CollectionFilter{OwnerID: personID, ProjectID: pid})
+			if err != nil {
+				return err
+			}
+			hierarchy := NewAssetHierarchy()
+			assetByID := make(map[core.AssetID]*Asset)
+			if allProjectCol != nil {
+				for _, pa := range allProjectCol.Elements() {
+					if pa != nil {
+						hierarchy.AddAsset(pa)
+						assetByID[pa.ID()] = pa
+					}
+				}
+			}
+			for _, ta := range projTargets {
+				if ta != nil && assetByID[ta.ID()] == nil {
+					hierarchy.AddAsset(ta)
+					assetByID[ta.ID()] = ta
+				}
+			}
+			for _, pa := range assetByID {
+				for _, ch := range pa.Children() {
+					hierarchy.AddEdge(pa.ID(), ch.ChildID, ch.SharePercentage)
+				}
+			}
+
+			directAll, _ := NormalizeProjectInvestments(invs, hc, s.rateProvider)
+			hierarchy.ApplyToAssets(directAll, hc)
+
+			for _, ta := range projTargets {
+				if ta == nil {
+					continue
+				}
+				if updated, ok := assetByID[ta.ID()]; ok && updated != nil && updated != ta {
+					ta.AssignValuation(updated.DirectCost(), updated.TotalCost(), updated.Children(), updated.Parents())
+				}
+				ta.EvaluateValuation(hc, s.rateProvider)
+			}
+			continue
+		}
+
+		for _, ta := range projTargets {
+			if ta != nil {
+				ta.EvaluateValuation(hc, s.rateProvider)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *ServiceImpl) computeScheduleWarnings(ctx context.Context, personID core.PersonID, target *Asset) []string {
+	warnings := make([]string, 0)
+	if target == nil || target.TargetCompletionDate() == nil {
+		return warnings
+	}
+	parentTarget := utcCalendarDay(*target.TargetCompletionDate())
+	for _, ch := range target.Children() {
+		childAsset, err := s.assets.FindOne(ctx, Filter{ID: ch.ChildID, ProjectID: target.ProjectID(), OwnerID: personID})
+		if err != nil || childAsset == nil || childAsset.TargetCompletionDate() == nil {
+			continue
+		}
+		childTarget := utcCalendarDay(*childAsset.TargetCompletionDate())
+		if childTarget.After(parentTarget) {
+			warnings = append(warnings, "child_target_exceeds_parent:"+childAsset.ID().String())
+		}
+	}
+	for _, p := range target.Parents() {
+		parentAsset, err := s.assets.FindOne(ctx, Filter{ID: p.ParentID, ProjectID: target.ProjectID(), OwnerID: personID})
+		if err != nil || parentAsset == nil || parentAsset.TargetCompletionDate() == nil {
+			continue
+		}
+		if parentTarget.After(utcCalendarDay(*parentAsset.TargetCompletionDate())) {
+			warnings = append(warnings, "child_target_exceeds_parent:"+parentAsset.ID().String())
+		}
+	}
+	return warnings
 }
 
 func preserveOrWrapError(err error, fallbackMsg string) error {

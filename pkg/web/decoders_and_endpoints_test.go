@@ -260,13 +260,34 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 			t.Errorf("expected bad type_id error")
 		}
 
-		// Price <= 0
-		bodyZeroPrice, _ := json.Marshal(CreateAssetDTO{Name: "Laptop", TypeID: validUUID, Price: 0})
-		reqZeroPrice, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyZeroPrice))
-		reqZeroPrice = mux.SetURLVars(reqZeroPrice, map[string]string{"project_id": validUUID})
-		_, err = decodeCreateAssetRequest(context.Background(), reqZeroPrice)
+		// Negative price fails; omitted target price succeeds as unbudgeted asset
+		bodyNegPrice, _ := json.Marshal(CreateAssetDTO{Name: "Laptop", TypeID: validUUID, Price: -5})
+		reqNegPrice, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyNegPrice))
+		reqNegPrice = mux.SetURLVars(reqNegPrice, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetRequest(context.Background(), reqNegPrice)
 		if err == nil {
 			t.Errorf("expected price <= 0 error")
+		}
+
+		bodyZeroWithPay, _ := json.Marshal(CreateAssetDTO{Name: "Laptop", TypeID: validUUID, Price: 0, WithPayment: true})
+		reqZeroWithPay, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyZeroWithPay))
+		reqZeroWithPay = mux.SetURLVars(reqZeroWithPay, map[string]string{"project_id": validUUID})
+		_, err = decodeCreateAssetRequest(context.Background(), reqZeroWithPay)
+		if err == nil {
+			t.Errorf("expected with_payment price <= 0 error")
+		}
+
+		bodyUnbudgeted, _ := json.Marshal(CreateAssetDTO{Name: "Coffee Routine", TargetCompletionDate: "2026-08-01"})
+		reqUnbudgeted, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyUnbudgeted))
+		reqUnbudgeted = mux.SetURLVars(reqUnbudgeted, map[string]string{"project_id": validUUID})
+		unbCmdAny, err := decodeCreateAssetRequest(context.Background(), reqUnbudgeted)
+		if err != nil {
+			t.Errorf("expected unbudgeted asset decode success, got: %v", err)
+		} else {
+			unbCmd := unbCmdAny.(asset.CreateAssetCommand)
+			if unbCmd.TargetCompletionDate == nil || unbCmd.TargetPrice != nil {
+				t.Errorf("unexpected unbudgeted cmd: %+v", unbCmd)
+			}
 		}
 
 		// Empty currency
@@ -419,12 +440,19 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 			t.Errorf("expected bad type_id error")
 		}
 
-		bodyZeroPrice, _ := json.Marshal(UpdateAssetDTO{Name: "Laptop", TypeID: validUUID, Price: 0})
-		reqZeroPrice, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyZeroPrice))
-		reqZeroPrice = mux.SetURLVars(reqZeroPrice, map[string]string{"project_id": validUUID, "asset_id": validUUID})
-		_, err = decodeUpdateAssetRequest(context.Background(), reqZeroPrice)
+		bodyNegPrice, _ := json.Marshal(UpdateAssetDTO{Name: "Laptop", TypeID: validUUID, Price: -10})
+		reqNegPrice, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyNegPrice))
+		reqNegPrice = mux.SetURLVars(reqNegPrice, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		_, err = decodeUpdateAssetRequest(context.Background(), reqNegPrice)
 		if err == nil {
 			t.Errorf("expected price <= 0 error")
+		}
+
+		bodyUnbudgetedUpd, _ := json.Marshal(UpdateAssetDTO{Name: "Laptop", TargetCompletionDate: "2026-09-01", ClearTargetDate: false})
+		reqUnbudgetedUpd, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyUnbudgetedUpd))
+		reqUnbudgetedUpd = mux.SetURLVars(reqUnbudgetedUpd, map[string]string{"project_id": validUUID, "asset_id": validUUID})
+		if _, err := decodeUpdateAssetRequest(context.Background(), reqUnbudgetedUpd); err != nil {
+			t.Errorf("expected optional target_price update decode success, got: %v", err)
 		}
 
 		bodyEmptyCurr, _ := json.Marshal(UpdateAssetDTO{Name: "Laptop", TypeID: validUUID, Price: 100, Currency: ""})
@@ -630,6 +658,106 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		_, err = ep(context.Background(), cmd)
 		if err != nil {
 			t.Errorf("unexpected link children endpoint error: %v", err)
+		}
+	})
+
+	t.Run("Schedule and CashFlowForecast decoders and endpoints", func(t *testing.T) {
+		pID := core.NewProjectID()
+		aID := core.NewAssetID()
+
+		// decodeUpdateScheduleRequest errors
+		reqBadProj, _ := http.NewRequest(http.MethodPatch, "/", nil)
+		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad", "asset_id": aID.String()})
+		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadProj); err == nil {
+			t.Errorf("expected invalid project id error")
+		}
+		reqBadAst, _ := http.NewRequest(http.MethodPatch, "/", nil)
+		reqBadAst = mux.SetURLVars(reqBadAst, map[string]string{"project_id": pID.String(), "asset_id": "bad"})
+		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadAst); err == nil {
+			t.Errorf("expected invalid asset id error")
+		}
+		reqBadStart, _ := http.NewRequest(http.MethodPatch, "/", bytes.NewReader([]byte(`{"start_date":"not-a-date"}`)))
+		reqBadStart = mux.SetURLVars(reqBadStart, map[string]string{"project_id": pID.String(), "asset_id": aID.String()})
+		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadStart); err == nil {
+			t.Errorf("expected invalid start date error")
+		}
+		reqBadTarget, _ := http.NewRequest(http.MethodPatch, "/", bytes.NewReader([]byte(`{"target_completion_date":"not-a-date"}`)))
+		reqBadTarget = mux.SetURLVars(reqBadTarget, map[string]string{"project_id": pID.String(), "asset_id": aID.String()})
+		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadTarget); err == nil {
+			t.Errorf("expected invalid target completion date error")
+		}
+
+		// decodeUpdateScheduleRequest clear via empty string
+		reqClear, _ := http.NewRequest(http.MethodPatch, "/", bytes.NewReader([]byte(`{"start_date":"2026-05-01","target_completion_date":""}`)))
+		reqClear = mux.SetURLVars(reqClear, map[string]string{"project_id": pID.String(), "asset_id": aID.String()})
+		cmdAny, err := decodeUpdateScheduleRequest(context.Background(), reqClear)
+		if err != nil {
+			t.Fatalf("unexpected clear schedule error: %v", err)
+		}
+		schedCmd := cmdAny.(asset.RescheduleAssetCommand)
+		if !schedCmd.ClearTargetDate || schedCmd.StartDate == nil {
+			t.Errorf("expected ClearTargetDate=true and StartDate parsed, got %+v", schedCmd)
+		}
+
+		ast, _ := asset.CreateAsset(aID, "Renovation", "", pID, money.New(5000, "UAH"), time.Now().UTC(), asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "Max"}, asset.AssetStatusActive, nil, nil)
+		schedEP := makeUpdateScheduleEndpoint(&mockAssetService{asset: ast})
+		respAny, err := schedEP(context.Background(), schedCmd)
+		if err != nil {
+			t.Fatalf("unexpected schedule endpoint error: %v", err)
+		}
+		respDTO := respAny.(RescheduleAssetResponseDTO)
+		if respDTO.Asset.AssetID != aID.String() {
+			t.Errorf("unexpected schedule response asset id: %s", respDTO.Asset.AssetID)
+		}
+
+		// decodeGetCashFlowForecastRequest validation & success
+		reqBadFCProj, _ := http.NewRequest(http.MethodGet, "/projects/bad/cashflow-forecast", nil)
+		reqBadFCProj = mux.SetURLVars(reqBadFCProj, map[string]string{"project_id": "bad"})
+		if _, err := decodeGetCashFlowForecastRequest(context.Background(), reqBadFCProj); err == nil {
+			t.Errorf("expected invalid project id error")
+		}
+		reqBadAsOf, _ := http.NewRequest(http.MethodGet, "/projects/"+pID.String()+"/cashflow-forecast?as_of_date=bad", nil)
+		reqBadAsOf = mux.SetURLVars(reqBadAsOf, map[string]string{"project_id": pID.String()})
+		if _, err := decodeGetCashFlowForecastRequest(context.Background(), reqBadAsOf); err == nil {
+			t.Errorf("expected invalid as_of_date error")
+		}
+
+		reqFC, _ := http.NewRequest(http.MethodGet, "/projects/"+pID.String()+"/cashflow-forecast?from_month=2026-05&to_month=2026-07&tag=home&as_of_date=2026-05-10", nil)
+		reqFC = mux.SetURLVars(reqFC, map[string]string{"project_id": pID.String()})
+		qAny, err := decodeGetCashFlowForecastRequest(context.Background(), reqFC)
+		if err != nil {
+			t.Fatalf("unexpected decodeGetCashFlowForecastRequest error: %v", err)
+		}
+		fcEP := makeGetCashFlowForecastEndpoint(&mockAssetService{})
+		if _, err := fcEP(context.Background(), qAny); err != nil {
+			t.Errorf("unexpected GetCashFlowForecast endpoint error: %v", err)
+		}
+
+		// Direct toCashFlowForecastDTO conversion coverage with populated fields
+		nowUTC := time.Date(2026, time.May, 10, 0, 0, 0, 0, time.UTC)
+		estDate := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+		dto := toCashFlowForecastDTO(&asset.CashFlowForecast{
+			ProjectID: pID,
+			Currency:  "UAH",
+			FromMonth: "2026-05",
+			ToMonth:   "2026-06",
+			Months: []asset.MonthCashFlow{{
+				Month:                "2026-05",
+				ScheduledDemandCents: 200,
+				AssetDemands:         []asset.AssetDemandItem{{AssetID: aID, AssetName: "Renovation", DemandCents: 200}},
+			}},
+			Assets: []asset.AssetForecastItem{{
+				AssetID:              aID,
+				AssetName:            "Renovation",
+				Status:               asset.AssetStatusActive,
+				StartDate:            nowUTC,
+				TargetCompletionDate: &estDate,
+				CompletedDate:        &nowUTC,
+				EstimatedCompletion:  &estDate,
+			}},
+		})
+		if len(dto.Months) != 1 || len(dto.Assets) != 1 || dto.Assets[0].EstimatedCompletion == nil || *dto.Assets[0].EstimatedCompletion != "2026-07" {
+			t.Errorf("unexpected DTO mapping: %+v", dto)
 		}
 	})
 }
