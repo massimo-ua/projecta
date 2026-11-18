@@ -72,6 +72,10 @@ export class Auth {
   async #refreshToken() {
     const refreshToken = localStorage.getItem(this.#refreshTokenKey);
     const accessToken = localStorage.getItem(this.#tokenKey);
+    if (!refreshToken || !accessToken) {
+      this.logout();
+      throw new Error('Missing authentication tokens');
+    }
     const response = await fetch(`${this.#baseUrl}/refresh`, {
       method: 'POST',
       headers: {

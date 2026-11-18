@@ -2,10 +2,8 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Rhymond/go-money"
@@ -270,7 +268,7 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 	}
 
 	var req CreateAssetDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err = decodeJSONBody(r, &req)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
@@ -313,9 +311,11 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 
 	var completedDate *time.Time
 	if req.CompletedDate != "" {
-		if cd, err := parseFlexibleDate(req.CompletedDate); err == nil {
-			completedDate = &cd
+		cd, err := parseFlexibleDate(req.CompletedDate)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid completed date", err)
 		}
+		completedDate = &cd
 	}
 
 	var targetCompletionDate *time.Time
@@ -357,7 +357,7 @@ func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (i
 	}
 
 	var req CreateAssetFromPaymentsDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err = decodeJSONBody(r, &req)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
@@ -461,7 +461,7 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 	}
 
 	var req UpdateAssetDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err = decodeJSONBody(r, &req)
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
@@ -501,9 +501,11 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 
 	var completedDate *time.Time
 	if req.CompletedDate != "" {
-		if cd, err := parseFlexibleDate(req.CompletedDate); err == nil {
-			completedDate = &cd
+		cd, err := parseFlexibleDate(req.CompletedDate)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid completed date", err)
 		}
+		completedDate = &cd
 	}
 
 	var targetCompletionDate *time.Time
@@ -545,25 +547,9 @@ func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, e
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	limit := 10
-	offset := 0
-	if l := r.URL.Query().Get("limit"); l != "" {
-		val, err := strconv.Atoi(l)
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid limit", err)
-		}
-		if val > 0 {
-			limit = val
-		}
-	}
-	if o := r.URL.Query().Get("offset"); o != "" {
-		val, err := strconv.Atoi(o)
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid offset", err)
-		}
-		if val >= 0 {
-			offset = val
-		}
+	pagination, err := parsePagination(r, core.DefaultLimit)
+	if err != nil {
+		return nil, err
 	}
 
 	var typeID uuid.UUID
@@ -578,13 +564,10 @@ func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, e
 	name := r.URL.Query().Get("name")
 
 	return asset.CollectionFilter{
-		Pagination: core.Pagination{
-			Limit:  limit,
-			Offset: offset,
-		},
-		ProjectID: projectUUID,
-		TypeID:    typeID,
-		Name:      name,
+		Pagination: pagination,
+		ProjectID:  projectUUID,
+		TypeID:     typeID,
+		Name:       name,
 	}, nil
 }
 
@@ -609,7 +592,7 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 	}
 
 	var req LinkChildAssetDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -802,7 +785,7 @@ func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interfa
 	}
 
 	var req AssignInvestmentsDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -852,7 +835,7 @@ func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, 
 	}
 
 	var req GroupAssetsDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -917,7 +900,7 @@ func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{},
 	}
 
 	var req LinkChildrenDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -1000,7 +983,7 @@ func decodeUpdateScheduleRequest(_ context.Context, r *http.Request) (interface{
 	}
 
 	var req RescheduleAssetDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 

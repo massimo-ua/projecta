@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -12,50 +13,74 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/project"
 )
 
-func decodeRegisterUser(_ context.Context, r *http.Request) (any, error) {
-	var req RegisterUserDTO
-	err := json.NewDecoder(r.Body).Decode(&req)
-	return req, err
+const (
+	maxJSONBodyBytes   int64 = 1 << 20 // 1 MiB
+	maxPaginationLimit int   = 1000
+)
+
+func decodeJSONBody(r *http.Request, dst any) error {
+	if r == nil || r.Body == nil {
+		return io.EOF
+	}
+	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxJSONBodyBytes)).Decode(dst)
 }
 
-func decodeLoginUser(_ context.Context, r *http.Request) (any, error) {
-	var req LoginDTO
-	err := json.NewDecoder(r.Body).Decode(&req)
-	return req, err
-}
+func parsePagination(r *http.Request, defaultLimit int) (core.Pagination, error) {
+	limit := defaultLimit
+	offset := 0
 
-func decodeRefreshUserToken(_ context.Context, r *http.Request) (any, error) {
-	var req RefreshTokenDTO
-	err := json.NewDecoder(r.Body).Decode(&req)
-	return req, err
-}
-
-func decodeListUsersRequest(_ context.Context, r *http.Request) (any, error) {
-	var err error
-	var limit, offset int
-	offsetStr := r.URL.Query().Get("offset")
-	limitStr := r.URL.Query().Get("limit")
-
-	if limitStr != "" {
-		limit, err = strconv.Atoi(limitStr)
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid limit", err)
+	q := r.URL.Query()
+	if limitStr := q.Get("limit"); limitStr != "" {
+		val, err := strconv.Atoi(limitStr)
+		if err != nil || val <= 0 {
+			return core.Pagination{}, exceptions.NewValidationException("invalid limit", err)
 		}
-	} else {
-		limit = core.DefaultLimit
+		if val > maxPaginationLimit {
+			val = maxPaginationLimit
+		}
+		limit = val
 	}
 
-	if offsetStr != "" {
-		offset, err = strconv.Atoi(offsetStr)
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid offset", err)
+	if offsetStr := q.Get("offset"); offsetStr != "" {
+		val, err := strconv.Atoi(offsetStr)
+		if err != nil || val < 0 {
+			return core.Pagination{}, exceptions.NewValidationException("invalid offset", err)
 		}
+		offset = val
 	}
 
 	return core.Pagination{
 		Limit:  limit,
 		Offset: offset,
 	}, nil
+}
+
+func decodeRegisterUser(_ context.Context, r *http.Request) (any, error) {
+	var req RegisterUserDTO
+	if err := decodeJSONBody(r, &req); err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+	return req, nil
+}
+
+func decodeLoginUser(_ context.Context, r *http.Request) (any, error) {
+	var req LoginDTO
+	if err := decodeJSONBody(r, &req); err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+	return req, nil
+}
+
+func decodeRefreshUserToken(_ context.Context, r *http.Request) (any, error) {
+	var req RefreshTokenDTO
+	if err := decodeJSONBody(r, &req); err != nil {
+		return nil, exceptions.NewValidationException("invalid request", err)
+	}
+	return req, nil
+}
+
+func decodeListUsersRequest(_ context.Context, r *http.Request) (any, error) {
+	return parsePagination(r, core.DefaultLimit)
 }
 
 type AssignRolesRequest struct {
@@ -76,8 +101,7 @@ func decodeAssignRolesRequest(_ context.Context, r *http.Request) (any, error) {
 	}
 
 	var req AssignRolesDTO
-	err = json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request payload", err)
 	}
 
@@ -88,39 +112,14 @@ func decodeAssignRolesRequest(_ context.Context, r *http.Request) (any, error) {
 }
 
 func decodeListProjectsRequest(_ context.Context, r *http.Request) (any, error) {
-	var err error
-	var limit, offset int
-	offsetStr := r.URL.Query().Get("offset")
-	limitStr := r.URL.Query().Get("limit")
-	name := r.URL.Query().Get("name")
-
-	if limitStr != "" {
-		limit, err = strconv.Atoi(limitStr)
-
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid limit", err)
-		}
-	} else {
-		limit = core.DefaultLimit
-	}
-
-	if offsetStr != "" {
-		offset, err = strconv.Atoi(offsetStr)
-
-		if err != nil {
-			return nil, exceptions.NewValidationException("invalid offset", err)
-		}
+	pagination, err := parsePagination(r, core.DefaultLimit)
+	if err != nil {
+		return nil, err
 	}
 
 	filter := project.ProjectCollectionFilter{
-		Pagination: core.Pagination{
-			Limit:  limit,
-			Offset: offset,
-		},
-	}
-
-	if name != "" {
-		filter.Name = name
+		Pagination: pagination,
+		Name:       r.URL.Query().Get("name"),
 	}
 
 	return filter, nil

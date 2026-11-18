@@ -233,8 +233,12 @@ func (s *ProjectServiceImpl) Create(ctx context.Context, command CreateProjectCo
 	})
 
 	if p != nil {
-		p.EvaluateTagBudgets(s.converter)
-		return p, nil
+		if p.IsOwnedByPerson(command.PersonID) {
+			p.EvaluateTagBudgets(s.converter)
+			return p, nil
+		}
+		p = nil
+		err = exceptions.NotFoundError
 	}
 
 	if errors.Is(err, exceptions.NotFoundError) {

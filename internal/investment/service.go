@@ -284,6 +284,10 @@ func (s *ServiceImpl) Update(ctx context.Context, command UpdateInvestmentComman
 }
 
 func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error {
+	if _, err := core.AuthGuard(ctx); err != nil {
+		return exceptions.NewUnauthorizedException(failedToUpdateInvestment, err)
+	}
+
 	if len(investmentIDs) == 0 {
 		return nil
 	}
@@ -293,9 +297,18 @@ func (s *ServiceImpl) AssignToAsset(ctx context.Context, assetID core.AssetID, i
 		return err
 	}
 
+	if !ast.ProjectID.IsNil() {
+		if _, err := s.verifyProjectAccess(ctx, ast.ProjectID); err != nil {
+			return err
+		}
+	}
+
 	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
 		for _, invID := range investmentIDs {
-			inv, err := s.investments.FindOne(txCtx, Filter{ID: invID})
+			inv, err := s.investments.FindOne(txCtx, Filter{
+				ID:        invID,
+				ProjectID: ast.ProjectID,
+			})
 			if err != nil {
 				return nil, err
 			}

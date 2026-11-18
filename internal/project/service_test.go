@@ -150,6 +150,18 @@ func TestProjectService(t *testing.T) {
 		t.Fatalf("Create existing project error: %v", err)
 	}
 
+	// Create with name matching a shared (non-owned) project creates a new project instead of returning the shared one
+	otherOwner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Other", CanHaveProjects: true}
+	sharedProj, _ := project.NewProject(core.NewProjectID(), "Project 1", "Shared Desc", otherOwner, time.Now(), time.Now())
+	svcSharedCollision := project.NewProjectService(&mockProjectRepo{project: sharedProj}, peopleSvc)
+	pCreatedInstead, err := svcSharedCollision.Create(context.Background(), project.CreateProjectCommand{PersonID: owner.PersonID, Name: "Project 1"})
+	if err != nil || pCreatedInstead == nil {
+		t.Fatalf("Create on shared name collision error: %v", err)
+	}
+	if pCreatedInstead.ID() == sharedProj.ID() || !pCreatedInstead.IsOwnedByPerson(owner.PersonID) {
+		t.Errorf("expected newly created owned project, got %+v", pCreatedInstead)
+	}
+
 	// Create new project with tag budgets
 	projRepoNotFound := &mockProjectRepo{findErr: exceptions.NotFoundError}
 	svcNew := project.NewProjectService(projRepoNotFound, peopleSvc)

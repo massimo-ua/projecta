@@ -27,8 +27,9 @@ type Repository interface {
 
 // AssetDescriptor represents the narrow read view of an asset needed by the investment context.
 type AssetDescriptor struct {
-	ID   core.AssetID
-	Name string
+	ID        core.AssetID
+	ProjectID core.ProjectID
+	Name      string
 }
 
 // AssetReader is a consumer-owned interface providing read access to assets.

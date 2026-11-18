@@ -582,4 +582,56 @@ func TestInvestmentService(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("AssignToAsset enforces auth and project access", func(t *testing.T) {
+		astWithProj := investment.AssetDescriptor{ID: core.NewAssetID(), ProjectID: project.ID, Name: "Vehicle"}
+		inv, err := investment.NewInvestment(
+			core.NewInvestmentID(),
+			project.ID,
+			"UAH",
+			astWithProj.ID,
+			astWithProj.Name,
+			owner,
+			investment.ResourceTypeMoney,
+			money.New(100, "UAH"),
+			nil, nil, nil, "", "",
+			"Desc",
+			time.Now(),
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		repo := &mockInvestmentRepo{inv: inv}
+		svc := investment.NewService(
+			&mockDb{},
+			repo,
+			&mockAssetRepo{asset: astWithProj},
+			&mockProjectRepo{project: project},
+			&mockPeopleService{owner: owner},
+		)
+
+		// Unauthenticated fails
+		if err := svc.AssignToAsset(context.Background(), astWithProj.ID, []core.InvestmentID{inv.ID()}); err == nil {
+			t.Errorf("expected unauthorized error")
+		}
+
+		// Project access error fails
+		svcProjErr := investment.NewService(
+			&mockDb{},
+			repo,
+			&mockAssetRepo{asset: astWithProj},
+			&mockProjectRepo{err: context.Canceled},
+			&mockPeopleService{owner: owner},
+		)
+		if err := svcProjErr.AssignToAsset(authedCtx, astWithProj.ID, []core.InvestmentID{inv.ID()}); err == nil {
+			t.Errorf("expected error when project access check fails")
+		}
+
+		// Success
+		if err := svc.AssignToAsset(authedCtx, astWithProj.ID, []core.InvestmentID{inv.ID()}); err != nil {
+			t.Errorf("unexpected error on AssignToAsset: %v", err)
+		}
+	})
 }

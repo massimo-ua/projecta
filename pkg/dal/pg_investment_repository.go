@@ -279,8 +279,15 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 	}
 	defer rows.Close()
 
-	records := make([]*investmentRecord, 0, total)
-	invIDs := make([]string, 0, total)
+	capHint := total
+	if filter.Limit > 0 && filter.Limit < capHint {
+		capHint = filter.Limit
+	}
+	if capHint < 0 {
+		capHint = 0
+	}
+	records := make([]*investmentRecord, 0, capHint)
+	invIDs := make([]string, 0, capHint)
 	for rows.Next() {
 		rec, err := scanInvestmentRecord(rows)
 		if err != nil {

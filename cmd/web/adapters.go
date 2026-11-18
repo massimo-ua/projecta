@@ -182,8 +182,9 @@ func (a *investmentAssetReaderAdapter) FindAsset(ctx context.Context, projectID 
 		return investment.AssetDescriptor{}, err
 	}
 	return investment.AssetDescriptor{
-		ID:   ast.ID(),
-		Name: ast.Name(),
+		ID:        ast.ID(),
+		ProjectID: ast.ProjectID(),
+		Name:      ast.Name(),
 	}, nil
 }
 

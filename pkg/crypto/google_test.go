@@ -90,6 +90,26 @@ func TestGoogleAuthProvider(t *testing.T) {
 		if err := provider.validateClaims(validClaimsPlain); err != nil {
 			t.Errorf("expected valid claims for plain issuer, got %v", err)
 		}
+
+		// Missing exp claim
+		missingExpClaims := jwt.MapClaims{
+			"aud": "valid-client-id",
+			"iss": "accounts.google.com",
+		}
+		if err := provider.validateClaims(missingExpClaims); err == nil {
+			t.Errorf("expected error for missing exp claim")
+		}
+
+		// Unverified email claim
+		unverifiedEmailClaims := jwt.MapClaims{
+			"exp":            float64(time.Now().Add(10 * time.Minute).Unix()),
+			"aud":            "valid-client-id",
+			"iss":            "accounts.google.com",
+			"email_verified": false,
+		}
+		if err := provider.validateClaims(unverifiedEmailClaims); err == nil {
+			t.Errorf("expected error for unverified email")
+		}
 	})
 
 	t.Run("full ValidateToken integration with httptest server", func(t *testing.T) {
@@ -124,11 +144,13 @@ func TestGoogleAuthProvider(t *testing.T) {
 		defer func() { googleCertsURL = oldCertsURL }()
 
 		token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-			"sub":  "google-user-id-999",
-			"name": "Jane Smith",
-			"exp":  float64(time.Now().Add(time.Hour).Unix()),
-			"aud":  "test-client-id",
-			"iss":  "https://accounts.google.com",
+			"sub":            "google-user-id-999",
+			"name":           "Jane Smith",
+			"email":          "jane@example.com",
+			"email_verified": true,
+			"exp":            float64(time.Now().Add(time.Hour).Unix()),
+			"aud":            "test-client-id",
+			"iss":            "https://accounts.google.com",
 		})
 		token.Header["kid"] = kid
 		idTokenStr, err := token.SignedString(privateKey)
@@ -164,7 +186,7 @@ func TestGoogleAuthProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected ValidateToken success, got error: %v", err)
 		}
-		if claims.Sub != "google-user-id-999" || claims.DisplayName != "Jane Smith" {
+		if claims.Sub != "google-user-id-999" || claims.DisplayName != "Jane Smith" || claims.Email != "jane@example.com" {
 			t.Errorf("unexpected claims payload: %+v", claims)
 		}
 	})

@@ -99,6 +99,25 @@ func TestDecodeParseStatementRequest(t *testing.T) {
 			t.Errorf("expected error for missing file")
 		}
 	})
+
+	t.Run("oversized upload rejected", func(t *testing.T) {
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, err := writer.CreateFormFile("file", "big.pdf")
+		if err != nil {
+			t.Fatalf("failed to create form file: %v", err)
+		}
+		_, _ = part.Write(bytes.Repeat([]byte("A"), (10<<20)+1024))
+		_ = writer.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/projects/"+projID.String()+"/payments/parse-statement", body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req = mux.SetURLVars(req, map[string]string{"project_id": projID.String()})
+
+		if _, err := decodeParseStatementRequest(context.Background(), req); err == nil {
+			t.Errorf("expected error for oversized multipart payload")
+		}
+	})
 }
 
 func TestMakeParseStatementEndpoint(t *testing.T) {

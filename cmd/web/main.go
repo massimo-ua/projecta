@@ -157,8 +157,11 @@ func main() {
 		Addr:    config.HttpUri,
 		Handler: webAPI,
 		// Add timeouts for security
-		ReadTimeout:  config.HttpReadTimeout,
-		WriteTimeout: config.HttpWriteTimeout,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       config.HttpReadTimeout,
+		WriteTimeout:      config.HttpWriteTimeout,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	go func() {

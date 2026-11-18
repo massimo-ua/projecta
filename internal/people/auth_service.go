@@ -3,11 +3,14 @@ package people
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
+
+const maxRefreshTokenAge = 7 * 24 * time.Hour
 
 type AuthServiceImpl struct {
 	db               core.DbConnection
@@ -88,49 +91,54 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 		return nil, exceptions.NewInternalException("invitation repository not configured", nil)
 	}
 
-	invitation, err := s.invitationRepo.FindByCodeHash(ctx, invCode.Hash())
-	if err != nil {
-		return nil, exceptions.NewNotFoundException("invitation not found", err)
-	}
+	redeemFn := func(txCtx context.Context) (any, error) {
+		invitation, err := s.invitationRepo.FindByCodeHash(txCtx, invCode.Hash())
+		if err != nil {
+			return nil, exceptions.NewNotFoundException("invitation not found", err)
+		}
 
-	personID, err := invitation.ValidateForRedemption(claims.Email)
-	if err != nil {
-		return nil, err
-	}
-
-	person, err := s.peopleRepository.FindByID(ctx, personID)
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to find invited user", err)
-	}
-
-	if err := person.AcceptInvitation(claims, provider); err != nil {
-		return nil, err
-	}
-
-	if err := invitation.Complete(); err != nil {
-		return nil, exceptions.NewValidationException(err.Error(), err)
-	}
-
-	updateFn := func(txCtx context.Context) (any, error) {
-		if err := s.peopleRepository.Save(txCtx, person); err != nil {
+		personID, err := invitation.ValidateForRedemption(claims.Email)
+		if err != nil {
 			return nil, err
+		}
+
+		person, err := s.peopleRepository.FindByID(txCtx, personID)
+		if err != nil {
+			return nil, exceptions.NewInternalException("failed to find invited user", err)
+		}
+
+		if err := person.AcceptInvitation(claims, provider); err != nil {
+			return nil, err
+		}
+
+		if err := invitation.Complete(); err != nil {
+			return nil, exceptions.NewValidationException(err.Error(), err)
+		}
+
+		if err := s.peopleRepository.Save(txCtx, person); err != nil {
+			return nil, exceptions.NewInternalException("failed to update invited user", err)
 		}
 
 		if err := s.invitationRepo.Save(txCtx, invitation); err != nil {
-			return nil, err
+			return nil, exceptions.NewInternalException("failed to update invitation", err)
 		}
 
-		return nil, nil
+		return person, nil
 	}
 
+	var result any
 	if s.db != nil {
-		if _, err := s.db.Tx(ctx, updateFn); err != nil {
-			return nil, exceptions.NewInternalException("failed to update invited user", err)
-		}
+		result, err = s.db.Tx(ctx, redeemFn)
 	} else {
-		if _, err := updateFn(ctx); err != nil {
-			return nil, exceptions.NewInternalException("failed to update invited user", err)
-		}
+		result, err = redeemFn(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	person, ok := result.(*Person)
+	if !ok || person == nil {
+		return nil, exceptions.NewInternalException("failed to redeem invitation", nil)
 	}
 
 	return s.authorizePerson(ctx, person.ID())
@@ -160,29 +168,33 @@ func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing
 	claims, err := s.tokenProvider.DecodeToken(tokenRing.AccessToken())
 
 	if err != nil {
-		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
+	}
+
+	if claims.IssuedAt > 0 && time.Since(time.Unix(claims.IssuedAt, 0)) > maxRefreshTokenAge {
+		return nil, exceptions.NewUnauthorizedException("refresh token has expired", core.RefreshTokenIsInvalid)
 	}
 
 	tokenID, err := uuid.Parse(claims.ID)
 
 	if err != nil {
-		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
 	}
 
 	if ok := s.tokenProvider.ValidateRefreshToken(tokenID, tokenRing.RefreshToken()); !ok {
-		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", core.RefreshTokenIsInvalid)
 	}
 
 	personID, err := core.ParsePersonID(claims.Sub)
 
 	if err != nil {
-		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
 	}
 
 	person, err := s.peopleRepository.FindByID(ctx, personID)
 
 	if err != nil {
-		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
 	}
 
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
@@ -192,7 +204,7 @@ func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing
 	})
 
 	if err != nil {
-		return nil, errors.Join(core.RefreshTokenIsInvalid, err)
+		return nil, exceptions.NewInternalException("failed to generate tokens", errors.Join(core.RefreshTokenIsInvalid, err))
 	}
 
 	return authResponse, nil

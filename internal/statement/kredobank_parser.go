@@ -3,12 +3,19 @@ package statement
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dslipak/pdf"
+)
+
+const (
+	maxPDFBytes     = 10 << 20 // 10 MiB
+	maxPDFPlainText = 5 << 20  // 5 MiB
+	maxPDFPages     = 100
 )
 
 var (
@@ -31,10 +38,30 @@ func (p *KredobankParser) Parse(data []byte) (*ParsedStatement, error) {
 
 // ParseKredobankStatement parses a Kredobank account statement PDF file and returns
 // statement metadata along with all expense (negative) transactions converted to positive amounts.
-func ParseKredobankStatement(data []byte) (*ParsedStatement, error) {
+func ParseKredobankStatement(data []byte) (parsed *ParsedStatement, retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			parsed = nil
+			retErr = fmt.Errorf("failed to parse PDF safely")
+		}
+	}()
+
+	if len(data) == 0 || len(data) > maxPDFBytes {
+		return nil, fmt.Errorf("invalid PDF size")
+	}
+
+	if !bytes.HasPrefix(data, []byte("%PDF-")) {
+		return nil, fmt.Errorf("invalid PDF header")
+	}
+
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open PDF: %w", err)
+	}
+
+	numPages := reader.NumPage()
+	if numPages <= 0 || numPages > maxPDFPages {
+		return nil, fmt.Errorf("PDF page count out of allowed range")
 	}
 
 	var fullTextBuf bytes.Buffer
@@ -42,7 +69,7 @@ func ParseKredobankStatement(data []byte) (*ParsedStatement, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read PDF plain text: %w", err)
 	}
-	_, _ = fullTextBuf.ReadFrom(b)
+	_, _ = fullTextBuf.ReadFrom(io.LimitReader(b, maxPDFPlainText))
 	fullText := fullTextBuf.String()
 
 	if !strings.Contains(fullText, "Кредобанк") && !strings.Contains(fullText, "Рух коштів за рахунком") {
@@ -76,7 +103,6 @@ func ParseKredobankStatement(data []byte) (*ParsedStatement, error) {
 		y         float64
 	}
 
-	numPages := reader.NumPage()
 	for p := 1; p <= numPages; p++ {
 		page := reader.Page(p)
 		rows, err := page.GetTextByRow()

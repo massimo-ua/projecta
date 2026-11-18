@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+
 	ht "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
@@ -14,7 +17,6 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
-	"net/http"
 )
 
 func errorCodeToHttpStatus(e exceptions.Exception) int {
@@ -44,9 +46,14 @@ func encodeErrorResponse(_ context.Context, err error, w http.ResponseWriter) {
 
 	var exception exceptions.Exception
 	if ok := errors.As(err, &exception); ok {
-		w.WriteHeader(errorCodeToHttpStatus(exception))
+		status := errorCodeToHttpStatus(exception)
+		message := exception.Message
+		if exception.Code == exceptions.Internal || status == http.StatusInternalServerError {
+			message = "Internal Error"
+		}
+		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(errorResponseDTO{
-			Message: exception.Message,
+			Message: message,
 			Code:    exception.Code,
 		})
 		return
@@ -57,6 +64,25 @@ func encodeErrorResponse(_ context.Context, err error, w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(errorResponseDTO{
 		Message: appErr.Message,
 		Code:    appErr.Code,
+	})
+}
+
+func securityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				encodeErrorResponse(r.Context(), exceptions.NewInternalException("internal panic", nil), w)
+			}
+		}()
+
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		if !strings.HasPrefix(r.URL.Path, "/swagger") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -98,10 +124,10 @@ func MakeHTTPHandler(
 	withAuth := append(options, ht.ServerBefore(jwtMiddleware(authTokenProvider)))
 
 	r.Methods(http.MethodPost).Path("/register").Handler(ht.NewServer(
-		peopleEndpoints.Register,
+		requireRole(string(people.RoleAdministrator), peopleEndpoints.Register),
 		decodeRegisterUser,
 		encodeJSON(http.StatusCreated),
-		options...,
+		withAuth...,
 	))
 
 	r.Methods(http.MethodPost).Path("/login").Handler(ht.NewServer(
@@ -401,5 +427,5 @@ func MakeHTTPHandler(
 		))
 	}
 
-	return r, nil
+	return securityMiddleware(r), nil
 }

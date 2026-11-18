@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -156,13 +155,18 @@ func toProjectDTO(p *project.Project) ProjectDTO {
 		endDateStr = p.EndDate().Format(time.RFC3339)
 	}
 
+	shareToken := ""
+	if !p.IsShared() {
+		shareToken = p.ShareToken().String()
+	}
+
 	dto := ProjectDTO{
 		ProjectID:           p.ID().String(),
 		Name:                p.Name(),
 		Description:         p.Description(),
 		StartDate:           startDateStr,
 		EndDate:             endDateStr,
-		ShareToken:          p.ShareToken().String(),
+		ShareToken:          shareToken,
 		IsShared:            p.IsShared(),
 		MainCurrency:        mainCurrency,
 		Participants:        participants,
@@ -196,7 +200,7 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}
 
 	var req CreateProjectDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -379,7 +383,7 @@ func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}
 
 	var req UpdateProjectDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+	if err := decodeJSONBody(r, &req); err != nil && err != io.EOF {
 		return nil, exceptions.NewValidationException("invalid json", err)
 	}
 
@@ -450,7 +454,7 @@ func decodeUpdateProjectBudgetRequest(ctx context.Context, r *http.Request) (any
 	}
 
 	var req UpdateProjectBudgetDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+	if err := decodeJSONBody(r, &req); err != nil && err != io.EOF {
 		return nil, exceptions.NewValidationException("invalid json", err)
 	}
 

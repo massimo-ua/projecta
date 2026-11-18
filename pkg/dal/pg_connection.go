@@ -3,7 +3,6 @@ package dal
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
@@ -72,7 +71,7 @@ func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (a
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		p.mu.Unlock()
-		return nil, exceptions.NewInternalException(fmt.Sprintf("beginning transaction: %s", err.Error()), errors.Join(core.DbTransactionStartFailedError, err))
+		return nil, exceptions.NewInternalException("failed to begin transaction", errors.Join(core.DbTransactionStartFailedError, err))
 	}
 
 	// Create new context with transaction
@@ -84,11 +83,8 @@ func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (a
 	if err != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			return nil, exceptions.NewInternalException(
-				fmt.Sprintf(
-					"transaction rollback failed err: %s, rb err: %s",
-					err.Error(),
-					rollbackErr.Error(),
-				), errors.Join(core.DbTransactionRollbackFailedError, err, rollbackErr),
+				"transaction rollback failed",
+				errors.Join(core.DbTransactionRollbackFailedError, err, rollbackErr),
 			)
 		}
 
@@ -97,7 +93,7 @@ func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (a
 
 	if err = tx.Commit(ctx); err != nil {
 		return nil, exceptions.NewInternalException(
-			fmt.Sprintf("committing transaction: %s", err.Error()),
+			"failed to commit transaction",
 			errors.Join(core.DbTransactionCommitFailedError, err),
 		)
 	}

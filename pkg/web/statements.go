@@ -83,6 +83,9 @@ func decodeParseStatementRequest(_ context.Context, r *http.Request) (any, error
 	}
 
 	r.Body = http.MaxBytesReader(nil, r.Body, 10<<20)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		return nil, exceptions.NewValidationException("invalid multipart form payload", err)
+	}
 
 	file, _, err := r.FormFile("file")
 	if err != nil {

@@ -27,5 +27,7 @@ func TestLogger(t *testing.T) {
 
 		appEx := exceptions.NewNotFoundException("entity not found", errors.New("db error"))
 		log.Error("test error with exception", appEx, map[string]any{"secret": "hidden"})
+
+		log.Error("test error with nil err", nil, map[string]any{"Authorization": "Bearer abc"})
 	})
 }

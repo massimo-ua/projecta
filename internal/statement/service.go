@@ -85,7 +85,7 @@ func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.Project
 
 	statement, err := s.parser.Parse(fileData)
 	if err != nil {
-		return nil, exceptions.NewValidationException("failed to parse statement: "+err.Error(), err)
+		return nil, exceptions.NewValidationException("failed to parse statement", err)
 	}
 
 	existingMap := make(map[string]bool)
