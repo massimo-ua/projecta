@@ -30,7 +30,7 @@ func jwtMiddleware(tokenProvider core.AuthTokenProvider) ht.RequestFunc {
         }
 
         headerParts := strings.Split(aHeader, " ")
-        if len(headerParts) != 2 {
+        if len(headerParts) != 2 || !strings.EqualFold(headerParts[0], "Bearer") || strings.TrimSpace(headerParts[1]) == "" {
             return ctx
         }
 

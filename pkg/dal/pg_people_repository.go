@@ -86,9 +86,10 @@ func (r *PgPeopleRepository) FindCredentials(
 	err := r.db.QueryRow(
 		ctx,
 		`SELECT
-				"person_id", "identity"
-				FROM "credentials"
-				WHERE "provider" = $1 AND "registration_id" = $2`,
+				c."person_id", c."identity"
+				FROM "credentials" c
+				JOIN "people" p ON p."person_id" = c."person_id"
+				WHERE c."provider" = $1 AND c."registration_id" = $2 AND p."deleted_at" IS NULL`,
 		provider,
 		registrationID,
 	).Scan(
@@ -186,6 +187,7 @@ func (r *PgPeopleRepository) FindByID(ctx context.Context, personID core.PersonI
 	qb.From("people")
 	qb.Select("first_name", "last_name", "display_name")
 	qb.Where(qb.Equal("person_id", personID.String()))
+	qb.Where("deleted_at IS NULL")
 
 	sql, args := qb.Build()
 

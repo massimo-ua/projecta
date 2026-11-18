@@ -85,7 +85,7 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		db,
 		assetRepository,
 		&assetOwnerReaderAdapter{people: peopleService},
-		&assetProjectReaderAdapter{projects: projectRepository},
+		&assetProjectReaderAdapter{projects: projectRepository, rateProvider: rateProvider},
 		&investmentSourceAdapter{svc: investmentService},
 		moneyConverter,
 	)
@@ -157,8 +157,11 @@ func main() {
 		Addr:    config.HttpUri,
 		Handler: webAPI,
 		// Add timeouts for security
-		ReadTimeout:  config.HttpReadTimeout,
-		WriteTimeout: config.HttpWriteTimeout,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       config.HttpReadTimeout,
+		WriteTimeout:      config.HttpWriteTimeout,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	go func() {

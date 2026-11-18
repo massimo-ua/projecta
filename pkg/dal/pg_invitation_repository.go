@@ -144,7 +144,8 @@ func (r *PgInvitationRepository) FindByCodeHash(ctx context.Context, codeHash st
 		ctx,
 		`SELECT invitation_id, email, code_hash, expires_at, created_by, person_id, status, created_at, completed_at
 		 FROM invitations
-		 WHERE code_hash = $1`,
+		 WHERE code_hash = $1
+		 FOR UPDATE`,
 		codeHash,
 	)
 	return r.scanInvitation(row)

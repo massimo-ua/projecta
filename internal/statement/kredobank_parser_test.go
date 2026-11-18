@@ -81,3 +81,21 @@ func TestParseKredobankStatement_NonKredobank(t *testing.T) {
 		t.Errorf("expected error for non-Kredobank PDF, got nil")
 	}
 }
+
+func TestParseKredobankStatement_SizeAndHeaderGuards(t *testing.T) {
+	parser := statement.NewKredobankParser()
+
+	if _, err := parser.Parse(nil); err == nil {
+		t.Errorf("expected error for empty PDF input")
+	}
+
+	oversized := make([]byte, (10<<20)+1)
+	copy(oversized, "%PDF-1.4")
+	if _, err := parser.Parse(oversized); err == nil {
+		t.Errorf("expected error for oversized PDF input")
+	}
+
+	if _, err := parser.Parse([]byte("%PDF-1.4\ncorrupted-data")); err == nil {
+		t.Errorf("expected error for corrupted PDF input")
+	}
+}

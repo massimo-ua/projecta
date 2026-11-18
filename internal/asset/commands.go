@@ -13,14 +13,15 @@ type CreateAssetCommand struct {
 	Description   string
 	ProjectID     core.ProjectID
 	TypeID        uuid.UUID
-	Status        AssetStatus
-	StartDate     time.Time
-	CompletedDate *time.Time
-	TargetPrice   *money.Money
-	Price         *money.Money
-	AcquiredAt    time.Time
-	WithPayment   bool
-	Tags          []string
+	Status               AssetStatus
+	StartDate            time.Time
+	CompletedDate        *time.Time
+	TargetCompletionDate *time.Time
+	TargetPrice          *money.Money
+	Price                *money.Money
+	AcquiredAt           time.Time
+	WithPayment          bool
+	Tags                 []string
 }
 
 type CreateAssetFromInvestmentsCommand struct {
@@ -50,13 +51,15 @@ type UpdateAssetCommand struct {
 	Description   string
 	ProjectID     core.ProjectID
 	TypeID        uuid.UUID
-	Status        AssetStatus
-	StartDate     time.Time
-	CompletedDate *time.Time
-	TargetPrice   *money.Money
-	Price         *money.Money
-	AcquiredAt    time.Time
-	Tags          []string
+	Status               AssetStatus
+	StartDate            time.Time
+	CompletedDate        *time.Time
+	TargetCompletionDate *time.Time
+	ClearTargetDate      bool
+	TargetPrice          *money.Money
+	Price                *money.Money
+	AcquiredAt           time.Time
+	Tags                 []string
 }
 
 type RemoveAssetCommand struct {
@@ -97,4 +100,19 @@ type LinkChildrenCommand struct {
 	ChildAssetIDs []core.AssetID
 }
 
+type RescheduleAssetCommand struct {
+	AssetID              core.AssetID
+	ProjectID            core.ProjectID
+	StartDate            *time.Time
+	TargetCompletionDate *time.Time
+	ClearTargetDate      bool
+}
+
+type GetCashFlowForecastQuery struct {
+	ProjectID core.ProjectID
+	FromMonth string
+	ToMonth   string
+	AsOfDate  time.Time
+	Tag       string
+}
 

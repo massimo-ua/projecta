@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-kit/kit/endpoint"
@@ -40,7 +39,7 @@ func decodeCreateInvitationRequest(ctx context.Context, r *http.Request) (any, e
 	}
 
 	var req CreateInvitationDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request body", err)
 	}
 

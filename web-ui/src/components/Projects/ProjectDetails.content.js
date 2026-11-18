@@ -39,6 +39,10 @@ const projectDetailsContent = {
       en: 'Total / Analytics',
       uk: 'Підсумок / Аналітика',
     }),
+    planning: t({
+      en: 'Planning',
+      uk: 'Планування',
+    }),
     investments: t({
       en: 'Investments',
       uk: 'Інвестиції',

@@ -52,9 +52,12 @@ func (l *JsonLogger) Error(message string, err error, fields map[string]any) {
 	if isException {
 		errorCode = ex.Code
 		errorMessage = ex.Message
-	} else {
+	} else if err != nil {
 		errorCode = exceptions.Internal
 		errorMessage = err.Error()
+	} else {
+		errorCode = exceptions.Internal
+		errorMessage = "unknown error"
 	}
 
 	details = append(details, slog.Any("code", errorCode), slog.Any("message", errorMessage))
@@ -62,14 +65,29 @@ func (l *JsonLogger) Error(message string, err error, fields map[string]any) {
 	l.logger.Error(message, details...)
 }
 
+var defaultProtectedKeys = []string{
+	"password",
+	"token",
+	"secret",
+	"authorization",
+	"refresh_token",
+	"access_token",
+	"db_uri",
+	"jwt_secret",
+}
+
 func New(protectedKeys ...string) core.Logger {
+	allProtected := make([]string, 0, len(defaultProtectedKeys)+len(protectedKeys))
+	allProtected = append(allProtected, defaultProtectedKeys...)
+	allProtected = append(allProtected, protectedKeys...)
+
 	return &JsonLogger{
 		logger: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 				// Sanitize sensitive information
-				for _, key := range protectedKeys {
-					if a.Key == strings.ToLower(key) {
+				for _, key := range allProtected {
+					if strings.EqualFold(a.Key, key) {
 						return slog.Attr{
 							Key:   a.Key,
 							Value: slog.StringValue("***"),

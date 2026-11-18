@@ -103,7 +103,8 @@ func (i *Invitation) ValidateForRedemption(email string) (core.PersonID, error) 
 	if i.IsCompleted() {
 		return core.NilPersonID, exceptions.NewValidationException("invitation has already been completed", nil)
 	}
-	if email != "" && !strings.EqualFold(email, i.email) {
+	trimmedEmail := strings.TrimSpace(email)
+	if trimmedEmail == "" || !strings.EqualFold(trimmedEmail, i.email) {
 		return core.NilPersonID, exceptions.NewValidationException("google account email does not match invitation email", nil)
 	}
 	if i.personID == nil {

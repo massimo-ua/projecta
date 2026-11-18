@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -238,6 +239,12 @@ func (m *mockAssetService) Group(_ context.Context, _ asset.GroupAssetsCommand) 
 func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenCommand) error {
 	return m.err
 }
+func (m *mockAssetService) UpdateSchedule(_ context.Context, _ asset.RescheduleAssetCommand) (*asset.Asset, []string, error) {
+	return m.asset, nil, m.err
+}
+func (m *mockAssetService) GetCashFlowForecast(_ context.Context, _ asset.GetCashFlowForecastQuery) (*asset.CashFlowForecast, error) {
+	return &asset.CashFlowForecast{}, m.err
+}
 
 func TestWebHandlersAndEndpoints(t *testing.T) {
 	personID := core.NewPersonID()
@@ -263,17 +270,41 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	t.Run("POST /register success and error", func(t *testing.T) {
+	t.Run("POST /register requires admin auth and succeeds for admin", func(t *testing.T) {
 		body, _ := json.Marshal(RegisterUserDTO{
 			FirstName:        "John",
 			LastName:         "Doe",
 			Login:            "john@example.com",
-			Token:            "secret",
+			Token:            "secret123",
 			IdentityProvider: "LOCAL",
 		})
-		resp, err := http.Post(server.URL+"/register", "application/json", bytes.NewReader(body))
-		if err != nil || resp.StatusCode != http.StatusCreated {
-			t.Errorf("expected 201 Created for register, got %v", resp.StatusCode)
+		respUnauth, err := http.Post(server.URL+"/register", "application/json", bytes.NewReader(body))
+		if err != nil || respUnauth.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 Unauthorized for unauthenticated register, got %v, err=%v", respUnauth.StatusCode, err)
+		}
+
+		client := &http.Client{}
+		reqUser, _ := http.NewRequest(http.MethodPost, server.URL+"/register", bytes.NewReader(body))
+		reqUser.Header.Set("Authorization", "Bearer valid_token")
+		reqUser.Header.Set("Content-Type", "application/json")
+		respUser, err := client.Do(reqUser)
+		if err != nil || respUser.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403 Forbidden for non-admin register, got %v, err=%v", respUser.StatusCode, err)
+		}
+
+		tokenProv.claims.AuthTokenPayload.Roles = []string{string(people.RoleAdministrator)}
+		defer func() {
+			tokenProv.claims.AuthTokenPayload.Roles = []string{string(people.RoleUser)}
+		}()
+		reqAdmin, _ := http.NewRequest(http.MethodPost, server.URL+"/register", bytes.NewReader(body))
+		reqAdmin.Header.Set("Authorization", "Bearer valid_token")
+		reqAdmin.Header.Set("Content-Type", "application/json")
+		respAdmin, err := client.Do(reqAdmin)
+		if err != nil || respAdmin.StatusCode != http.StatusCreated {
+			t.Errorf("expected 201 Created for admin register, got %v, err=%v", respAdmin.StatusCode, err)
+		}
+		if respAdmin.Header.Get("X-Content-Type-Options") != "nosniff" || respAdmin.Header.Get("X-Frame-Options") != "DENY" {
+			t.Errorf("expected security headers on response, got %v", respAdmin.Header)
 		}
 	})
 
@@ -667,4 +698,66 @@ func TestEncodeJSON(t *testing.T) {
 	if err != nil || wNC.Code != http.StatusNoContent {
 		t.Errorf("expected StatusNoContent")
 	}
+}
+
+func TestSecurityMiddlewareAndSwaggerNoDirList(t *testing.T) {
+	t.Run("securityMiddleware recovers panic and sets security headers", func(t *testing.T) {
+		h := securityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/panic" {
+				panic("boom")
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		wPanic := httptest.NewRecorder()
+		reqPanic := httptest.NewRequest(http.MethodGet, "/panic", nil)
+		h.ServeHTTP(wPanic, reqPanic)
+		if wPanic.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500 on panic, got %d", wPanic.Code)
+		}
+		if wPanic.Header().Get("Cache-Control") != "no-store" || wPanic.Header().Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("expected security headers on panic response, got %v", wPanic.Header())
+		}
+
+		wSwagger := httptest.NewRecorder()
+		reqSwagger := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+		h.ServeHTTP(wSwagger, reqSwagger)
+		if wSwagger.Header().Get("Cache-Control") == "no-store" {
+			t.Errorf("did not expect no-store Cache-Control on /swagger path")
+		}
+
+		wErr := httptest.NewRecorder()
+		encodeErrorResponse(context.Background(), exceptions.NewInternalException("pq: leak sensitive table info", nil), wErr)
+		if wErr.Code != http.StatusInternalServerError || bytes.Contains(wErr.Body.Bytes(), []byte("sensitive")) || !bytes.Contains(wErr.Body.Bytes(), []byte("Internal Error")) {
+			t.Errorf("expected sanitized Internal Error JSON, got %d %s", wErr.Code, wErr.Body.String())
+		}
+	})
+
+	t.Run("noDirListFS blocks directory without index.html and serves directory with index.html", func(t *testing.T) {
+		dir := t.TempDir()
+		subNoIndex := dir + "/empty"
+		subWithIndex := dir + "/ui"
+		if err := os.MkdirAll(subNoIndex, 0o755); err != nil {
+			t.Fatalf("mkdir failed: %v", err)
+		}
+		if err := os.MkdirAll(subWithIndex, 0o755); err != nil {
+			t.Fatalf("mkdir failed: %v", err)
+		}
+		if err := os.WriteFile(subWithIndex+"/index.html", []byte("ok"), 0o600); err != nil {
+			t.Fatalf("write index failed: %v", err)
+		}
+
+		fs := noDirListFS{fs: http.Dir(dir)}
+		if _, err := fs.Open("/empty"); err == nil {
+			t.Errorf("expected error opening directory without index.html")
+		}
+		f, err := fs.Open("/ui")
+		if err != nil {
+			t.Fatalf("expected directory with index.html to open, got %v", err)
+		}
+		_ = f.Close()
+		if _, err := fs.Open("/missing"); err == nil {
+			t.Errorf("expected error for missing path")
+		}
+	})
 }

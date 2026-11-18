@@ -80,8 +80,10 @@ func (m *mockPeopleService) FindOwner(ctx context.Context, id core.PersonID) (as
 }
 
 type mockProjectRepo struct {
-	project asset.ProjectDescriptor
-	err     error
+	project     asset.ProjectDescriptor
+	ceilings    map[string]int64
+	ceilingsErr error
+	err         error
 }
 
 func (m *mockProjectRepo) FindProject(ctx context.Context, projectID core.ProjectID) (asset.ProjectDescriptor, error) {
@@ -91,14 +93,26 @@ func (m *mockProjectRepo) FindProject(ctx context.Context, projectID core.Projec
 	return m.project, nil
 }
 
+func (m *mockProjectRepo) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error) {
+	if m.ceilingsErr != nil {
+		return nil, m.ceilingsErr
+	}
+	if m.ceilings == nil {
+		return map[string]int64{}, nil
+	}
+	return m.ceilings, nil
+}
+
 type mockInvestmentSource struct {
-	items         []asset.InvestmentItem
-	findErr       error
-	assignErr     error
-	assignedAsset core.AssetID
-	assignedIDs   []core.InvestmentID
-	createErr     error
-	createdItem   asset.InitialInvestment
+	items           []asset.InvestmentItem
+	projectSummary  []asset.InvestmentRecordSummary
+	listErr         error
+	findErr         error
+	assignErr       error
+	assignedAsset   core.AssetID
+	assignedIDs     []core.InvestmentID
+	createErr       error
+	createdItem     asset.InitialInvestment
 }
 
 func (m *mockInvestmentSource) FindInvestments(ctx context.Context, projectID core.ProjectID, ids []core.InvestmentID) ([]asset.InvestmentItem, error) {
@@ -132,6 +146,13 @@ func (m *mockInvestmentSource) CreateInitialInvestment(ctx context.Context, item
 	}
 	m.createdItem = item
 	return nil
+}
+
+func (m *mockInvestmentSource) ListProjectInvestments(ctx context.Context, projectID core.ProjectID) ([]asset.InvestmentRecordSummary, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return m.projectSummary, nil
 }
 
 type mockRateProvider struct {

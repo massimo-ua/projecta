@@ -314,6 +314,20 @@ func TestLoginWithInvitation(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "does not match") {
 			t.Errorf("expected email mismatch error, got: %v", err)
 		}
+
+		emptyEmailGoogle := &mockThirdPartyAuth{
+			claims: &core.AuthTokenClaims{
+				AuthTokenPayload: core.AuthTokenPayload{
+					Sub:   "google_sub_888",
+					Email: "",
+				},
+			},
+		}
+		svcEmptyEmail := people.NewAuthService(&mockDb{}, peopleRepo, tokenProvider, hasher, emptyEmailGoogle, &mockInvitationRepo{inv: pendingInv})
+		_, err = svcEmptyEmail.LoginWithInvitation(context.Background(), "token", people.GOOGLE, rawCode)
+		if err == nil || !strings.Contains(err.Error(), "does not match") {
+			t.Errorf("expected email mismatch error for empty email, got: %v", err)
+		}
 	})
 
 	t.Run("LoginWithInvitation fails on unsupported provider", func(t *testing.T) {

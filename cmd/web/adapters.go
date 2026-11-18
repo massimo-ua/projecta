@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/Rhymond/go-money"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
@@ -61,7 +62,8 @@ func (a *projectPeopleAdapter) FindOwner(ctx context.Context, personID core.Pers
 }
 
 type assetProjectReaderAdapter struct {
-	projects project.ProjectRepository
+	projects     project.ProjectRepository
+	rateProvider currency.CurrencyRateProvider
 }
 
 func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (asset.ProjectDescriptor, error) {
@@ -79,7 +81,80 @@ func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID c
 	return asset.ProjectDescriptor{
 		ID:           proj.ID(),
 		MainCurrency: proj.MainCurrency(),
+		StartDate:    proj.StartDate(),
+		EndDate:      proj.EndDate(),
 	}, nil
+}
+
+func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error) {
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+	proj, err := a.projects.FindOne(ctx, project.ProjectFilter{
+		ProjectID:   projectID,
+		RequesterID: personID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if a.rateProvider != nil {
+		proj.EvaluateTagBudgets(&currencyConverterAdapter{provider: a.rateProvider})
+	} else {
+		proj.EvaluateTagBudgets(nil)
+	}
+
+	ceilings := make(map[string]int64, len(months))
+	hasStart := !proj.StartDate().IsZero()
+	hasEnd := !proj.EndDate().IsZero()
+	var startMonth, startDay, endDay time.Time
+	if hasStart {
+		su := proj.StartDate().UTC()
+		startMonth = time.Date(su.Year(), su.Month(), 1, 0, 0, 0, 0, time.UTC)
+		startDay = time.Date(su.Year(), su.Month(), su.Day(), 0, 0, 0, 0, time.UTC)
+	}
+	if hasEnd {
+		eu := proj.EndDate().UTC()
+		endDay = time.Date(eu.Year(), eu.Month(), eu.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	for _, mStr := range months {
+		parsed, err := time.Parse("2006-01", mStr)
+		if err != nil {
+			continue
+		}
+		mStart := time.Date(parsed.Year(), parsed.Month(), 1, 0, 0, 0, 0, time.UTC)
+		mEnd := mStart.AddDate(0, 1, -1)
+		if hasStart && mEnd.Before(startDay) {
+			continue
+		}
+		if hasEnd && mStart.After(endDay) {
+			continue
+		}
+
+		scheduleIdx := 1
+		if hasStart {
+			scheduleIdx = (mStart.Year()-startMonth.Year())*12 + int(mStart.Month()-startMonth.Month()) + 1
+		}
+
+		var total int64
+		for _, tb := range proj.TagBudgets() {
+			if tb.ResourceType() != project.BudgetResourceMoney {
+				continue
+			}
+			evalIdx := scheduleIdx
+			if evalIdx < 1 || evalIdx > 12 {
+				if tb.Frequency() == project.FrequencyOnce {
+					continue
+				}
+				evalIdx = 1
+			}
+			total += tb.ProjectedHomeAmountForMonth(evalIdx, mStart.Year(), mStart.Month())
+		}
+		ceilings[mStr] = total
+	}
+	return ceilings, nil
 }
 
 type assetOwnerReaderAdapter struct {
@@ -107,8 +182,9 @@ func (a *investmentAssetReaderAdapter) FindAsset(ctx context.Context, projectID 
 		return investment.AssetDescriptor{}, err
 	}
 	return investment.AssetDescriptor{
-		ID:   ast.ID(),
-		Name: ast.Name(),
+		ID:        ast.ID(),
+		ProjectID: ast.ProjectID(),
+		Name:      ast.Name(),
 	}, nil
 }
 
@@ -222,6 +298,64 @@ func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID
 		})
 	}
 	return items, nil
+}
+
+func (a *investmentSourceAdapter) ListProjectInvestments(ctx context.Context, projectID core.ProjectID) ([]asset.InvestmentRecordSummary, error) {
+	const pageSize = 500
+	offset := 0
+	var out []asset.InvestmentRecordSummary
+
+	for {
+		col, err := a.svc.Find(ctx, investment.CollectionFilter{
+			ProjectID: projectID,
+			Pagination: core.Pagination{
+				Limit:  pageSize,
+				Offset: offset,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if col == nil {
+			break
+		}
+		for _, inv := range col.Elements() {
+			if inv == nil {
+				continue
+			}
+			var hours float64
+			if th := inv.TimeHours(); th != nil {
+				hours = *th
+			}
+			srcAllocs := inv.AssetAllocations()
+			allocs := make([]asset.InvestmentAllocation, 0, len(srcAllocs))
+			for _, al := range srcAllocs {
+				allocs = append(allocs, asset.InvestmentAllocation{
+					AssetID:         al.AssetID,
+					SharePercentage: al.SharePercentage,
+				})
+			}
+			if len(allocs) == 0 && !inv.PrimaryAssetID().IsNil() {
+				allocs = append(allocs, asset.InvestmentAllocation{
+					AssetID:         inv.PrimaryAssetID(),
+					SharePercentage: 100.0,
+				})
+			}
+			out = append(out, asset.InvestmentRecordSummary{
+				ID:               inv.ID(),
+				ResourceType:     string(inv.ResourceType()),
+				Amount:           inv.Amount(),
+				TimeHours:        hours,
+				Date:             inv.Date(),
+				AssetAllocations: allocs,
+			})
+		}
+		if len(col.Elements()) < pageSize || len(out) >= col.Total() {
+			break
+		}
+		offset += pageSize
+	}
+	return out, nil
 }
 
 func (a *investmentSourceAdapter) AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error {
