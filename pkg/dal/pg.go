@@ -34,7 +34,7 @@ func (r *PgRepository) getConnection(ctx context.Context) (PgDb, error) {
 	db, err := r.db.GetConnection(ctx)
 
 	if err != nil {
-		return nil, exceptions.NewInternalException(err.Error(), errors.Join(core.DbFailedToGetConnectionError, err))
+		return nil, exceptions.NewInternalException("database connection error", errors.Join(core.DbFailedToGetConnectionError, err))
 	}
 
 	return db, nil

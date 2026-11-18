@@ -2,9 +2,7 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Rhymond/go-money"
@@ -216,7 +214,7 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	}
 
 	var req CreateInvestmentDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
@@ -245,9 +243,9 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 
 	var date time.Time
 	if req.Date != "" {
-		date, _ = time.Parse(time.RFC3339, req.Date)
-		if date.IsZero() {
-			date, _ = time.Parse("2006-01-02", req.Date)
+		date, err = parseFlexibleDate(req.Date)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid date", err)
 		}
 	}
 
@@ -304,13 +302,16 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	}
 
 	var req UpdateInvestmentDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
 	var assetID core.AssetID
 	if req.AssetID != "" {
-		assetID, _ = core.ParseAssetID(req.AssetID)
+		assetID, err = core.ParseAssetID(req.AssetID)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid asset id", err)
+		}
 	}
 
 	var assetAllocations []investment.InvestmentAssetInput
@@ -327,15 +328,18 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 
 	var date time.Time
 	if req.Date != "" {
-		date, _ = time.Parse(time.RFC3339, req.Date)
-		if date.IsZero() {
-			date, _ = time.Parse("2006-01-02", req.Date)
+		date, err = parseFlexibleDate(req.Date)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid date", err)
 		}
 	}
 
 	var resType investment.ResourceType
 	if req.ResourceType != "" {
-		resType, _ = investment.ToResourceType(req.ResourceType)
+		resType, err = investment.ToResourceType(req.ResourceType)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid resource type", err)
+		}
 	}
 
 	var amount *money.Money
@@ -377,36 +381,31 @@ func decodeListInvestmentsRequest(_ context.Context, r *http.Request) (interface
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	limit := 50
-	offset := 0
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if val, err := strconv.Atoi(l); err == nil && val > 0 {
-			limit = val
-		}
-	}
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if val, err := strconv.Atoi(o); err == nil && val >= 0 {
-			offset = val
-		}
+	pagination, err := parsePagination(r, 50)
+	if err != nil {
+		return nil, err
 	}
 
 	var assetID core.AssetID
 	if a := r.URL.Query().Get("asset_id"); a != "" {
-		assetID, _ = core.ParseAssetID(a)
+		assetID, err = core.ParseAssetID(a)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid asset id", err)
+		}
 	}
 
 	var resType investment.ResourceType
 	if rt := r.URL.Query().Get("resource_type"); rt != "" {
-		resType, _ = investment.ToResourceType(rt)
+		resType, err = investment.ToResourceType(rt)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid resource type", err)
+		}
 	}
 
 	tag := r.URL.Query().Get("tag")
 
 	return investment.CollectionFilter{
-		Pagination: core.Pagination{
-			Limit:  limit,
-			Offset: offset,
-		},
+		Pagination:   pagination,
 		ProjectID:    projectID,
 		AssetID:      assetID,
 		ResourceType: resType,
@@ -452,31 +451,43 @@ func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (in
 	}
 
 	var req CreateBatchInvestmentsDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(r, &req); err != nil {
 		return nil, exceptions.NewValidationException("invalid request", err)
 	}
 
 	var defaultAsset core.AssetID
 	if req.DefaultAsset != "" {
-		defaultAsset, _ = core.ParseAssetID(req.DefaultAsset)
+		defaultAsset, err = core.ParseAssetID(req.DefaultAsset)
+		if err != nil {
+			return nil, exceptions.NewValidationException("invalid default asset id", err)
+		}
 	}
 
 	var items []investment.BatchCreateInvestmentItem
 	for _, it := range req.Items {
 		var aID core.AssetID
 		if it.AssetID != "" {
-			aID, _ = core.ParseAssetID(it.AssetID)
+			aID, err = core.ParseAssetID(it.AssetID)
+			if err != nil {
+				return nil, exceptions.NewValidationException("invalid asset id in item", err)
+			}
 		}
 
 		var date time.Time
 		if it.Date != "" {
-			date, _ = time.Parse(time.RFC3339, it.Date)
-			if date.IsZero() {
-				date, _ = time.Parse("2006-01-02", it.Date)
+			date, err = parseFlexibleDate(it.Date)
+			if err != nil {
+				return nil, exceptions.NewValidationException("invalid date in item", err)
 			}
 		}
 
-		resType, _ := investment.ToResourceType(it.ResourceType)
+		var resType investment.ResourceType
+		if it.ResourceType != "" {
+			resType, err = investment.ToResourceType(it.ResourceType)
+			if err != nil {
+				return nil, exceptions.NewValidationException("invalid resource type in item", err)
+			}
+		}
 		var amount *money.Money
 		if it.Amount > 0 && it.Currency != "" {
 			amount = money.New(it.Amount, it.Currency)

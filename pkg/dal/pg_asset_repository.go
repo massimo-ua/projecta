@@ -222,7 +222,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	}
 
 	if !filter.OwnerID.IsNil() {
-		qb.Where(fmt.Sprintf("(projecta_assets.owner_id = %s OR projecta_assets.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
+		qb.Where(fmt.Sprintf("projecta_assets.project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s AND deleted_at IS NULL UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
 	}
 
 	if filter.Name != "" {
@@ -305,7 +305,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	qb.From("projecta_assets")
 
 	if !filter.OwnerID.IsNil() {
-		qb.Where(fmt.Sprintf("(projecta_assets.owner_id = %s OR projecta_assets.project_id IN (SELECT project_id FROM projecta_project_shares WHERE person_id = %s))", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
+		qb.Where(fmt.Sprintf("projecta_assets.project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s AND deleted_at IS NULL UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
 	}
 
 	if !filter.ProjectID.IsNil() {

@@ -16,7 +16,9 @@ type AuthTokenPayload struct {
 
 type AuthTokenClaims struct {
 	AuthTokenPayload
-	ID string
+	ID        string
+	IssuedAt  int64
+	ExpiresAt int64
 }
 
 type AuthResponse struct {

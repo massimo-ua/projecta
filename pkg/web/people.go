@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-kit/kit/endpoint"
@@ -75,7 +74,7 @@ func decodeUpdateProfileRequest(ctx context.Context, r *http.Request) (any, erro
 	}
 
 	var dto UpdateProfileDTO
-	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
+	if err := decodeJSONBody(r, &dto); err != nil {
 		return nil, exceptions.NewValidationException("invalid request body", err)
 	}
 

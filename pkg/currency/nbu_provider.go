@@ -188,12 +188,11 @@ func (p *NBUCurrencyRateProvider) fetchRatesFromNBU() (map[string]float64, error
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, exceptions.NewInternalException(fmt.Sprintf("NBU API returned status %d: %s", resp.StatusCode, string(bodyBytes)), nil)
+		return nil, exceptions.NewInternalException(fmt.Sprintf("NBU API returned status %d", resp.StatusCode), nil)
 	}
 
 	var items []nbuRateItem
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&items); err != nil {
 		return nil, exceptions.NewInternalException("failed to decode NBU exchange rates response", err)
 	}
 

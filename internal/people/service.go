@@ -33,29 +33,32 @@ func NewUserService(
 }
 
 func (s *ServiceImpl) Register(ctx context.Context, command RegisterCommand) error {
-	displayName := ""
-	token := command.Token
-
-	login := command.Login
-
-	if command.IdentityProvider == LOCAL {
-		email, err := NewEmailAddress(command.Login)
-
-		if err != nil {
-			return err
-		}
-
-		login = email.String()
-
-		hash, err := s.hasher.Hash(command.Token)
-		if err != nil {
-			return err
-		}
-
-		token = hash
+	if command.IdentityProvider != LOCAL {
+		return exceptions.NewValidationException("unsupported identity provider for registration", nil)
 	}
 
-	credentials, err := NewCredentials(command.IdentityProvider, login, token)
+	if len(command.Token) < 8 || len([]byte(command.Token)) > 72 {
+		return exceptions.NewValidationException("password must be between 8 and 72 bytes", nil)
+	}
+
+	email, err := NewEmailAddress(command.Login)
+	if err != nil {
+		return err
+	}
+
+	login := email.String()
+
+	if existingID, _, findErr := s.peopleRepository.FindCredentials(ctx, LOCAL, login); findErr == nil && !existingID.IsNil() {
+		return exceptions.NewValidationException("user with this email already exists", nil)
+	}
+
+	hash, err := s.hasher.Hash(command.Token)
+	if err != nil {
+		return err
+	}
+
+	displayName := ""
+	credentials, err := NewCredentials(command.IdentityProvider, login, hash)
 
 	if err != nil {
 		return exceptions.NewValidationException(userRegistrationFailedError.Error(), err)

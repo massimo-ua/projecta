@@ -131,7 +131,7 @@ func TestJwtTokenProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("ValidateToken with no exp claim", func(t *testing.T) {
+	t.Run("ValidateToken with no exp claim returns error", func(t *testing.T) {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 			"jti":          uuid.New().String(),
 			"sub":          "user-no-exp",
@@ -139,12 +139,9 @@ func TestJwtTokenProvider(t *testing.T) {
 		})
 		tokenStr, _ := token.SignedString([]byte(secret))
 
-		claims, err := provider.ValidateToken(tokenStr)
-		if err != nil {
-			t.Fatalf("expected ValidateToken success when no exp claim, got %v", err)
-		}
-		if claims.Sub != "user-no-exp" {
-			t.Errorf("unexpected sub: %s", claims.Sub)
+		_, err := provider.ValidateToken(tokenStr)
+		if !errors.Is(err, core.AuthTokenIsInvalid) {
+			t.Fatalf("expected AuthTokenIsInvalid when no exp claim, got %v", err)
 		}
 	})
 
@@ -154,19 +151,62 @@ func TestJwtTokenProvider(t *testing.T) {
 			"sub":          "sub1",
 			"display_name": "disp1",
 			"roles":        []string{"admin", "editor"},
+			"exp":          float64(9999999999),
 		}
-		domain, err := provider.DecodeToken("")
-		_ = err
-		// Call toDomain directly via provider validation of manually created token
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 		tokenStr, _ := token.SignedString([]byte(secret))
 
-		domain, err = provider.ValidateToken(tokenStr)
+		domain, err := provider.ValidateToken(tokenStr)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(domain.Roles) != 2 || domain.Roles[0] != "admin" {
 			t.Errorf("unexpected roles: %v", domain.Roles)
+		}
+	})
+
+	t.Run("ValidateToken preserves empty non-nil roles slice and rejects malformed claims", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"jti":          uuid.New().String(),
+			"sub":          "sub1",
+			"display_name": "disp1",
+			"roles":        []string{},
+			"exp":          float64(9999999999),
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenStr, _ := token.SignedString([]byte(secret))
+
+		domain, err := provider.ValidateToken(tokenStr)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if domain.Roles == nil || len(domain.Roles) != 0 {
+			t.Errorf("expected non-nil empty roles slice, got %#v", domain.Roles)
+		}
+
+		// Non-string jti/sub/display_name/roles should fail cleanly without panic
+		badClaimsList := []jwt.MapClaims{
+			{"sub": "s", "exp": float64(9999999999)},
+			{"jti": "j", "exp": float64(9999999999)},
+			{"jti": "j", "sub": "s", "display_name": 123, "exp": float64(9999999999)},
+			{"jti": "j", "sub": "s", "roles": "admin", "exp": float64(9999999999)},
+			{"jti": "j", "sub": "s", "roles": []interface{}{123}, "exp": float64(9999999999)},
+		}
+		for i, bad := range badClaimsList {
+			tok := jwt.NewWithClaims(jwt.SigningMethodHS256, bad)
+			s, _ := tok.SignedString([]byte(secret))
+			if _, err := provider.ValidateToken(s); !errors.Is(err, core.AuthTokenIsInvalid) {
+				t.Errorf("case %d: expected AuthTokenIsInvalid, got %v", i, err)
+			}
+		}
+
+		// Alg=none rejected
+		noneTok := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.MapClaims{
+			"jti": "j", "sub": "s", "exp": float64(9999999999),
+		})
+		noneStr, _ := noneTok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+		if _, err := provider.ValidateToken(noneStr); !errors.Is(err, core.AuthTokenIsInvalid) {
+			t.Errorf("expected AuthTokenIsInvalid for alg=none, got %v", err)
 		}
 	})
 

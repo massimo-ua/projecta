@@ -3,15 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { authProvider } from '../api/index.js';
 import useCurrentUser from '../hooks/useCurrentUser.js';
 
-export const AuthenticatedOnly = (WrappedComponent) => function (props) {
+export const AuthenticatedOnly = (WrappedComponent) => function AuthenticatedGuard(props) {
   const navigate = useNavigate();
+  const isAuthenticated = authProvider.isAuthenticated();
 
   useEffect(() => {
-    const isAuthenticated = authProvider.isAuthenticated();
     if (!isAuthenticated) {
       navigate('/login');
     }
-  }, [navigate]);
+  }, [navigate, isAuthenticated]);
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return <WrappedComponent {...props} />;
 };

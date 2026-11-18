@@ -62,12 +62,10 @@ func (p *JwtTokenProvider) ValidateToken(token string) (*core.AuthTokenClaims, e
 	claims, err := p.readClaims(token)
 
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, errors.Join(core.AuthTokenIsInvalid, core.AuthTokenIsExpired, err)
+		}
 		return nil, errors.Join(core.AuthTokenIsInvalid, err)
-	}
-
-	now := time.Now().UTC()
-	if claims["exp"] != nil && now.Unix() > int64(claims["exp"].(float64)) {
-		return nil, core.AuthTokenIsExpired
 	}
 
 	return p.toDomain(claims)
@@ -84,25 +82,61 @@ func (p *JwtTokenProvider) DecodeToken(token string) (*core.AuthTokenClaims, err
 }
 
 func (p *JwtTokenProvider) toDomain(claims jwt.MapClaims) (*core.AuthTokenClaims, error) {
+	jti, ok := claims["jti"].(string)
+	if !ok || jti == "" {
+		return nil, core.AuthTokenIsInvalid
+	}
+
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return nil, core.AuthTokenIsInvalid
+	}
+
+	var displayName string
+	if rawDN, exists := claims["display_name"]; exists && rawDN != nil {
+		dn, ok := rawDN.(string)
+		if !ok {
+			return nil, core.AuthTokenIsInvalid
+		}
+		displayName = dn
+	}
+
 	var roles []string
-	if claims["roles"] != nil {
-		switch r := claims["roles"].(type) {
+	if rawRoles, exists := claims["roles"]; exists && rawRoles != nil {
+		roles = []string{}
+		switch r := rawRoles.(type) {
 		case []string:
-			roles = r
+			roles = append(roles, r...)
 		case []interface{}:
 			for _, item := range r {
-				if s, ok := item.(string); ok {
-					roles = append(roles, s)
+				s, ok := item.(string)
+				if !ok {
+					return nil, core.AuthTokenIsInvalid
 				}
+				roles = append(roles, s)
 			}
+		default:
+			return nil, core.AuthTokenIsInvalid
 		}
 	}
 
+	var issuedAt int64
+	if iat, err := claims.GetIssuedAt(); err == nil && iat != nil {
+		issuedAt = iat.Unix()
+	}
+
+	var expiresAt int64
+	if exp, err := claims.GetExpirationTime(); err == nil && exp != nil {
+		expiresAt = exp.Unix()
+	}
+
 	return &core.AuthTokenClaims{
-		ID: claims["jti"].(string),
+		ID:        jti,
+		IssuedAt:  issuedAt,
+		ExpiresAt: expiresAt,
 		AuthTokenPayload: core.AuthTokenPayload{
-			Sub:         claims["sub"].(string),
-			DisplayName: claims["display_name"].(string),
+			Sub:         sub,
+			DisplayName: displayName,
 			Roles:       roles,
 		},
 	}, nil
@@ -110,9 +144,15 @@ func (p *JwtTokenProvider) toDomain(claims jwt.MapClaims) (*core.AuthTokenClaims
 
 func (p *JwtTokenProvider) readClaims(token string) (jwt.MapClaims, error) {
 	claims := jwt.MapClaims{}
-	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(p.secret), nil
-	})
+	_, err := jwt.ParseWithClaims(
+		token,
+		claims,
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(p.secret), nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(),
+	)
 	return claims, err
 }
 

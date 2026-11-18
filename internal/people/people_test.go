@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -332,7 +333,7 @@ func TestUserService(t *testing.T) {
 		t.Fatalf("unexpected error registering local user: %v", err)
 	}
 
-	// Register GOOGLE success
+	// Register GOOGLE rejected
 	regCmdGoogle := people.RegisterCommand{
 		IdentityProvider: people.GOOGLE,
 		FirstName:        "Jane",
@@ -341,8 +342,8 @@ func TestUserService(t *testing.T) {
 		Token:            "google_token",
 	}
 	err = svc.Register(context.Background(), regCmdGoogle)
-	if err != nil {
-		t.Fatalf("unexpected error registering google user: %v", err)
+	if err == nil {
+		t.Errorf("expected error registering non-LOCAL user")
 	}
 
 	// Register error cases
@@ -354,6 +355,29 @@ func TestUserService(t *testing.T) {
 		t.Errorf("expected error for invalid email")
 	}
 
+	// Short password rejected
+	regShortPass := regCmdLocal
+	regShortPass.Token = "short"
+	err = svc.Register(context.Background(), regShortPass)
+	if err == nil {
+		t.Errorf("expected error for short password")
+	}
+
+	// Overlong password (>72 bytes) rejected
+	regLongPass := regCmdLocal
+	regLongPass.Token = string(make([]byte, 73))
+	err = svc.Register(context.Background(), regLongPass)
+	if err == nil {
+		t.Errorf("expected error for overlong password")
+	}
+
+	// Duplicate local login rejected
+	svcDup := people.NewUserService(&mockDb{}, &mockPeopleRepo{credPersonID: core.NewPersonID()}, hasher)
+	err = svcDup.Register(context.Background(), regCmdLocal)
+	if err == nil {
+		t.Errorf("expected error for duplicate email registration")
+	}
+
 	// Hasher error
 	svcHashErr := people.NewUserService(&mockDb{}, repo, &mockHasher{hashErr: errors.New("hash err")})
 	err = svcHashErr.Register(context.Background(), regCmdLocal)
@@ -362,7 +386,7 @@ func TestUserService(t *testing.T) {
 	}
 
 	// Invalid credentials (e.g. empty token)
-	regEmptyToken := regCmdGoogle
+	regEmptyToken := regCmdLocal
 	regEmptyToken.Token = ""
 	err = svc.Register(context.Background(), regEmptyToken)
 	if err == nil {
@@ -370,7 +394,7 @@ func TestUserService(t *testing.T) {
 	}
 
 	// Person creation error (e.g. short name)
-	regShortName := regCmdGoogle
+	regShortName := regCmdLocal
 	regShortName.FirstName = "A"
 	err = svc.Register(context.Background(), regShortName)
 	if err == nil {
@@ -488,6 +512,20 @@ func TestAuthService(t *testing.T) {
 		_, err = svcDecErr.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error when DecodeToken fails")
+		}
+
+		// Refresh token exceeded max age (IssuedAt > 7 days ago)
+		svcOldRefresh := newAuth(repo, &mockTokenProvider{
+			claims: &core.AuthTokenClaims{
+				ID:               uuid.New().String(),
+				IssuedAt:         time.Now().Add(-8 * 24 * time.Hour).Unix(),
+				AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String()},
+			},
+			valRef: true,
+		}, hasher, googleAuth)
+		_, err = svcOldRefresh.Refresh(context.Background(), ring)
+		if !errors.Is(err, core.RefreshTokenIsInvalid) {
+			t.Errorf("expected RefreshTokenIsInvalid for old IssuedAt, got %v", err)
 		}
 
 		// Invalid claims.ID (not a UUID)
@@ -635,7 +673,7 @@ func TestRegisterDefaultUserRole(t *testing.T) {
 		FirstName:        "John",
 		LastName:         "Doe",
 		IdentityProvider: people.LOCAL,
-		Token:            "secret",
+		Token:            "secret123",
 	})
 	if err != nil {
 		t.Fatalf("unexpected Register error: %v", err)
