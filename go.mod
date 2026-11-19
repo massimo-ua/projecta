@@ -12,7 +12,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/huandu/go-sqlbuilder v1.44.1
 	github.com/jackc/pgx/v5 v5.13.0
-	github.com/rabbitmq/amqp091-go v1.16.0
+	github.com/rabbitmq/amqp091-go v1.17.0
 	golang.org/x/crypto v0.59.0
 )
 
