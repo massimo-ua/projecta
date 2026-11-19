@@ -221,9 +221,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		qb.Where(qb.Equal("projecta_assets.project_id", filter.ProjectID.String()))
 	}
 
-	if !filter.OwnerID.IsNil() {
-		qb.Where(fmt.Sprintf("projecta_assets.project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s AND deleted_at IS NULL UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
-	}
+	applyAssetOwnerFilter(qb, filter.OwnerID)
 
 	if filter.Name != "" {
 		qb.Where(qb.ILike("projecta_assets.name", fmt.Sprintf("%s%%", filter.Name)))
@@ -304,9 +302,7 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_assets")
 
-	if !filter.OwnerID.IsNil() {
-		qb.Where(fmt.Sprintf("projecta_assets.project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s AND deleted_at IS NULL UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)", qb.Var(filter.OwnerID.String()), qb.Var(filter.OwnerID.String())))
-	}
+	applyAssetOwnerFilter(qb, filter.OwnerID)
 
 	if !filter.ProjectID.IsNil() {
 		qb.Where(qb.Equal("projecta_assets.project_id", filter.ProjectID.String()))
@@ -527,6 +523,17 @@ func (r *PgAssetRepository) loadCompositionsAndRollup(ctx context.Context, asset
 
 	// 3. Delegate valuation rollups & link resolution to domain aggregate
 	hierarchy.ApplyToAssets(directCosts, defaultCurr)
+}
+
+func applyAssetOwnerFilter(qb *sqlbuilder.SelectBuilder, ownerID core.PersonID) {
+	if ownerID.IsNil() {
+		return
+	}
+	qb.Where(fmt.Sprintf(
+		"projecta_assets.project_id IN (SELECT project_id FROM projecta_projects WHERE owner_id = %s UNION SELECT project_id FROM projecta_project_shares WHERE person_id = %s)",
+		qb.Var(ownerID.String()),
+		qb.Var(ownerID.String()),
+	))
 }
 
 func setupSelectQueryBuilder(qb *sqlbuilder.SelectBuilder) {
