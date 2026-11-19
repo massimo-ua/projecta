@@ -165,6 +165,7 @@ type mockPgDb struct {
 	rowsErr    error
 	isNotFound bool
 	zeroTotal  bool
+	queries    []string
 }
 
 func (m *mockPgDb) Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error) {
@@ -178,6 +179,7 @@ func (m *mockPgDb) Exec(ctx context.Context, sql string, arguments ...interface{
 }
 
 func (m *mockPgDb) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	m.queries = append(m.queries, sql)
 	if m.queryErr != nil {
 		return nil, m.queryErr
 	}
@@ -191,6 +193,7 @@ func (m *mockPgDb) Query(ctx context.Context, sql string, args ...interface{}) (
 }
 
 func (m *mockPgDb) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	m.queries = append(m.queries, sql)
 	if m.rowErr != nil {
 		return &mockRow{err: m.rowErr}
 	}
@@ -787,6 +790,44 @@ func TestPgAssetRepository(t *testing.T) {
 		err = astRepo.Remove(ctxRemZero, ast)
 		if err == nil {
 			t.Errorf("expected error on 0 rows deleted for asset")
+		}
+	})
+
+	t.Run("PgAssetRepository OwnerID filter queries valid projecta_projects columns", func(t *testing.T) {
+		targetPrice := int64(1000)
+		targetCurr := "USD"
+		mockDb := &mockPgDb{
+			rowVal: []any{
+				astID.String(), "Laptop", "Desc", pID.String(),
+				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
+				&targetPrice, &targetCurr, []string{"tag1"}, nil,
+			},
+			rowsData: [][]any{{
+				astID.String(), "Laptop", "Desc", pID.String(),
+				now, ownerID.String(), "J.D.", "ACTIVE", now, nil,
+				&targetPrice, &targetCurr, []string{"tag1"}, nil,
+			}},
+		}
+		ctx := withMockDb(authedCtx, mockDb)
+
+		if _, err := astRepo.FindOne(ctx, asset.Filter{ID: astID, ProjectID: pID, OwnerID: ownerID}); err != nil {
+			t.Fatalf("FindOne with OwnerID failed: %v", err)
+		}
+		if _, err := astRepo.Find(ctx, asset.CollectionFilter{ProjectID: pID, OwnerID: ownerID}); err != nil {
+			t.Fatalf("Find with OwnerID failed: %v", err)
+		}
+
+		sawProjectScope := false
+		for _, q := range mockDb.queries {
+			if strings.Contains(q, "projecta_projects") {
+				sawProjectScope = true
+				if strings.Contains(q, "deleted_at") {
+					t.Fatalf("unexpected deleted_at column reference on projecta_projects in query: %s", q)
+				}
+			}
+		}
+		if !sawProjectScope {
+			t.Fatalf("expected projecta_projects ownership filter in queries, got %v", mockDb.queries)
 		}
 	})
 
