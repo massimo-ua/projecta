@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useIntlayer } from 'react-intlayer';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { ChevronLeft, ChevronRight, Plus, Inbox } from 'lucide-react';
+import { Plus, Inbox } from 'lucide-react';
+import { Pagination } from '../../../models/Pagination';
+import { PaginationControls } from './PaginationControls';
 
 export function ListView({
   loading,
@@ -32,7 +34,10 @@ export function ListView({
   renderItemActions,
 }) {
   const content = useIntlayer('list-view');
-  const totalPages = Math.ceil(total / pageSize);
+  const pagination = useMemo(
+    () => new Pagination({ total, pageSize, currentPage }),
+    [total, pageSize, currentPage],
+  );
 
   if (loading) {
     return (
@@ -148,35 +153,10 @@ export function ListView({
       )}
 
       {/* Modern Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 pt-6 border-t border-border/50">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage <= 1}
-            onClick={() => onPaginationChange(currentPage - 1)}
-            className="gap-1.5 text-xs rounded-xl h-9 px-3 border-border/70 text-muted-foreground hover:text-foreground"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            <span>{String(content.previous)}</span>
-          </Button>
-
-          <span className="text-xs text-muted-foreground font-medium px-2">
-            {String(content.pageOf)} <strong className="text-foreground">{currentPage}</strong> {String(content.of)} {totalPages}
-          </span>
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => onPaginationChange(currentPage + 1)}
-            className="gap-1.5 text-xs rounded-xl h-9 px-3 border-border/70 text-muted-foreground hover:text-foreground"
-          >
-            <span>{String(content.next)}</span>
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
+      <PaginationControls
+        pagination={pagination}
+        onPageChange={onPaginationChange}
+      />
     </div>
   );
 }
