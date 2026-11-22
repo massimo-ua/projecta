@@ -418,6 +418,7 @@ func TestAuthService(t *testing.T) {
 	tokenProvider := &mockTokenProvider{
 		claims: &core.AuthTokenClaims{
 			ID:               uuid.New().String(),
+			IssuedAt:         time.Now().Unix(),
 			AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String()},
 		},
 		valRef: true,
@@ -529,7 +530,7 @@ func TestAuthService(t *testing.T) {
 		}
 
 		// Invalid claims.ID (not a UUID)
-		svcInvalidID := newAuth(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: "invalid-uuid"}}, hasher, googleAuth)
+		svcInvalidID := newAuth(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: "invalid-uuid", IssuedAt: time.Now().Unix()}}, hasher, googleAuth)
 		_, err = svcInvalidID.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error for invalid claim ID")
@@ -543,7 +544,7 @@ func TestAuthService(t *testing.T) {
 		}
 
 		// Invalid claims.Sub (not a UUID)
-		svcInvalidSub := newAuth(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: "invalid-uuid"}}, valRef: true}, hasher, googleAuth)
+		svcInvalidSub := newAuth(repo, &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), IssuedAt: time.Now().Unix(), AuthTokenPayload: core.AuthTokenPayload{Sub: "invalid-uuid"}}, valRef: true}, hasher, googleAuth)
 		_, err = svcInvalidSub.Refresh(context.Background(), ring)
 		if err == nil {
 			t.Errorf("expected error for invalid claim Sub")
@@ -740,7 +741,8 @@ func TestAuthService_TokenRolesPropagation(t *testing.T) {
 	var capturedPayload core.AuthTokenPayload
 	captureTokenProvider := &mockTokenProvider{
 		claims: &core.AuthTokenClaims{
-			ID: uuid.New().String(),
+			ID:       uuid.New().String(),
+			IssuedAt: time.Now().Unix(),
 			AuthTokenPayload: core.AuthTokenPayload{
 				Sub:   pID.String(),
 				Roles: p.RoleStrings(),

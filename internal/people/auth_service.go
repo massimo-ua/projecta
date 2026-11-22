@@ -63,7 +63,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*
 		return nil, err
 	}
 
-	return s.authorizePerson(ctx, personID)
+	return s.authorizePerson(ctx, personID, "login failed", loginFailedError)
 }
 
 func (s *AuthServiceImpl) LoginWithInvitation(
@@ -141,71 +141,91 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 		return nil, exceptions.NewInternalException("failed to redeem invitation", nil)
 	}
 
-	return s.authorizePerson(ctx, person.ID())
+	return s.authorizePerson(ctx, person.ID(), "login failed", loginFailedError)
 }
 
-func (s *AuthServiceImpl) authorizePerson(ctx context.Context, personID core.PersonID) (*core.AuthResponse, error) {
-	customer, err := s.peopleRepository.FindByID(ctx, personID)
-
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("login failed", errors.Join(loginFailedError, err))
-	}
-
-	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
-		Sub:         personID.String(),
-		DisplayName: customer.DisplayName(),
-		Roles:       customer.RoleStrings(),
-	})
-
-	if err != nil {
-		return nil, exceptions.NewInternalException("failed to generate tokens", errors.Join(loginFailedError, err))
-	}
-
-	return authResponse, nil
-}
-
-func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing) (*core.AuthResponse, error) {
-	claims, err := s.tokenProvider.DecodeToken(tokenRing.AccessToken())
-
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
-	}
-
-	if claims.IssuedAt > 0 && time.Since(time.Unix(claims.IssuedAt, 0)) > maxRefreshTokenAge {
-		return nil, exceptions.NewUnauthorizedException("refresh token has expired", core.RefreshTokenIsInvalid)
-	}
-
-	tokenID, err := uuid.Parse(claims.ID)
-
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
-	}
-
-	if ok := s.tokenProvider.ValidateRefreshToken(tokenID, tokenRing.RefreshToken()); !ok {
-		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", core.RefreshTokenIsInvalid)
-	}
-
-	personID, err := core.ParsePersonID(claims.Sub)
-
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
-	}
-
-	person, err := s.peopleRepository.FindByID(ctx, personID)
-
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
-	}
-
+func (s *AuthServiceImpl) issueTokens(person *Person) (*core.AuthResponse, error) {
 	authResponse, err := s.tokenProvider.GenerateTokenRing(core.AuthTokenPayload{
 		Sub:         person.ID().String(),
 		DisplayName: person.DisplayName(),
 		Roles:       person.RoleStrings(),
 	})
-
 	if err != nil {
-		return nil, exceptions.NewInternalException("failed to generate tokens", errors.Join(core.RefreshTokenIsInvalid, err))
+		return nil, exceptions.NewInternalException("failed to generate tokens", errors.Join(core.AuthTokenGenerationFailed, err))
 	}
 
 	return authResponse, nil
+}
+
+func (s *AuthServiceImpl) authorizePerson(
+	ctx context.Context,
+	personID core.PersonID,
+	unauthorizedMsg string,
+	unauthorizedErr error,
+) (*core.AuthResponse, error) {
+	person, err := s.peopleRepository.FindByID(ctx, personID)
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewUnauthorizedException(unauthorizedMsg, errors.Join(unauthorizedErr, err))
+		}
+		return nil, exceptions.NewInternalException("failed to load user", err)
+	}
+	if person == nil {
+		return nil, exceptions.NewUnauthorizedException(unauthorizedMsg, unauthorizedErr)
+	}
+
+	return s.issueTokens(person)
+}
+
+func (s *AuthServiceImpl) decodeRefreshClaims(tokenRing *core.TokenRing) (*core.AuthTokenClaims, error) {
+	if tokenRing == nil {
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", core.RefreshTokenIsInvalid)
+	}
+
+	claims, err := s.tokenProvider.DecodeToken(tokenRing.AccessToken())
+	if err != nil || claims == nil {
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
+	}
+
+	if claims.IssuedAt <= 0 {
+		return nil, exceptions.NewUnauthorizedException("refresh token is invalid", core.RefreshTokenIsInvalid)
+	}
+
+	if time.Since(time.Unix(claims.IssuedAt, 0)) > maxRefreshTokenAge {
+		return nil, exceptions.NewUnauthorizedException("refresh token has expired", core.RefreshTokenIsInvalid)
+	}
+
+	return claims, nil
+}
+
+func (s *AuthServiceImpl) validateRefreshToken(tokenRing *core.TokenRing) (core.PersonID, error) {
+	claims, err := s.decodeRefreshClaims(tokenRing)
+	if err != nil {
+		return core.NilPersonID, err
+	}
+
+	tokenID, err := uuid.Parse(claims.ID)
+	if err != nil || tokenID == uuid.Nil {
+		return core.NilPersonID, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
+	}
+
+	if !s.tokenProvider.ValidateRefreshToken(tokenID, tokenRing.RefreshToken()) {
+		return core.NilPersonID, exceptions.NewUnauthorizedException("refresh token is invalid", core.RefreshTokenIsInvalid)
+	}
+
+	personID, err := core.ParsePersonID(claims.Sub)
+	if err != nil || personID.IsNil() {
+		return core.NilPersonID, exceptions.NewUnauthorizedException("refresh token is invalid", errors.Join(core.RefreshTokenIsInvalid, err))
+	}
+
+	return personID, nil
+}
+
+func (s *AuthServiceImpl) Refresh(ctx context.Context, tokenRing *core.TokenRing) (*core.AuthResponse, error) {
+	personID, err := s.validateRefreshToken(tokenRing)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.authorizePerson(ctx, personID, "refresh token is invalid", core.RefreshTokenIsInvalid)
 }
