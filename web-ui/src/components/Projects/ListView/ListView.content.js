@@ -27,6 +27,14 @@ const listViewContent = {
       en: 'Next',
       uk: 'Наступна',
     }),
+    toBeginning: t({
+      en: 'To the beginning',
+      uk: 'На початок',
+    }),
+    toEnd: t({
+      en: 'To the end',
+      uk: 'В кінець',
+    }),
     pageOf: t({
       en: 'Page',
       uk: 'Сторінка',
