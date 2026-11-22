@@ -46,7 +46,7 @@ func (r *projectRecord) scanFields() []any {
 	}
 }
 
-func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Participant, tagBudgets ...[]project.TagBudget) (*project.Project, error) {
+func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Participant, sharedWith []core.PersonID, tagBudgets ...[]project.TagBudget) (*project.Project, error) {
 	pID, err := core.ParseProjectID(r.projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project id: %w", err)
@@ -91,7 +91,7 @@ func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Pa
 		curr = "UAH"
 	}
 
-	return project.ReconstituteProject(
+	return project.ReconstituteProjectWithShares(
 		pID,
 		r.name,
 		r.description,
@@ -102,6 +102,7 @@ func (r *projectRecord) toProject(isShared bool, sharedParticipants []project.Pa
 		isShared,
 		curr,
 		participants,
+		sharedWith,
 		tagBudgets...,
 	), nil
 }
@@ -117,6 +118,70 @@ func NewPgProjectRepository(db *PgDbConnection) *PgProjectRepository {
 }
 
 func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.ProjectFilter) (*project.Project, error) {
+	return r.findOneInternal(ctx, filter, false)
+}
+
+func (r *PgProjectRepository) GetProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) (*project.Project, error) {
+	if requesterID.IsNil() {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	}
+	p, err := r.findOneInternal(ctx, project.ProjectFilter{
+		ProjectID:   projectID,
+		RequesterID: requesterID,
+	}, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := project.CanPersonViewProject(requesterID, *p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (r *PgProjectRepository) UpdateProject(
+	ctx context.Context,
+	projectID core.ProjectID,
+	requesterID core.PersonID,
+	updateFn func(ctx context.Context, p *project.Project) (*project.Project, error),
+) error {
+	if requesterID.IsNil() {
+		return exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	}
+
+	execFn := func(txCtx context.Context) (any, error) {
+		existing, err := r.findOneInternal(txCtx, project.ProjectFilter{
+			ProjectID:   projectID,
+			RequesterID: requesterID,
+		}, true)
+		if err != nil {
+			return nil, err
+		}
+		if err := project.CanPersonViewProject(requesterID, *existing); err != nil {
+			return nil, err
+		}
+
+		updated, err := updateFn(txCtx, existing)
+		if err != nil {
+			return nil, err
+		}
+		if updated == nil {
+			return nil, exceptions.NewValidationException("updated project cannot be nil", nil)
+		}
+		if err := r.Update(txCtx, updated); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, execFn)
+		return err
+	}
+	_, err := execFn(ctx)
+	return err
+}
+
+func (r *PgProjectRepository) findOneInternal(ctx context.Context, filter project.ProjectFilter, forUpdate bool) (*project.Project, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_projects")
 	qb.Select(
@@ -147,6 +212,9 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 	}
 
 	sql, args := qb.Build()
+	if forUpdate {
+		sql += " FOR UPDATE OF projecta_projects"
+	}
 
 	var rec projectRecord
 	if err := r.db.QueryRow(ctx, sql, args...).Scan(rec.scanFields()...); err != nil {
@@ -162,7 +230,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 		return nil, err
 	}
 
-	sharedParts, err := r.fetchParticipants(ctx, pID)
+	sharedParts, sharedWith, err := r.fetchParticipants(ctx, pID)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +241,7 @@ func (r *PgProjectRepository) FindOne(ctx context.Context, filter project.Projec
 	}
 
 	isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
-	return rec.toProject(isShared, sharedParts, tagBudgets)
+	return rec.toProject(isShared, sharedParts, sharedWith, tagBudgets)
 }
 
 func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
@@ -214,7 +282,7 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		return nil, err
 	}
 
-	sharedParts, err := r.fetchParticipants(ctx, pID)
+	sharedParts, sharedWith, err := r.fetchParticipants(ctx, pID)
 	if err != nil {
 		return nil, err
 	}
@@ -224,13 +292,14 @@ func (r *PgProjectRepository) FindByShareToken(ctx context.Context, token uuid.U
 		return nil, err
 	}
 
-	return rec.toProject(false, sharedParts, tagBudgets)
+	return rec.toProject(false, sharedParts, sharedWith, tagBudgets)
 }
 
-func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID core.ProjectID) ([]project.Participant, error) {
+func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID core.ProjectID) ([]project.Participant, []core.PersonID, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_project_shares")
 	qb.Select(
+		"projecta_project_shares.person_id",
 		"people.first_name",
 		"people.last_name",
 		"people.display_name",
@@ -243,20 +312,26 @@ func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID c
 
 	rows, err := r.db.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	var participants []project.Participant
+	var sharedWith []core.PersonID
 	for rows.Next() {
 		var (
+			personIDStr string
 			firstName   string
 			lastName    string
 			displayName types.NullString
 		)
 
-		if err := rows.Scan(&firstName, &lastName, &displayName); err != nil {
-			return nil, err
+		if err := rows.Scan(&personIDStr, &firstName, &lastName, &displayName); err != nil {
+			return nil, nil, err
+		}
+
+		if pid, err := core.ParsePersonID(personIDStr); err == nil && !pid.IsNil() {
+			sharedWith = append(sharedWith, pid)
 		}
 
 		name := displayName.String
@@ -272,7 +347,7 @@ func (r *PgProjectRepository) fetchParticipants(ctx context.Context, projectID c
 		}
 	}
 
-	return participants, rows.Err()
+	return participants, sharedWith, rows.Err()
 }
 
 func (r *PgProjectRepository) fetchTagBudgets(ctx context.Context, projectID core.ProjectID) ([]project.TagBudget, error) {
@@ -578,7 +653,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 			return nil, err
 		}
 
-		sharedParts, err := r.fetchParticipants(ctx, pID)
+		sharedParts, sharedWith, err := r.fetchParticipants(ctx, pID)
 		if err != nil {
 			return nil, err
 		}
@@ -589,7 +664,7 @@ func (r *PgProjectRepository) Find(ctx context.Context, filter project.ProjectCo
 		}
 
 		isShared := (!filter.RequesterID.IsNil() && rec.ownerID != filter.RequesterID.String())
-		p, err := rec.toProject(isShared, sharedParts, tagBudgets)
+		p, err := rec.toProject(isShared, sharedParts, sharedWith, tagBudgets)
 		if err != nil {
 			return nil, err
 		}

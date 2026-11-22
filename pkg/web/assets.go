@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 )
@@ -31,24 +32,24 @@ type AssetEndpoints struct {
 	GetCashFlowForecast     endpoint.Endpoint
 }
 
-func MakeAssetEndpoints(assetService asset.Service) AssetEndpoints {
-	if assetService == nil {
+func MakeAssetEndpoints(assetApp *assetapp.Application) AssetEndpoints {
+	if assetApp == nil {
 		return AssetEndpoints{}
 	}
 	return AssetEndpoints{
-		CreateAsset:             makeCreateAssetEndpoint(assetService),
-		CreateAssetFromPayments: makeCreateAssetFromPaymentsEndpoint(assetService),
-		RemoveAsset:             makeRemoveAssetEndpoint(assetService),
-		ListAssets:              makeListAssetsEndpoint(assetService),
-		UpdateAsset:             makeUpdateAssetEndpoint(assetService),
-		GetAsset:                makeGetAssetEndpoint(assetService),
-		LinkChildAsset:          makeLinkChildAssetEndpoint(assetService),
-		UnlinkChildAsset:        makeUnlinkChildAssetEndpoint(assetService),
-		AssignInvestments:       makeAssignInvestmentsEndpoint(assetService),
-		GroupAssets:             makeGroupAssetsEndpoint(assetService),
-		LinkChildren:            makeLinkChildrenEndpoint(assetService),
-		UpdateSchedule:          makeUpdateScheduleEndpoint(assetService),
-		GetCashFlowForecast:     makeGetCashFlowForecastEndpoint(assetService),
+		CreateAsset:             makeCreateAssetEndpoint(assetApp),
+		CreateAssetFromPayments: makeCreateAssetFromPaymentsEndpoint(assetApp),
+		RemoveAsset:             makeRemoveAssetEndpoint(assetApp),
+		ListAssets:              makeListAssetsEndpoint(assetApp),
+		UpdateAsset:             makeUpdateAssetEndpoint(assetApp),
+		GetAsset:                makeGetAssetEndpoint(assetApp),
+		LinkChildAsset:          makeLinkChildAssetEndpoint(assetApp),
+		UnlinkChildAsset:        makeUnlinkChildAssetEndpoint(assetApp),
+		AssignInvestments:       makeAssignInvestmentsEndpoint(assetApp),
+		GroupAssets:             makeGroupAssetsEndpoint(assetApp),
+		LinkChildren:            makeLinkChildrenEndpoint(assetApp),
+		UpdateSchedule:          makeUpdateScheduleEndpoint(assetApp),
+		GetCashFlowForecast:     makeGetCashFlowForecastEndpoint(assetApp),
 	}
 }
 
@@ -255,7 +256,7 @@ type ListAssetsResponse struct {
 	PaginationDTO
 }
 
-func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeCreateAssetRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -327,7 +328,14 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		targetCompletionDate = &td
 	}
 
-	return asset.CreateAssetCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.CreateAsset{
+		AssetID:              core.NewAssetID(),
+		RequesterID:          requesterID,
 		Name:                 req.Name,
 		Description:          req.Description,
 		ProjectID:            projectUUID,
@@ -344,7 +352,7 @@ func decodeCreateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 	}, nil
 }
 
-func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeCreateAssetFromPaymentsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -399,9 +407,16 @@ func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (i
 		}
 	}
 
-	return asset.CreateAssetFromPaymentsCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.CreateAssetFromInvestments{
+		AssetID:        core.NewAssetID(),
+		RequesterID:    requesterID,
 		ProjectID:      projectUUID,
-		PaymentIDs:     paymentUUIDs,
+		InvestmentIDs:  paymentUUIDs,
 		Name:           req.Name,
 		Description:    req.Description,
 		TypeID:         typeUUID,
@@ -410,7 +425,7 @@ func decodeCreateAssetFromPaymentsRequest(_ context.Context, r *http.Request) (i
 	}, nil
 }
 
-func decodeGetAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeGetAssetRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -432,13 +447,19 @@ func decodeGetAssetRequest(_ context.Context, r *http.Request) (interface{}, err
 		return nil, exceptions.NewValidationException("invalid asset id", err)
 	}
 
-	return asset.Filter{
-		ID:        assetUUID,
-		ProjectID: projectUUID,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.GetAsset{
+		ID:          assetUUID,
+		ProjectID:   projectUUID,
+		RequesterID: requesterID,
 	}, nil
 }
 
-func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeUpdateAssetRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -517,8 +538,14 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 		targetCompletionDate = &td
 	}
 
-	return asset.UpdateAssetCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.UpdateAsset{
 		AssetID:              assetUUID,
+		RequesterID:          requesterID,
 		Name:                 req.Name,
 		Description:          req.Description,
 		ProjectID:            projectUUID,
@@ -535,7 +562,7 @@ func decodeUpdateAssetRequest(_ context.Context, r *http.Request) (interface{}, 
 	}, nil
 }
 
-func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeListAssetsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -563,15 +590,21 @@ func decodeListAssetsRequest(_ context.Context, r *http.Request) (interface{}, e
 
 	name := r.URL.Query().Get("name")
 
-	return asset.CollectionFilter{
-		Pagination: pagination,
-		ProjectID:  projectUUID,
-		TypeID:     typeID,
-		Name:       name,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.ListAssets{
+		Pagination:  pagination,
+		RequesterID: requesterID,
+		ProjectID:   projectUUID,
+		TypeID:      typeID,
+		Name:        name,
 	}, nil
 }
 
-func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeLinkChildAssetRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -606,7 +639,13 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 		share = *req.SharePercentage
 	}
 
-	return asset.LinkChildCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.LinkChildAsset{
+		RequesterID:     requesterID,
 		ParentID:        parentID,
 		ChildID:         childID,
 		ProjectID:       projectID,
@@ -614,7 +653,7 @@ func decodeLinkChildAssetRequest(_ context.Context, r *http.Request) (interface{
 	}, nil
 }
 
-func decodeUnlinkChildAssetRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeUnlinkChildAssetRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -643,17 +682,23 @@ func decodeUnlinkChildAssetRequest(_ context.Context, r *http.Request) (interfac
 		return nil, exceptions.NewValidationException("invalid child asset id", err)
 	}
 
-	return asset.UnlinkChildCommand{
-		ParentID:  parentID,
-		ChildID:   childID,
-		ProjectID: projectID,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.UnlinkChildAsset{
+		RequesterID: requesterID,
+		ParentID:    parentID,
+		ChildID:     childID,
+		ProjectID:   projectID,
 	}, nil
 }
 
-func makeGetAssetEndpoint(s asset.Service) endpoint.Endpoint {
+func makeGetAssetEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(asset.Filter)
-		a, err := s.FindOne(ctx, filter)
+		query := request.(assetapp.GetAsset)
+		a, err := app.Queries.GetAsset.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -661,10 +706,20 @@ func makeGetAssetEndpoint(s asset.Service) endpoint.Endpoint {
 	}
 }
 
-func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
+func makeCreateAssetEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		cmd := request.(asset.CreateAssetCommand)
-		a, err := s.Create(ctx, cmd)
+		cmd := request.(assetapp.CreateAsset)
+		if cmd.AssetID.IsNil() {
+			cmd.AssetID = core.NewAssetID()
+		}
+		if err := app.Commands.CreateAsset.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+		a, err := app.Queries.GetAsset.Handle(ctx, assetapp.GetAsset{
+			ID:          cmd.AssetID,
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -672,10 +727,20 @@ func makeCreateAssetEndpoint(s asset.Service) endpoint.Endpoint {
 	}
 }
 
-func makeCreateAssetFromPaymentsEndpoint(s asset.Service) endpoint.Endpoint {
+func makeCreateAssetFromPaymentsEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		cmd := request.(asset.CreateAssetFromPaymentsCommand)
-		a, err := s.CreateFromPayments(ctx, cmd)
+		cmd := request.(assetapp.CreateAssetFromInvestments)
+		if cmd.AssetID.IsNil() {
+			cmd.AssetID = core.NewAssetID()
+		}
+		if err := app.Commands.CreateAssetFromInvestments.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+		a, err := app.Queries.GetAsset.Handle(ctx, assetapp.GetAsset{
+			ID:          cmd.AssetID,
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -683,15 +748,14 @@ func makeCreateAssetFromPaymentsEndpoint(s asset.Service) endpoint.Endpoint {
 	}
 }
 
-func makeUpdateAssetEndpoint(s asset.Service) endpoint.Endpoint {
+func makeUpdateAssetEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.UpdateAssetCommand)
-		err := s.Update(ctx, cmd)
-		return nil, err
+		cmd := request.(assetapp.UpdateAsset)
+		return nil, app.Commands.UpdateAsset.Handle(ctx, cmd)
 	}
 }
 
-func decodeRemoveAssetRequest(_ context.Context, r *http.Request) (any, error) {
+func decodeRemoveAssetRequest(ctx context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -709,32 +773,36 @@ func decodeRemoveAssetRequest(_ context.Context, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid asset_id", err)
 	}
-	return asset.RemoveAssetCommand{
-		ProjectID: projectUUID,
-		AssetID:   assetUUID,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+	return assetapp.RemoveAsset{
+		ProjectID:   projectUUID,
+		AssetID:     assetUUID,
+		RequesterID: requesterID,
 	}, nil
 }
 
-func makeRemoveAssetEndpoint(svc asset.Service) endpoint.Endpoint {
+func makeRemoveAssetEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command, ok := request.(asset.RemoveAssetCommand)
+		cmd, ok := request.(assetapp.RemoveAsset)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
-		err := svc.Remove(ctx, command)
-		return nil, err
+		return nil, app.Commands.RemoveAsset.Handle(ctx, cmd)
 	}
 }
 
-func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
+func makeListAssetsEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(asset.CollectionFilter)
-		collection, err := svc.Find(ctx, filter)
+		query := request.(assetapp.ListAssets)
+		collection, err := app.Queries.ListAssets.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}
 
-		var list []AssetDTO = make([]AssetDTO, 0)
+		list := make([]AssetDTO, 0, len(collection.Elements()))
 		for _, e := range collection.Elements() {
 			list = append(list, toAssetDTO(e))
 		}
@@ -742,29 +810,29 @@ func makeListAssetsEndpoint(svc asset.Service) endpoint.Endpoint {
 		return ListAssetsResponse{
 			Assets: list,
 			PaginationDTO: PaginationDTO{
-				Limit:  filter.Limit,
-				Offset: filter.Offset,
+				Limit:  query.Limit,
+				Offset: query.Offset,
 				Total:  collection.Total(),
 			},
-		}, err
+		}, nil
 	}
 }
 
-func makeLinkChildAssetEndpoint(svc asset.Service) endpoint.Endpoint {
+func makeLinkChildAssetEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.LinkChildCommand)
-		return nil, svc.LinkChild(ctx, cmd)
+		cmd := request.(assetapp.LinkChildAsset)
+		return nil, app.Commands.LinkChildAsset.Handle(ctx, cmd)
 	}
 }
 
-func makeUnlinkChildAssetEndpoint(svc asset.Service) endpoint.Endpoint {
+func makeUnlinkChildAssetEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.UnlinkChildCommand)
-		return nil, svc.UnlinkChild(ctx, cmd)
+		cmd := request.(assetapp.UnlinkChildAsset)
+		return nil, app.Commands.UnlinkChildAsset.Handle(ctx, cmd)
 	}
 }
 
-func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeAssignInvestmentsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -802,17 +870,23 @@ func decodeAssignInvestmentsRequest(_ context.Context, r *http.Request) (interfa
 		invUUIDs = append(invUUIDs, u)
 	}
 
-	return asset.AssignInvestmentsCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.AssignInvestments{
+		RequesterID:   requesterID,
 		AssetID:       assetID,
 		ProjectID:     projectID,
 		InvestmentIDs: invUUIDs,
 	}, nil
 }
 
-func makeAssignInvestmentsEndpoint(s asset.Service) endpoint.Endpoint {
+func makeAssignInvestmentsEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.AssignInvestmentsCommand)
-		return nil, s.AssignInvestments(ctx, cmd)
+		cmd := request.(assetapp.AssignInvestments)
+		return nil, app.Commands.AssignInvestments.Handle(ctx, cmd)
 	}
 }
 
@@ -823,7 +897,7 @@ type GroupAssetsDTO struct {
 	Tags          []string `json:"tags"`
 }
 
-func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeGroupAssetsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -855,7 +929,14 @@ func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, 
 		childUUIDs = append(childUUIDs, u)
 	}
 
-	return asset.GroupAssetsCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.GroupAssets{
+		GroupAssetID:  core.NewAssetID(),
+		RequesterID:   requesterID,
 		ProjectID:     projectID,
 		Name:          req.Name,
 		Description:   req.Description,
@@ -864,10 +945,20 @@ func decodeGroupAssetsRequest(_ context.Context, r *http.Request) (interface{}, 
 	}, nil
 }
 
-func makeGroupAssetsEndpoint(s asset.Service) endpoint.Endpoint {
+func makeGroupAssetsEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.GroupAssetsCommand)
-		a, err := s.Group(ctx, cmd)
+		cmd := request.(assetapp.GroupAssets)
+		if cmd.GroupAssetID.IsNil() {
+			cmd.GroupAssetID = core.NewAssetID()
+		}
+		if err := app.Commands.GroupAssets.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+		a, err := app.Queries.GetAsset.Handle(ctx, assetapp.GetAsset{
+			ID:          cmd.GroupAssetID,
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -879,7 +970,7 @@ type LinkChildrenDTO struct {
 	ChildAssetIDs []string `json:"child_asset_ids"`
 }
 
-func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeLinkChildrenRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -917,17 +1008,23 @@ func decodeLinkChildrenRequest(_ context.Context, r *http.Request) (interface{},
 		childUUIDs = append(childUUIDs, u)
 	}
 
-	return asset.LinkChildrenCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.LinkChildrenAssets{
+		RequesterID:   requesterID,
 		ProjectID:     projectID,
 		ParentID:      parentID,
 		ChildAssetIDs: childUUIDs,
 	}, nil
 }
 
-func makeLinkChildrenEndpoint(s asset.Service) endpoint.Endpoint {
+func makeLinkChildrenEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.LinkChildrenCommand)
-		return nil, s.LinkChildren(ctx, cmd)
+		cmd := request.(assetapp.LinkChildrenAssets)
+		return nil, app.Commands.LinkChildrenAssets.Handle(ctx, cmd)
 	}
 }
 
@@ -971,7 +1068,7 @@ type RescheduleAssetResponseDTO struct {
 	Warnings []string `json:"warnings"`
 }
 
-func decodeUpdateScheduleRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeUpdateScheduleRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, err := core.ParseProjectID(vars["project_id"])
 	if err != nil {
@@ -1010,7 +1107,13 @@ func decodeUpdateScheduleRequest(_ context.Context, r *http.Request) (interface{
 		}
 	}
 
-	return asset.RescheduleAssetCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return assetapp.RescheduleAsset{
+		RequesterID:          requesterID,
 		ProjectID:            projectID,
 		AssetID:              assetID,
 		StartDate:            startDate,
@@ -1019,18 +1122,26 @@ func decodeUpdateScheduleRequest(_ context.Context, r *http.Request) (interface{
 	}, nil
 }
 
-func makeUpdateScheduleEndpoint(s asset.Service) endpoint.Endpoint {
+func makeUpdateScheduleEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(asset.RescheduleAssetCommand)
-		updated, warnings, err := s.UpdateSchedule(ctx, cmd)
+		cmd := request.(assetapp.RescheduleAsset)
+		if err := app.Commands.RescheduleAsset.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+		view, err := app.Queries.GetAssetScheduleView.Handle(ctx, assetapp.GetAssetScheduleView{
+			AssetID:     cmd.AssetID,
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
+		warnings := view.Warnings
 		if warnings == nil {
 			warnings = make([]string, 0)
 		}
 		return RescheduleAssetResponseDTO{
-			Asset:    toAssetDTO(updated),
+			Asset:    toAssetDTO(view.Asset),
 			Warnings: warnings,
 		}, nil
 	}
@@ -1210,7 +1321,7 @@ func toCashFlowForecastDTO(fc *asset.CashFlowForecast) CashFlowForecastDTO {
 	}
 }
 
-func decodeGetCashFlowForecastRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeGetCashFlowForecastRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectID, err := core.ParseProjectID(vars["project_id"])
 	if err != nil {
@@ -1225,19 +1336,24 @@ func decodeGetCashFlowForecastRequest(_ context.Context, r *http.Request) (inter
 		}
 		asOf = parsed
 	}
-	return asset.GetCashFlowForecastQuery{
-		ProjectID: projectID,
-		FromMonth: q.Get("from_month"),
-		ToMonth:   q.Get("to_month"),
-		Tag:       q.Get("tag"),
-		AsOfDate:  asOf,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+	return assetapp.GetCashFlowForecast{
+		RequesterID: requesterID,
+		ProjectID:   projectID,
+		FromMonth:   q.Get("from_month"),
+		ToMonth:     q.Get("to_month"),
+		Tag:         q.Get("tag"),
+		AsOfDate:    asOf,
 	}, nil
 }
 
-func makeGetCashFlowForecastEndpoint(s asset.Service) endpoint.Endpoint {
+func makeGetCashFlowForecastEndpoint(app *assetapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		query := request.(asset.GetCashFlowForecastQuery)
-		fc, err := s.GetCashFlowForecast(ctx, query)
+		query := request.(assetapp.GetCashFlowForecast)
+		fc, err := app.Queries.GetCashFlowForecast.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}

@@ -45,6 +45,7 @@ type Project struct {
 	isShared     bool
 	mainCurrency string
 	participants []Participant
+	sharedWith   []core.PersonID
 	tagBudgets   []TagBudget
 }
 
@@ -111,6 +112,34 @@ func (p *Project) RegenerateShareToken() {
 
 func (p *Project) MarkShared() {
 	p.isShared = true
+}
+
+func (p *Project) HasSharedAccess(personID core.PersonID) bool {
+	if personID.IsNil() {
+		return false
+	}
+	for _, id := range p.sharedWith {
+		if id == personID {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Project) GrantShare(personID core.PersonID) {
+	if personID.IsNil() || p.IsOwnedByPerson(personID) || p.HasSharedAccess(personID) {
+		return
+	}
+	p.sharedWith = append(p.sharedWith, personID)
+}
+
+func (p *Project) SharedWith() []core.PersonID {
+	if p.sharedWith == nil {
+		return make([]core.PersonID, 0)
+	}
+	cp := make([]core.PersonID, len(p.sharedWith))
+	copy(cp, p.sharedWith)
+	return cp
 }
 
 func copyOwner(o *Owner) *Owner {
@@ -235,8 +264,33 @@ func ReconstituteProject(
 		isShared:     isShared,
 		mainCurrency: curr,
 		participants: parts,
+		sharedWith:   make([]core.PersonID, 0),
 		tagBudgets:   tBudgets,
 	}
+}
+
+// ReconstituteProjectWithShares hydrates a Project entity including shared participant IDs from persistence.
+func ReconstituteProjectWithShares(
+	id core.ProjectID,
+	name string,
+	description string,
+	owner *Owner,
+	startDate time.Time,
+	endDate time.Time,
+	shareToken uuid.UUID,
+	isShared bool,
+	mainCurrency string,
+	participants []Participant,
+	sharedWith []core.PersonID,
+	tagBudgets ...[]TagBudget,
+) *Project {
+	p := ReconstituteProject(id, name, description, owner, startDate, endDate, shareToken, isShared, mainCurrency, participants, tagBudgets...)
+	if len(sharedWith) > 0 {
+		sw := make([]core.PersonID, len(sharedWith))
+		copy(sw, sharedWith)
+		p.sharedWith = sw
+	}
+	return p
 }
 
 // Getters

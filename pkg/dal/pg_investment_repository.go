@@ -69,33 +69,41 @@ func (r *PgInvestmentRepository) Save(ctx context.Context, inv *investment.Inves
 			tags = EXCLUDED.tags
 	`
 
-	if _, err := r.db.Exec(
-		ctx,
-		sql,
-		inv.ID().String(),
-		inv.ProjectID().String(),
-		inv.PrimaryAssetID().String(),
-		inv.Contributor().PersonID.String(),
-		inv.ResourceType().String(),
-		amountVal,
-		currVal,
-		inv.TimeHours(),
-		hourlyRateVal,
-		inv.GoodsQuantity(),
-		inv.GoodsUnit(),
-		inv.GoodsItemName(),
-		inv.Description(),
-		inv.Date(),
-		tags,
-	); err != nil {
-		return errors.Join(ErrFailedToSaveInvestment, err)
+	execFn := func(txCtx context.Context) (any, error) {
+		if _, err := r.db.Exec(
+			txCtx,
+			sql,
+			inv.ID().String(),
+			inv.ProjectID().String(),
+			inv.PrimaryAssetID().String(),
+			inv.Contributor().PersonID.String(),
+			inv.ResourceType().String(),
+			amountVal,
+			currVal,
+			inv.TimeHours(),
+			hourlyRateVal,
+			inv.GoodsQuantity(),
+			inv.GoodsUnit(),
+			inv.GoodsItemName(),
+			inv.Description(),
+			inv.Date(),
+			tags,
+		); err != nil {
+			return nil, errors.Join(ErrFailedToSaveInvestment, err)
+		}
+
+		if err := r.saveAllocations(txCtx, inv); err != nil {
+			return nil, errors.Join(ErrFailedToSaveInvestment, err)
+		}
+		return nil, nil
 	}
 
-	if err := r.saveAllocations(ctx, inv); err != nil {
-		return errors.Join(ErrFailedToSaveInvestment, err)
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, execFn)
+		return err
 	}
-
-	return nil
+	_, err := execFn(ctx)
+	return err
 }
 
 func (r *PgInvestmentRepository) saveAllocations(ctx context.Context, inv *investment.Investment) error {
@@ -180,6 +188,45 @@ func (r *PgInvestmentRepository) Remove(ctx context.Context, inv *investment.Inv
 }
 
 func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.Filter) (*investment.Investment, error) {
+	return r.findOneInternal(ctx, filter, false)
+}
+
+func (r *PgInvestmentRepository) UpdateInvestment(
+	ctx context.Context,
+	id core.InvestmentID,
+	projectID core.ProjectID,
+	updateFn func(ctx context.Context, inv *investment.Investment) (*investment.Investment, error),
+) error {
+	execFn := func(txCtx context.Context) (any, error) {
+		existing, err := r.findOneInternal(txCtx, investment.Filter{
+			ID:        id,
+			ProjectID: projectID,
+		}, true)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := updateFn(txCtx, existing)
+		if err != nil {
+			return nil, err
+		}
+		if updated == nil {
+			return nil, exceptions.NewValidationException("updated investment cannot be nil", nil)
+		}
+		if err := r.Save(txCtx, updated); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, execFn)
+		return err
+	}
+	_, err := execFn(ctx)
+	return err
+}
+
+func (r *PgInvestmentRepository) findOneInternal(ctx context.Context, filter investment.Filter, forUpdate bool) (*investment.Investment, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_investments")
 	setupInvestmentSelect(qb)
@@ -193,6 +240,9 @@ func (r *PgInvestmentRepository) FindOne(ctx context.Context, filter investment.
 	}
 
 	sql, args := qb.Build()
+	if forUpdate {
+		sql += " FOR UPDATE OF projecta_investments"
+	}
 	row := r.db.QueryRow(ctx, sql, args...)
 
 	rec, err := scanInvestmentRecord(row)

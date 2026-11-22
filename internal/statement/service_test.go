@@ -14,7 +14,7 @@ type mockProjectValidator struct {
 	err error
 }
 
-func (m *mockProjectValidator) ValidateProject(_ context.Context, _ core.ProjectID) error {
+func (m *mockProjectValidator) ValidateProject(_ context.Context, _ core.ProjectID, _ core.PersonID) error {
 	return m.err
 }
 
@@ -23,7 +23,7 @@ type mockFinder struct {
 	err error
 }
 
-func (m *mockFinder) FindExisting(_ context.Context, _ core.ProjectID) ([]statement.ExistingTransaction, error) {
+func (m *mockFinder) FindExisting(_ context.Context, _ core.ProjectID, _ core.PersonID) ([]statement.ExistingTransaction, error) {
 	return m.txs, m.err
 }
 
@@ -39,11 +39,20 @@ func (m *mockParser) Parse(_ []byte) (*statement.ParsedStatement, error) {
 func TestStatementService(t *testing.T) {
 	ctx := context.Background()
 	projID := core.NewProjectID()
+	requesterID := core.NewPersonID()
 	now := time.Now()
+
+	t.Run("Validation: missing requester id", func(t *testing.T) {
+		svc := statement.NewService(&mockProjectValidator{}, nil)
+		_, err := svc.ParseStatement(ctx, projID, core.NilPersonID, []byte("data"))
+		if err == nil {
+			t.Errorf("expected unauthorized error for nil requester id")
+		}
+	})
 
 	t.Run("Validation: missing project id", func(t *testing.T) {
 		svc := statement.NewService(&mockProjectValidator{}, nil)
-		_, err := svc.ParseStatement(ctx, core.NilProjectID, []byte("data"))
+		_, err := svc.ParseStatement(ctx, core.NilProjectID, requesterID, []byte("data"))
 		if err == nil {
 			t.Errorf("expected validation error for nil project id")
 		}
@@ -51,7 +60,7 @@ func TestStatementService(t *testing.T) {
 
 	t.Run("Project not found error", func(t *testing.T) {
 		svc := statement.NewService(&mockProjectValidator{err: errors.New("not found")}, nil)
-		_, err := svc.ParseStatement(ctx, projID, []byte("data"))
+		_, err := svc.ParseStatement(ctx, projID, requesterID, []byte("data"))
 		if err == nil {
 			t.Errorf("expected error when project is not found")
 		}
@@ -60,7 +69,7 @@ func TestStatementService(t *testing.T) {
 	t.Run("Parser error", func(t *testing.T) {
 		p := &mockParser{err: errors.New("corrupt file")}
 		svc := statement.NewService(&mockProjectValidator{}, nil, p)
-		_, err := svc.ParseStatement(ctx, projID, []byte("corrupt"))
+		_, err := svc.ParseStatement(ctx, projID, requesterID, []byte("corrupt"))
 		if err == nil {
 			t.Errorf("expected parser error")
 		}
@@ -102,7 +111,7 @@ func TestStatementService(t *testing.T) {
 		}
 
 		svc := statement.NewService(&mockProjectValidator{}, finder, p)
-		res, err := svc.ParseStatement(ctx, projID, []byte("data"))
+		res, err := svc.ParseStatement(ctx, projID, requesterID, []byte("data"))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -136,7 +145,7 @@ func TestStatementService(t *testing.T) {
 		}
 		finder := &mockFinder{err: errors.New("db error")}
 		svc := statement.NewService(&mockProjectValidator{}, finder, p)
-		_, err := svc.ParseStatement(ctx, projID, []byte("data"))
+		_, err := svc.ParseStatement(ctx, projID, requesterID, []byte("data"))
 		if err == nil {
 			t.Errorf("expected error when finder fails")
 		}

@@ -515,9 +515,10 @@ func TestPgProjectRepository(t *testing.T) {
 	})
 
 	t.Run("FindOne with participants from shares", func(t *testing.T) {
+		janeID := core.NewPersonID()
 		mockDb := &mockPgDb{
 			rowVal:   []any{pID.String(), "Project A", "Desc", ownerID.String(), now, now, "John", "Doe", "Owner Display", uuid.New().String(), "UAH"},
-			rowsData: [][]any{{"Jane", "Smith", "Jane Member"}},
+			rowsData: [][]any{{janeID.String(), "Jane", "Smith", "Jane Member"}},
 		}
 		ctx := withMockDb(authedCtx, mockDb)
 
@@ -673,7 +674,7 @@ func TestPgProjectRepository(t *testing.T) {
 			shareTokenStr: token.String(),
 			mainCurrency:  types.NullString{String: "UAH", Valid: true},
 		}
-		p, err := rec.toProject(false, nil)
+		p, err := rec.toProject(false, nil, nil)
 		if err != nil || p == nil || p.ShareToken() != token {
 			t.Errorf("toProject error: %v", err)
 		}
@@ -681,7 +682,7 @@ func TestPgProjectRepository(t *testing.T) {
 		// Invalid project id
 		recInvalidPID := rec
 		recInvalidPID.projectID = "invalid"
-		_, err = recInvalidPID.toProject(false, nil)
+		_, err = recInvalidPID.toProject(false, nil, nil)
 		if err == nil {
 			t.Errorf("expected error for invalid project id")
 		}
@@ -689,7 +690,7 @@ func TestPgProjectRepository(t *testing.T) {
 		// Invalid owner id
 		recInvalidOID := rec
 		recInvalidOID.ownerID = "invalid"
-		_, err = recInvalidOID.toProject(false, nil)
+		_, err = recInvalidOID.toProject(false, nil, nil)
 		if err == nil {
 			t.Errorf("expected error for invalid owner id")
 		}
@@ -866,7 +867,7 @@ func TestPgAssetRepository(t *testing.T) {
 			endedAt:      now,
 			mainCurrency: types.NullString{String: "UAH", Valid: true},
 		}
-		p1, err := rec.toProject(false, nil)
+		p1, err := rec.toProject(false, nil, nil)
 		if err != nil || p1 == nil {
 			t.Errorf("toProject error: %v", err)
 		}

@@ -1,9 +1,6 @@
 package asset_test
 
 import (
-	"context"
-	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,19 +13,16 @@ func mustUTCDate(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-type mockLookupAssetRepo struct {
-	mockAssetRepo
-	byID map[core.AssetID]*asset.Asset
-}
+type fixedRateConverter struct{}
 
-func (m *mockLookupAssetRepo) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
-	if m.findOneErr != nil {
-		return nil, m.findOneErr
+func (fixedRateConverter) ConvertMoney(amount *money.Money, targetCurrency string) (*money.Money, error) {
+	if amount == nil {
+		return money.New(0, targetCurrency), nil
 	}
-	if m.byID != nil {
-		return m.byID[filter.ID], nil
+	if amount.Currency().Code == targetCurrency {
+		return amount, nil
 	}
-	return m.asset, nil
+	return money.New(amount.Amount()*40, targetCurrency), nil
 }
 
 func TestAssetOptionalTargetAndSchedule(t *testing.T) {
@@ -202,7 +196,7 @@ func TestCalculateProjectCashFlowForecast(t *testing.T) {
 		ceilings,
 		months,
 		query,
-		&mockRateProvider{},
+		fixedRateConverter{},
 	)
 
 	if fc.Currency != "UAH" {
@@ -265,7 +259,7 @@ func TestCalculateProjectCashFlowForecast(t *testing.T) {
 		ceilings,
 		months,
 		asset.GetCashFlowForecastQuery{ProjectID: pID, FromMonth: "2026-04", ToMonth: "2026-07", AsOfDate: asOf, Tag: "home"},
-		&mockRateProvider{},
+		fixedRateConverter{},
 	)
 	if len(homeFC.Assets) != 2 {
 		t.Errorf("expected 2 home-tagged assets, got %d", len(homeFC.Assets))
@@ -433,170 +427,10 @@ func TestCalculateProjectCashFlowForecast_TagFilterMatchesInvestmentTags(t *test
 	}
 }
 
-func TestServiceMultiCurrencyScheduleAndForecast(t *testing.T) {
-	db := &mockDb{}
-	ownerID := core.NewPersonID()
+func TestCalculateProjectCashFlowForecast_CompletedAndOngoingETA(t *testing.T) {
 	pID := core.NewProjectID()
-	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, ownerID)
-	ownerRef := asset.OwnerRef{PersonID: ownerID, DisplayName: "Max"}
+	ownerRef := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "Max"}
 
-	child, _ := asset.CreateAsset(core.NewAssetID(), "Child", "", pID, money.New(500, "UAH"), mustUTCDate(2026, time.January, 1), ownerRef, asset.AssetStatusActive, nil, nil)
-	childTarget := mustUTCDate(2026, time.August, 1)
-	_ = child.UpdateSchedule(nil, &childTarget, false)
-
-	parent, _ := asset.CreateAsset(core.NewAssetID(), "Parent", "", pID, money.New(2000, "UAH"), mustUTCDate(2026, time.January, 1), ownerRef, asset.AssetStatusActive, nil, nil)
-	parent.AssignValuation(nil, nil, []asset.ChildAssetLink{{ChildID: child.ID(), ChildName: "Child", SharePercentage: 100}}, nil)
-
-	col := asset.NewCollection(2)
-	col.Add(parent)
-	col.Add(child)
-
-	repo := &mockLookupAssetRepo{
-		mockAssetRepo: mockAssetRepo{col: col, asset: parent},
-		byID: map[core.AssetID]*asset.Asset{
-			parent.ID(): parent,
-			child.ID():  child,
-		},
-	}
-	peopleSvc := &mockPeopleService{owner: ownerRef}
-	projRepo := &mockProjectRepo{
-		project: asset.ProjectDescriptor{
-			ID:           pID,
-			MainCurrency: "UAH",
-			StartDate:    mustUTCDate(2026, time.May, 1),
-			EndDate:      mustUTCDate(2026, time.August, 31),
-		},
-		ceilings: map[string]int64{"2026-05": 10000},
-	}
-	invSrc := &mockInvestmentSource{
-		projectSummary: []asset.InvestmentRecordSummary{
-			{
-				ID:           core.NewInvestmentID(),
-				ResourceType: "MONEY",
-				Amount:       money.New(10, "USD"), // 400 UAH in child -> rolls up 100% into parent!
-				Date:         mustUTCDate(2026, time.May, 2),
-				AssetAllocations: []asset.InvestmentAllocation{
-					{AssetID: child.ID(), SharePercentage: 100},
-				},
-			},
-		},
-	}
-
-	svc := newTestService(db, repo, peopleSvc, projRepo, invSrc, &mockRateProvider{})
-
-	// Find normalizes mixed-currency direct & rolled-up costs in UAH
-	foundCol, err := svc.Find(authedCtx, asset.CollectionFilter{ProjectID: pID})
-	if err != nil {
-		t.Fatalf("Find failed: %v", err)
-	}
-	if foundCol.Elements()[0].TotalCost() == nil || foundCol.Elements()[0].TotalCost().Amount() != 400 || foundCol.Elements()[0].TotalCost().Currency().Code != "UAH" {
-		t.Errorf("expected parent TotalCost rolled up to 400 UAH, got %v", foundCol.Elements()[0].TotalCost())
-	}
-
-	// FindOne normalizes single asset via project hierarchy
-	one, err := svc.FindOne(authedCtx, asset.Filter{ID: parent.ID(), ProjectID: pID})
-	if err != nil || one == nil {
-		t.Fatalf("FindOne failed: %v", err)
-	}
-
-	// Create unbudgeted asset succeeds, while WithPayment without positive price fails
-	created, err := svc.Create(authedCtx, asset.CreateAssetCommand{
-		Name:      "Unbudgeted",
-		ProjectID: pID,
-	})
-	if err != nil || created.HasTargetBudget() {
-		t.Errorf("expected unbudgeted asset create to succeed, got asset=%v err=%v", created, err)
-	}
-	if _, err := svc.Create(authedCtx, asset.CreateAssetCommand{
-		Name:        "Needs Payment",
-		ProjectID:   pID,
-		WithPayment: true,
-	}); err == nil {
-		t.Errorf("expected error when WithPayment=true and no target price")
-	}
-
-	// UpdateSchedule returns non-blocking warning when parent target precedes child target
-	earlierParentTarget := mustUTCDate(2026, time.June, 1)
-	_, warnings, err := svc.UpdateSchedule(authedCtx, asset.RescheduleAssetCommand{
-		AssetID:              parent.ID(),
-		ProjectID:            pID,
-		TargetCompletionDate: &earlierParentTarget,
-	})
-	if err != nil {
-		t.Fatalf("UpdateSchedule failed: %v", err)
-	}
-	if len(warnings) != 1 || !strings.HasPrefix(warnings[0], "child_target_exceeds_parent:") {
-		t.Errorf("expected child_target_exceeds_parent warning, got %v", warnings)
-	}
-
-	// GetCashFlowForecast validation & error branches
-	if _, err := svc.GetCashFlowForecast(context.Background(), asset.GetCashFlowForecastQuery{ProjectID: pID}); err == nil {
-		t.Errorf("expected unauthorized error")
-	}
-	if _, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{}); err == nil {
-		t.Errorf("expected validation error for missing project id")
-	}
-	if _, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{
-		ProjectID: pID,
-		Tag:       strings.Repeat("a", 101),
-	}); err == nil {
-		t.Errorf("expected validation error for oversized tag filter")
-	}
-	invSrc.listErr = errors.New("inv boom")
-	if _, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{ProjectID: pID}); err == nil {
-		t.Errorf("expected investment source error propagation")
-	}
-	invSrc.listErr = nil
-
-	fc, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{
-		ProjectID: pID,
-		FromMonth: "2026-05",
-		ToMonth:   "2026-08",
-		Tag:       "edu",
-		AsOfDate:  mustUTCDate(2026, time.May, 10),
-	})
-	if err != nil || fc == nil || len(fc.Months) != 4 {
-		t.Fatalf("expected 4-month forecast, got fc=%v err=%v", fc, err)
-	}
-	if projRepo.lastCeilingTag != "edu" {
-		t.Errorf("expected FindMonthlyCashCeilings to receive tag 'edu', got %q", projRepo.lastCeilingTag)
-	}
-
-	// Cover additional edge cases cleanly
-	if parent.DirectCostHomeAmount() != 0 {
-		t.Errorf("expected 0 DirectCostHomeAmount for group parent, got %d", parent.DirectCostHomeAmount())
-	}
-	if child.DirectCostHomeAmount() != 400 {
-		t.Errorf("expected 400 DirectCostHomeAmount for USD child, got %d", child.DirectCostHomeAmount())
-	}
-
-	// Child UpdateSchedule triggers parent warning via target.Parents()
-	_, childWarnings, err := svc.UpdateSchedule(authedCtx, asset.RescheduleAssetCommand{
-		AssetID:   child.ID(),
-		ProjectID: pID,
-	})
-	if err == nil && len(childWarnings) == 0 {
-		// Assign parent link on child and verify parent warning fires
-		child.AssignValuation(child.DirectCost(), child.TotalCost(), nil, []asset.ParentAssetLink{{ParentID: parent.ID(), ParentName: "Parent", SharePercentage: 100}})
-		_, childWarnings, err = svc.UpdateSchedule(authedCtx, asset.RescheduleAssetCommand{
-			AssetID:              child.ID(),
-			ProjectID:            pID,
-			TargetCompletionDate: &childTarget,
-		})
-		if err != nil || len(childWarnings) == 0 {
-			t.Errorf("expected parent warning when updating child target past parent target, got err=%v warnings=%v", err, childWarnings)
-		}
-	}
-
-	// Unauthorized & not found UpdateSchedule branches
-	if _, _, err := svc.UpdateSchedule(context.Background(), asset.RescheduleAssetCommand{AssetID: child.ID(), ProjectID: pID}); err == nil {
-		t.Errorf("expected unauthorized error for UpdateSchedule")
-	}
-	if _, _, err := svc.UpdateSchedule(authedCtx, asset.RescheduleAssetCommand{AssetID: core.NewAssetID(), ProjectID: pID}); err == nil {
-		t.Errorf("expected error when UpdateSchedule asset missing")
-	}
-
-	// Default month resolution, COMPLETED asset, ONGOING_RUN_RATE with EstimatedCompletion, and unallocated investments
 	doneDate := mustUTCDate(2026, time.March, 20)
 	completedAsset, _ := asset.CreateAsset(core.NewAssetID(), "Done", "", pID, money.New(1000, "UAH"), mustUTCDate(2026, time.March, 1), ownerRef, asset.AssetStatusCompleted, &doneDate, nil)
 	budgetedOngoing, _ := asset.CreateAsset(core.NewAssetID(), "Save Fund", "", pID, money.New(12000, "UAH"), mustUTCDate(2026, time.April, 1), ownerRef, asset.AssetStatusActive, nil, nil)

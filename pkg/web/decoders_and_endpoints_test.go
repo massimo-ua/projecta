@@ -15,10 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
-	"gitlab.com/massimo-ua/projecta/internal/investment"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
 
@@ -149,8 +150,8 @@ func TestDecodersValidationErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, ok := res.(project.RemoveProjectCommand); !ok {
-			t.Errorf("expected project.RemoveProjectCommand, got %T", res)
+		if _, ok := res.(projectapp.RemoveProject); !ok {
+			t.Errorf("expected projectapp.RemoveProject, got %T", res)
 		}
 	})
 
@@ -219,6 +220,7 @@ func TestDecodersValidationErrors(t *testing.T) {
 
 func TestAssetDecodersValidationErrors(t *testing.T) {
 	validUUID := uuid.New().String()
+	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, core.NewPersonID())
 
 	t.Run("decodeCreateAssetRequest errors", func(t *testing.T) {
 		reqNoProj, _ := http.NewRequest("POST", "/", nil)
@@ -280,11 +282,11 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		bodyUnbudgeted, _ := json.Marshal(CreateAssetDTO{Name: "Coffee Routine", TargetCompletionDate: "2026-08-01"})
 		reqUnbudgeted, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyUnbudgeted))
 		reqUnbudgeted = mux.SetURLVars(reqUnbudgeted, map[string]string{"project_id": validUUID})
-		unbCmdAny, err := decodeCreateAssetRequest(context.Background(), reqUnbudgeted)
+		unbCmdAny, err := decodeCreateAssetRequest(authedCtx, reqUnbudgeted)
 		if err != nil {
 			t.Errorf("expected unbudgeted asset decode success, got: %v", err)
 		} else {
-			unbCmd := unbCmdAny.(asset.CreateAssetCommand)
+			unbCmd := unbCmdAny.(assetapp.CreateAsset)
 			if unbCmd.TargetCompletionDate == nil || unbCmd.TargetPrice != nil {
 				t.Errorf("unexpected unbudgeted cmd: %+v", unbCmd)
 			}
@@ -379,12 +381,12 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		bodyValidDay, _ := json.Marshal(CreateAssetFromPaymentsDTO{Name: "Asset", PaymentIDs: []string{validUUID}, AcquiredAt: "2026-05-15", TargetCurrency: "USD"})
 		reqValidDay, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValidDay))
 		reqValidDay = mux.SetURLVars(reqValidDay, map[string]string{"project_id": validUUID})
-		res, err := decodeCreateAssetFromPaymentsRequest(context.Background(), reqValidDay)
+		res, err := decodeCreateAssetFromPaymentsRequest(authedCtx, reqValidDay)
 		if err != nil {
 			t.Fatalf("unexpected error decoding valid day request: %v", err)
 		}
-		cmd := res.(asset.CreateAssetFromPaymentsCommand)
-		if cmd.Name != "Asset" || len(cmd.PaymentIDs) != 1 || cmd.TargetCurrency != "USD" {
+		cmd := res.(assetapp.CreateAssetFromInvestments)
+		if cmd.Name != "Asset" || len(cmd.InvestmentIDs) != 1 || cmd.TargetCurrency != "USD" {
 			t.Errorf("unexpected decoded command: %+v", cmd)
 		}
 	})
@@ -451,7 +453,7 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		bodyUnbudgetedUpd, _ := json.Marshal(UpdateAssetDTO{Name: "Laptop", TargetCompletionDate: "2026-09-01", ClearTargetDate: false})
 		reqUnbudgetedUpd, _ := http.NewRequest("PUT", "/", bytes.NewReader(bodyUnbudgetedUpd))
 		reqUnbudgetedUpd = mux.SetURLVars(reqUnbudgetedUpd, map[string]string{"project_id": validUUID, "asset_id": validUUID})
-		if _, err := decodeUpdateAssetRequest(context.Background(), reqUnbudgetedUpd); err != nil {
+		if _, err := decodeUpdateAssetRequest(authedCtx, reqUnbudgetedUpd); err != nil {
 			t.Errorf("expected optional target_price update decode success, got: %v", err)
 		}
 
@@ -592,18 +594,19 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		bodyValid, _ := json.Marshal(AssignInvestmentsDTO{InvestmentIDs: []string{invID}})
 		reqValid, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValid))
 		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": validUUID, "asset_id": validUUID})
-		cmdAny, err := decodeAssignInvestmentsRequest(context.Background(), reqValid)
+		cmdAny, err := decodeAssignInvestmentsRequest(authedCtx, reqValid)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		cmd := cmdAny.(asset.AssignInvestmentsCommand)
+		cmd := cmdAny.(assetapp.AssignInvestments)
 		if len(cmd.InvestmentIDs) != 1 || cmd.InvestmentIDs[0].String() != invID {
 			t.Errorf("unexpected command: %+v", cmd)
 		}
 
 		// Test makeAssignInvestmentsEndpoint
-		ep := makeAssignInvestmentsEndpoint(&mockAssetService{})
-		_, err = ep(context.Background(), cmd)
+		seedAst, _ := asset.CreateAsset(cmd.AssetID, "Target", "", cmd.ProjectID, money.New(100, "USD"), time.Now().UTC(), asset.OwnerRef{PersonID: cmd.RequesterID, DisplayName: "John"}, asset.AssetStatusActive, nil, nil)
+		ep := makeAssignInvestmentsEndpoint(newTestAssetApp(seedAst, nil))
+		_, err = ep(authedCtx, cmd)
 		if err != nil {
 			t.Errorf("unexpected endpoint error: %v", err)
 		}
@@ -616,46 +619,49 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 			t.Errorf("expected no project id error")
 		}
 
-		childID := uuid.New().String()
-		bodyValid, _ := json.Marshal(GroupAssetsDTO{Name: "Rent", ChildAssetIDs: []string{childID}})
+		childID := core.NewAssetID()
+		bodyValid, _ := json.Marshal(GroupAssetsDTO{Name: "Rent", ChildAssetIDs: []string{childID.String()}})
 		reqValid, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValid))
 		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": validUUID})
-		cmdAny, err := decodeGroupAssetsRequest(context.Background(), reqValid)
+		cmdAny, err := decodeGroupAssetsRequest(authedCtx, reqValid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd := cmdAny.(asset.GroupAssetsCommand)
+		cmd := cmdAny.(assetapp.GroupAssets)
 		if cmd.Name != "Rent" || len(cmd.ChildAssetIDs) != 1 {
 			t.Errorf("unexpected cmd: %+v", cmd)
 		}
 
 		// Test makeGroupAssetsEndpoint
-		ownerRef := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "John"}
-		mockAst, _ := asset.CreateAssetGroup(core.NewAssetID(), "Rent", "", core.NewProjectID(), ownerRef, nil)
-		ep := makeGroupAssetsEndpoint(&mockAssetService{asset: mockAst})
-		_, err = ep(context.Background(), cmd)
+		ownerRef := asset.OwnerRef{PersonID: cmd.RequesterID, DisplayName: "John"}
+		childAst, _ := asset.CreateAsset(childID, "Child", "", cmd.ProjectID, money.New(100, "USD"), time.Now().UTC(), ownerRef, asset.AssetStatusActive, nil, nil)
+		ep := makeGroupAssetsEndpoint(newTestAssetApp(childAst, nil))
+		_, err = ep(authedCtx, cmd)
 		if err != nil {
 			t.Errorf("unexpected group endpoint error: %v", err)
 		}
 	})
 
 	t.Run("decodeLinkChildrenRequest validation and success", func(t *testing.T) {
-		childID := uuid.New().String()
-		bodyValid, _ := json.Marshal(LinkChildrenDTO{ChildAssetIDs: []string{childID}})
+		childID := core.NewAssetID()
+		bodyValid, _ := json.Marshal(LinkChildrenDTO{ChildAssetIDs: []string{childID.String()}})
 		reqValid, _ := http.NewRequest("POST", "/", bytes.NewReader(bodyValid))
 		reqValid = mux.SetURLVars(reqValid, map[string]string{"project_id": validUUID, "asset_id": validUUID})
-		cmdAny, err := decodeLinkChildrenRequest(context.Background(), reqValid)
+		cmdAny, err := decodeLinkChildrenRequest(authedCtx, reqValid)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd := cmdAny.(asset.LinkChildrenCommand)
+		cmd := cmdAny.(assetapp.LinkChildrenAssets)
 		if len(cmd.ChildAssetIDs) != 1 {
 			t.Errorf("unexpected cmd: %+v", cmd)
 		}
 
 		// Test makeLinkChildrenEndpoint
-		ep := makeLinkChildrenEndpoint(&mockAssetService{})
-		_, err = ep(context.Background(), cmd)
+		ownerRef := asset.OwnerRef{PersonID: cmd.RequesterID, DisplayName: "John"}
+		parentAst, _ := asset.CreateAsset(cmd.ParentID, "Parent", "", cmd.ProjectID, money.New(100, "USD"), time.Now().UTC(), ownerRef, asset.AssetStatusActive, nil, nil)
+		childAst, _ := asset.CreateAsset(childID, "Child", "", cmd.ProjectID, money.New(50, "USD"), time.Now().UTC(), ownerRef, asset.AssetStatusActive, nil, nil)
+		ep := makeLinkChildrenEndpoint(newTestAssetAppWithAssets(parentAst, childAst))
+		_, err = ep(authedCtx, cmd)
 		if err != nil {
 			t.Errorf("unexpected link children endpoint error: %v", err)
 		}
@@ -668,40 +674,40 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		// decodeUpdateScheduleRequest errors
 		reqBadProj, _ := http.NewRequest(http.MethodPatch, "/", nil)
 		reqBadProj = mux.SetURLVars(reqBadProj, map[string]string{"project_id": "bad", "asset_id": aID.String()})
-		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadProj); err == nil {
+		if _, err := decodeUpdateScheduleRequest(authedCtx, reqBadProj); err == nil {
 			t.Errorf("expected invalid project id error")
 		}
 		reqBadAst, _ := http.NewRequest(http.MethodPatch, "/", nil)
 		reqBadAst = mux.SetURLVars(reqBadAst, map[string]string{"project_id": pID.String(), "asset_id": "bad"})
-		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadAst); err == nil {
+		if _, err := decodeUpdateScheduleRequest(authedCtx, reqBadAst); err == nil {
 			t.Errorf("expected invalid asset id error")
 		}
 		reqBadStart, _ := http.NewRequest(http.MethodPatch, "/", bytes.NewReader([]byte(`{"start_date":"not-a-date"}`)))
 		reqBadStart = mux.SetURLVars(reqBadStart, map[string]string{"project_id": pID.String(), "asset_id": aID.String()})
-		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadStart); err == nil {
+		if _, err := decodeUpdateScheduleRequest(authedCtx, reqBadStart); err == nil {
 			t.Errorf("expected invalid start date error")
 		}
 		reqBadTarget, _ := http.NewRequest(http.MethodPatch, "/", bytes.NewReader([]byte(`{"target_completion_date":"not-a-date"}`)))
 		reqBadTarget = mux.SetURLVars(reqBadTarget, map[string]string{"project_id": pID.String(), "asset_id": aID.String()})
-		if _, err := decodeUpdateScheduleRequest(context.Background(), reqBadTarget); err == nil {
+		if _, err := decodeUpdateScheduleRequest(authedCtx, reqBadTarget); err == nil {
 			t.Errorf("expected invalid target completion date error")
 		}
 
 		// decodeUpdateScheduleRequest clear via empty string
 		reqClear, _ := http.NewRequest(http.MethodPatch, "/", bytes.NewReader([]byte(`{"start_date":"2026-05-01","target_completion_date":""}`)))
 		reqClear = mux.SetURLVars(reqClear, map[string]string{"project_id": pID.String(), "asset_id": aID.String()})
-		cmdAny, err := decodeUpdateScheduleRequest(context.Background(), reqClear)
+		cmdAny, err := decodeUpdateScheduleRequest(authedCtx, reqClear)
 		if err != nil {
 			t.Fatalf("unexpected clear schedule error: %v", err)
 		}
-		schedCmd := cmdAny.(asset.RescheduleAssetCommand)
+		schedCmd := cmdAny.(assetapp.RescheduleAsset)
 		if !schedCmd.ClearTargetDate || schedCmd.StartDate == nil {
 			t.Errorf("expected ClearTargetDate=true and StartDate parsed, got %+v", schedCmd)
 		}
 
-		ast, _ := asset.CreateAsset(aID, "Renovation", "", pID, money.New(5000, "UAH"), time.Now().UTC(), asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "Max"}, asset.AssetStatusActive, nil, nil)
-		schedEP := makeUpdateScheduleEndpoint(&mockAssetService{asset: ast})
-		respAny, err := schedEP(context.Background(), schedCmd)
+		ast, _ := asset.CreateAsset(aID, "Renovation", "", pID, money.New(5000, "UAH"), time.Now().UTC(), asset.OwnerRef{PersonID: schedCmd.RequesterID, DisplayName: "Max"}, asset.AssetStatusActive, nil, nil)
+		schedEP := makeUpdateScheduleEndpoint(newTestAssetApp(ast, nil))
+		respAny, err := schedEP(authedCtx, schedCmd)
 		if err != nil {
 			t.Fatalf("unexpected schedule endpoint error: %v", err)
 		}
@@ -713,23 +719,23 @@ func TestAssetDecodersValidationErrors(t *testing.T) {
 		// decodeGetCashFlowForecastRequest validation & success
 		reqBadFCProj, _ := http.NewRequest(http.MethodGet, "/projects/bad/cashflow-forecast", nil)
 		reqBadFCProj = mux.SetURLVars(reqBadFCProj, map[string]string{"project_id": "bad"})
-		if _, err := decodeGetCashFlowForecastRequest(context.Background(), reqBadFCProj); err == nil {
+		if _, err := decodeGetCashFlowForecastRequest(authedCtx, reqBadFCProj); err == nil {
 			t.Errorf("expected invalid project id error")
 		}
 		reqBadAsOf, _ := http.NewRequest(http.MethodGet, "/projects/"+pID.String()+"/cashflow-forecast?as_of_date=bad", nil)
 		reqBadAsOf = mux.SetURLVars(reqBadAsOf, map[string]string{"project_id": pID.String()})
-		if _, err := decodeGetCashFlowForecastRequest(context.Background(), reqBadAsOf); err == nil {
+		if _, err := decodeGetCashFlowForecastRequest(authedCtx, reqBadAsOf); err == nil {
 			t.Errorf("expected invalid as_of_date error")
 		}
 
 		reqFC, _ := http.NewRequest(http.MethodGet, "/projects/"+pID.String()+"/cashflow-forecast?from_month=2026-05&to_month=2026-07&tag=home&as_of_date=2026-05-10", nil)
 		reqFC = mux.SetURLVars(reqFC, map[string]string{"project_id": pID.String()})
-		qAny, err := decodeGetCashFlowForecastRequest(context.Background(), reqFC)
+		qAny, err := decodeGetCashFlowForecastRequest(authedCtx, reqFC)
 		if err != nil {
 			t.Fatalf("unexpected decodeGetCashFlowForecastRequest error: %v", err)
 		}
-		fcEP := makeGetCashFlowForecastEndpoint(&mockAssetService{})
-		if _, err := fcEP(context.Background(), qAny); err != nil {
+		fcEP := makeGetCashFlowForecastEndpoint(newTestAssetApp(ast, nil))
+		if _, err := fcEP(authedCtx, qAny); err != nil {
 			t.Errorf("unexpected GetCashFlowForecast endpoint error: %v", err)
 		}
 
@@ -785,8 +791,8 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	peopleSvcErr := &mockPeopleService{err: errSvc}
 	authSvcErr := &mockAuthService{err: errSvc}
-	projSvcErr := &mockProjectService{err: errSvc}
-	astSvcErr := &mockAssetService{err: errSvc}
+	projSvcErr := newTestProjectApp(nil, project.ProjectTotals{}, errSvc)
+	astSvcErr := newTestAssetApp(nil, errSvc)
 
 	t.Run("makeRegisterEndpoint errors", func(t *testing.T) {
 		ep := makeRegisterEndpoint(peopleSvcErr)
@@ -843,7 +849,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeCreateProjectEndpoint error", func(t *testing.T) {
 		ep := makeCreateProjectEndpoint(projSvcErr)
-		_, err := ep(context.Background(), project.CreateProjectCommand{})
+		_, err := ep(context.Background(), projectapp.CreateProject{RequesterID: core.NewPersonID(), Name: "Valid"})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
@@ -851,7 +857,7 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeUpdateProjectEndpoint error", func(t *testing.T) {
 		ep := makeUpdateProjectEndpoint(projSvcErr)
-		_, err := ep(context.Background(), project.UpdateProjectCommand{})
+		_, err := ep(context.Background(), projectapp.UpdateProject{ProjectID: core.NewProjectID(), RequesterID: core.NewPersonID()})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
@@ -859,13 +865,15 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeRemoveProjectEndpoint success and error", func(t *testing.T) {
 		epErr := makeRemoveProjectEndpoint(projSvcErr)
-		_, err := epErr(context.Background(), project.RemoveProjectCommand{})
+		_, err := epErr(context.Background(), projectapp.RemoveProject{ProjectID: core.NewProjectID(), RequesterID: core.NewPersonID()})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
 
-		epOk := makeRemoveProjectEndpoint(&mockProjectService{})
-		_, err = epOk(context.Background(), project.RemoveProjectCommand{})
+		ownerID := core.NewPersonID()
+		seedProj, _ := project.NewProject(core.NewProjectID(), "Removable", "Desc", &project.Owner{PersonID: ownerID, DisplayName: "Owner"}, time.Now(), time.Now())
+		epOk := makeRemoveProjectEndpoint(newTestProjectApp(seedProj, project.ProjectTotals{}, nil))
+		_, err = epOk(context.Background(), projectapp.RemoveProject{ProjectID: seedProj.ID(), RequesterID: ownerID})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -873,15 +881,15 @@ func TestEndpointsErrorBranches(t *testing.T) {
 
 	t.Run("makeUpdateProjectBudgetEndpoint success and error", func(t *testing.T) {
 		epErr := makeUpdateProjectBudgetEndpoint(projSvcErr)
-		_, err := epErr(context.Background(), project.UpdateProjectBudgetCommand{})
+		_, err := epErr(context.Background(), projectapp.UpdateProjectBudget{ProjectID: core.NewProjectID(), RequesterID: core.NewPersonID()})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
 
 		dummyOwner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner"}
 		dummyProj, _ := project.NewProject(core.NewProjectID(), "Proj", "Desc", dummyOwner, time.Now(), time.Now())
-		epOk := makeUpdateProjectBudgetEndpoint(&mockProjectService{project: dummyProj})
-		res, err := epOk(context.Background(), project.UpdateProjectBudgetCommand{})
+		epOk := makeUpdateProjectBudgetEndpoint(newTestProjectApp(dummyProj, project.ProjectTotals{}, nil))
+		res, err := epOk(context.Background(), projectapp.UpdateProjectBudget{ProjectID: dummyProj.ID(), RequesterID: dummyOwner.PersonID})
 		if err != nil || res == nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -895,23 +903,23 @@ func TestEndpointsErrorBranches(t *testing.T) {
 	})
 
 	t.Run("makeShowProjectTotalsEndpoint currency mismatch and service error", func(t *testing.T) {
-		mProjSvcErr := &mockProjectService{err: errors.New("svc error")}
+		mProjSvcErr := newTestProjectApp(nil, project.ProjectTotals{}, errors.New("svc error"))
 		epErr := makeShowProjectTotalsEndpoint(mProjSvcErr)
-		_, err := epErr(context.Background(), core.NewProjectID())
+		_, err := epErr(context.Background(), projectapp.GetProjectTotals{ProjectID: core.NewProjectID(), RequesterID: core.NewPersonID()})
 		if err == nil {
 			t.Errorf("expected service error")
 		}
 
-		mProjSvcSuccess := &mockProjectService{
-			totals: project.ProjectTotals{
-				TotalInvested: 1000,
-				Balance:       500,
-				HasActivity:   true,
-				Currency:      "USD",
-			},
-		}
+		totOwner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner"}
+		totProj, _ := project.NewProject(core.NewProjectID(), "Totals Proj", "Desc", totOwner, time.Now(), time.Now(), "USD")
+		mProjSvcSuccess := newTestProjectApp(totProj, project.ProjectTotals{
+			TotalInvested: 1000,
+			Balance:       500,
+			HasActivity:   true,
+			Currency:      "USD",
+		}, nil)
 		epSuccess := makeShowProjectTotalsEndpoint(mProjSvcSuccess)
-		res, err := epSuccess(context.Background(), core.NewProjectID())
+		res, err := epSuccess(context.Background(), projectapp.GetProjectTotals{ProjectID: totProj.ID(), RequesterID: totOwner.PersonID})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -920,48 +928,6 @@ func TestEndpointsErrorBranches(t *testing.T) {
 			t.Fatalf("expected 2 totals items, got %v", res)
 		}
 	})
-}
-
-type mockAssetServiceWithCol struct {
-	mockAssetService
-	col *asset.Collection
-}
-
-func (m *mockAssetServiceWithCol) Find(_ context.Context, _ asset.CollectionFilter) (*asset.Collection, error) {
-	return m.col, nil
-}
-
-type mockInvestmentServiceWithCol struct {
-	col *investment.Collection
-	err error
-}
-
-func (m *mockInvestmentServiceWithCol) Create(context.Context, investment.CreateInvestmentCommand) (*investment.Investment, error) {
-	return nil, nil
-}
-func (m *mockInvestmentServiceWithCol) CreateBatch(context.Context, investment.CreateBatchInvestmentsCommand) ([]*investment.Investment, error) {
-	return nil, nil
-}
-func (m *mockInvestmentServiceWithCol) Update(context.Context, investment.UpdateInvestmentCommand) error {
-	return nil
-}
-func (m *mockInvestmentServiceWithCol) Remove(context.Context, investment.RemoveInvestmentCommand) error {
-	return nil
-}
-func (m *mockInvestmentServiceWithCol) FindOne(context.Context, investment.Filter) (*investment.Investment, error) {
-	return nil, nil
-}
-func (m *mockInvestmentServiceWithCol) Find(_ context.Context, _ investment.CollectionFilter) (*investment.Collection, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.col, nil
-}
-func (m *mockInvestmentServiceWithCol) FindTags(context.Context, core.ProjectID) ([]string, error) {
-	return nil, nil
-}
-func (m *mockInvestmentServiceWithCol) AssignToAsset(context.Context, core.AssetID, []core.InvestmentID) error {
-	return nil
 }
 
 type mockRateProvider struct {
@@ -1012,8 +978,8 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, ok := res.(AcceptShareCommand); !ok {
-			t.Errorf("expected AcceptShareCommand result")
+		if _, ok := res.(projectapp.AcceptProjectShare); !ok {
+			t.Errorf("expected projectapp.AcceptProjectShare result")
 		}
 	})
 
@@ -1031,40 +997,41 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		}
 
 		req = mux.SetURLVars(req, map[string]string{"project_id": validUUID})
-		res, err := DecodeGetProjectRequest(context.Background(), req)
+		authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, core.NewPersonID())
+		res, err := DecodeGetProjectRequest(authedCtx, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, ok := res.(project.ProjectFilter); !ok {
-			t.Errorf("expected ProjectFilter result")
+		if _, ok := res.(projectapp.GetProject); !ok {
+			t.Errorf("expected projectapp.GetProject result")
 		}
 	})
 
 	t.Run("makeGetProjectEndpoint and makeAcceptShareEndpoint", func(t *testing.T) {
 		owner := &project.Owner{PersonID: core.NewPersonID(), DisplayName: "Owner"}
 		proj, _ := project.NewProject(core.NewProjectID(), "Project One", "Desc", owner, time.Now(), time.Now())
-		projSvc := &mockProjectService{project: proj}
+		projSvc := newTestProjectApp(proj, project.ProjectTotals{}, nil)
 
 		epGet := makeGetProjectEndpoint(projSvc)
-		res, err := epGet(context.Background(), project.ProjectFilter{ProjectID: proj.ID()})
+		res, err := epGet(context.Background(), projectapp.GetProject{ProjectID: proj.ID(), RequesterID: owner.PersonID})
 		if err != nil || res == nil {
 			t.Fatalf("makeGetProjectEndpoint error: %v", err)
 		}
 
 		epAccept := makeAcceptShareEndpoint(projSvc)
-		res, err = epAccept(context.Background(), AcceptShareCommand{ShareToken: proj.ShareToken(), PersonID: owner.PersonID})
+		res, err = epAccept(context.Background(), projectapp.AcceptProjectShare{ShareToken: proj.ShareToken(), RequesterID: owner.PersonID})
 		if err != nil || res == nil {
 			t.Fatalf("makeAcceptShareEndpoint error: %v", err)
 		}
 
-		projErrSvc := &mockProjectService{err: errors.New("svc error")}
+		projErrSvc := newTestProjectApp(nil, project.ProjectTotals{}, errors.New("svc error"))
 		epGetErr := makeGetProjectEndpoint(projErrSvc)
-		if _, err := epGetErr(context.Background(), project.ProjectFilter{}); err == nil {
+		if _, err := epGetErr(context.Background(), projectapp.GetProject{ProjectID: proj.ID(), RequesterID: owner.PersonID}); err == nil {
 			t.Error("expected error from makeGetProjectEndpoint")
 		}
 
 		epAcceptErr := makeAcceptShareEndpoint(projErrSvc)
-		if _, err := epAcceptErr(context.Background(), AcceptShareCommand{}); err == nil {
+		if _, err := epAcceptErr(context.Background(), projectapp.AcceptProjectShare{ShareToken: proj.ShareToken(), RequesterID: owner.PersonID}); err == nil {
 			t.Error("expected error from makeAcceptShareEndpoint")
 		}
 	})
@@ -1128,9 +1095,9 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd, ok := res.(project.CreateProjectCommand)
+		cmd, ok := res.(projectapp.CreateProject)
 		if !ok {
-			t.Fatalf("expected CreateProjectCommand")
+			t.Fatalf("expected projectapp.CreateProject")
 		}
 		if cmd.Name != "Project with Budget" || len(cmd.TagBudgets) != 1 || cmd.TagBudgets[0].Tag != "materials" {
 			t.Errorf("unexpected command data: %+v", cmd)
@@ -1179,7 +1146,7 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd, ok := res.(project.UpdateProjectBudgetCommand)
+		cmd, ok := res.(projectapp.UpdateProjectBudget)
 		if !ok || len(cmd.TagBudgets) != 1 || cmd.TagBudgets[0].Tag != "rent" || cmd.TagBudgets[0].Currency != "PLN" {
 			t.Errorf("unexpected command: %+v", cmd)
 		}
@@ -1240,41 +1207,56 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Errorf("expected ProgressPercentage 200.0, got %v", aDto.ProgressPercentage)
 		}
 
-		astSvc := &mockAssetService{asset: astUSD}
+		astSvc := newTestAssetApp(astUSD, nil)
 		epCreateAst := makeCreateAssetEndpoint(astSvc)
-		if _, err := epCreateAst(context.Background(), asset.CreateAssetCommand{}); err != nil {
+		if _, err := epCreateAst(context.Background(), assetapp.CreateAsset{
+			AssetID:     core.NewAssetID(),
+			RequesterID: owner.PersonID,
+			ProjectID:   proj.ID(),
+			Name:        "Created Asset",
+			Price:       money.New(100, money.USD),
+			AcquiredAt:  time.Now().UTC(),
+		}); err != nil {
 			t.Errorf("makeCreateAssetEndpoint error: %v", err)
 		}
 
 		epCreateFromPays := makeCreateAssetFromPaymentsEndpoint(astSvc)
-		if _, err := epCreateFromPays(context.Background(), asset.CreateAssetFromPaymentsCommand{}); err != nil {
+		if _, err := epCreateFromPays(context.Background(), assetapp.CreateAssetFromInvestments{
+			AssetID:       core.NewAssetID(),
+			RequesterID:   owner.PersonID,
+			ProjectID:     proj.ID(),
+			Name:          "From Payments",
+			InvestmentIDs: []core.InvestmentID{core.NewInvestmentID()},
+		}); err != nil {
 			t.Errorf("makeCreateAssetFromPaymentsEndpoint error: %v", err)
 		}
 
 		epGetAst := makeGetAssetEndpoint(astSvc)
-		if _, err := epGetAst(context.Background(), asset.Filter{}); err != nil {
+		if _, err := epGetAst(context.Background(), assetapp.GetAsset{
+			ID:          astUSD.ID(),
+			ProjectID:   proj.ID(),
+			RequesterID: owner.PersonID,
+		}); err != nil {
 			t.Errorf("makeGetAssetEndpoint error: %v", err)
 		}
 
-		astCol := asset.NewCollection(1)
-		astCol.Add(astUSD)
-		mAstColSvc := &mockAssetServiceWithCol{col: astCol}
-		epListAst := makeListAssetsEndpoint(mAstColSvc)
-		if _, err := epListAst(context.Background(), asset.CollectionFilter{}); err != nil {
+		epListAst := makeListAssetsEndpoint(astSvc)
+		if _, err := epListAst(context.Background(), assetapp.ListAssets{
+			ProjectID:   proj.ID(),
+			RequesterID: owner.PersonID,
+		}); err != nil {
 			t.Errorf("makeListAssetsEndpoint error: %v", err)
 		}
 
 		// Test makeShowProjectTotalsEndpoint
-		mProjSvcTotals := &mockProjectService{
-			totals: project.ProjectTotals{
-				TotalInvested: 40000,
-				Balance:       25000,
-				HasActivity:   true,
-				Currency:      "UAH",
-			},
-		}
+		mProjSvcTotals := newTestProjectApp(proj, project.ProjectTotals{
+			TotalInvested: 40000,
+			Balance:       25000,
+			HasActivity:   true,
+			Currency:      "UAH",
+		}, nil)
 		epTotalsInv := makeShowProjectTotalsEndpoint(mProjSvcTotals)
-		resInvTotals, err := epTotalsInv(context.Background(), proj.ID())
+		resInvTotals, err := epTotalsInv(context.Background(), projectapp.GetProjectTotals{ProjectID: proj.ID(), RequesterID: owner.PersonID})
 		if err != nil {
 			t.Fatalf("unexpected error with inv service: %v", err)
 		}
@@ -1291,9 +1273,9 @@ func TestAcceptShareAndGetProjectDecodersAndEndpoints(t *testing.T) {
 			t.Errorf("expected Project Balance 25000, got %+v", dtoTotals.Totals[1])
 		}
 
-		mProjSvcErrTotals := &mockProjectService{err: errors.New("rate error")}
+		mProjSvcErrTotals := newTestProjectApp(nil, project.ProjectTotals{}, errors.New("rate error"))
 		epTotalsErr := makeShowProjectTotalsEndpoint(mProjSvcErrTotals)
-		if _, err := epTotalsErr(context.Background(), proj.ID()); err == nil {
+		if _, err := epTotalsErr(context.Background(), projectapp.GetProjectTotals{ProjectID: proj.ID(), RequesterID: owner.PersonID}); err == nil {
 			t.Error("expected rate error in makeShowProjectTotalsEndpoint")
 		}
 	})
@@ -1645,6 +1627,7 @@ func TestDecodeLinkChildAssetRequest(t *testing.T) {
 	projID := core.NewProjectID()
 	parentID := core.NewAssetID()
 	childID := core.NewAssetID()
+	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, core.NewPersonID())
 
 	t.Run("omitted share_percentage defaults to 100", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"child_asset_id": "` + childID.String() + `"}`)
@@ -1654,13 +1637,13 @@ func TestDecodeLinkChildAssetRequest(t *testing.T) {
 			"asset_id":   parentID.String(),
 		})
 
-		res, err := decodeLinkChildAssetRequest(context.Background(), req)
+		res, err := decodeLinkChildAssetRequest(authedCtx, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd, ok := res.(asset.LinkChildCommand)
+		cmd, ok := res.(assetapp.LinkChildAsset)
 		if !ok {
-			t.Fatalf("expected LinkChildCommand, got %T", res)
+			t.Fatalf("expected assetapp.LinkChildAsset, got %T", res)
 		}
 		if cmd.SharePercentage != 100.0 {
 			t.Errorf("expected default share 100.0, got %f", cmd.SharePercentage)
@@ -1675,11 +1658,11 @@ func TestDecodeLinkChildAssetRequest(t *testing.T) {
 			"asset_id":   parentID.String(),
 		})
 
-		res, err := decodeLinkChildAssetRequest(context.Background(), req)
+		res, err := decodeLinkChildAssetRequest(authedCtx, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd := res.(asset.LinkChildCommand)
+		cmd := res.(assetapp.LinkChildAsset)
 		if cmd.SharePercentage != 45.5 {
 			t.Errorf("expected share 45.5, got %f", cmd.SharePercentage)
 		}
@@ -1693,11 +1676,11 @@ func TestDecodeLinkChildAssetRequest(t *testing.T) {
 			"asset_id":   parentID.String(),
 		})
 
-		res, err := decodeLinkChildAssetRequest(context.Background(), req)
+		res, err := decodeLinkChildAssetRequest(authedCtx, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		cmd := res.(asset.LinkChildCommand)
+		cmd := res.(assetapp.LinkChildAsset)
 		if cmd.SharePercentage != -10.0 {
 			t.Errorf("expected explicit share -10.0 to be retained, got %f", cmd.SharePercentage)
 		}

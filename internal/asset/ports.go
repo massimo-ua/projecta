@@ -8,28 +8,19 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 )
 
-type Service interface {
-	Find(ctx context.Context, filter CollectionFilter) (*Collection, error)
-	FindOne(ctx context.Context, filter Filter) (*Asset, error)
-	Create(ctx context.Context, command CreateAssetCommand) (*Asset, error)
-	CreateFromInvestments(ctx context.Context, command CreateAssetFromInvestmentsCommand) (*Asset, error)
-	CreateFromPayments(ctx context.Context, command CreateAssetFromPaymentsCommand) (*Asset, error)
-	Update(ctx context.Context, command UpdateAssetCommand) error
-	Remove(ctx context.Context, command RemoveAssetCommand) error
-	LinkChild(ctx context.Context, command LinkChildCommand) error
-	UnlinkChild(ctx context.Context, command UnlinkChildCommand) error
-	AssignInvestments(ctx context.Context, command AssignInvestmentsCommand) error
-	Group(ctx context.Context, command GroupAssetsCommand) (*Asset, error)
-	LinkChildren(ctx context.Context, command LinkChildrenCommand) error
-	UpdateSchedule(ctx context.Context, command RescheduleAssetCommand) (*Asset, []string, error)
-	GetCashFlowForecast(ctx context.Context, query GetCashFlowForecastQuery) (*CashFlowForecast, error)
-}
-
+// Repository defines persistence and transactional read-modify-write access for Asset aggregates.
 type Repository interface {
 	Save(ctx context.Context, asset *Asset) error
 	Remove(ctx context.Context, asset *Asset) error
 	FindOne(ctx context.Context, filter Filter) (*Asset, error)
 	Find(ctx context.Context, filter CollectionFilter) (*Collection, error)
+	UpdateAsset(
+		ctx context.Context,
+		assetID core.AssetID,
+		projectID core.ProjectID,
+		ownerID core.PersonID,
+		updateFn func(ctx context.Context, a *Asset) (*Asset, error),
+	) error
 	AddChild(ctx context.Context, parentID core.AssetID, childID core.AssetID, sharePercentage float64) error
 	RemoveChild(ctx context.Context, parentID core.AssetID, childID core.AssetID) error
 	FindChildren(ctx context.Context, parentID core.AssetID) ([]ChildAssetLink, error)
@@ -70,14 +61,7 @@ type InvestmentRecordSummary struct {
 	Tags             []string
 }
 
-type InvestmentSource interface {
-	FindInvestments(ctx context.Context, projectID core.ProjectID, ids []core.InvestmentID) ([]InvestmentItem, error)
-	ListProjectInvestments(ctx context.Context, projectID core.ProjectID) ([]InvestmentRecordSummary, error)
-	AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error
-	CreateInitialInvestment(ctx context.Context, item InitialInvestment) error
-}
-
-// ProjectDescriptor represents the narrow read view of a project needed by the asset context.
+// ProjectDescriptor represents the narrow read view of a project needed by the asset domain.
 type ProjectDescriptor struct {
 	ID           core.ProjectID
 	MainCurrency string
@@ -85,13 +69,10 @@ type ProjectDescriptor struct {
 	EndDate      time.Time
 }
 
-// ProjectReader is a consumer-owned interface providing read access to projects.
-type ProjectReader interface {
-	FindProject(ctx context.Context, projectID core.ProjectID) (ProjectDescriptor, error)
-	FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string, tag string) (map[string]int64, error)
-}
-
-// OwnerReader is a consumer-owned interface providing read access to asset owners.
-type OwnerReader interface {
-	FindOwner(ctx context.Context, personID core.PersonID) (OwnerRef, error)
+type GetCashFlowForecastQuery struct {
+	ProjectID core.ProjectID
+	FromMonth string
+	ToMonth   string
+	AsOfDate  time.Time
+	Tag       string
 }

@@ -13,10 +13,12 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 )
 
 // Mocks for web package tests
@@ -131,119 +133,177 @@ func (m *mockTokenProvider) ValidateRefreshToken(_ uuid.UUID, _ string) bool {
 	return true
 }
 
-type mockProjectService struct {
-	project *project.Project
-	totals  project.ProjectTotals
-	err     error
-}
-
-func (m *mockProjectService) Find(_ context.Context, _ project.ProjectCollectionFilter) ([]*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return []*project.Project{m.project}, nil
-}
-func (m *mockProjectService) FindOne(_ context.Context, _ project.ProjectFilter) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectService) Create(_ context.Context, _ project.CreateProjectCommand) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectService) Remove(_ context.Context, _ project.RemoveProjectCommand) error {
-	return m.err
-}
-func (m *mockProjectService) Update(_ context.Context, _ project.UpdateProjectCommand) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectService) UpdateBudget(_ context.Context, _ project.UpdateProjectBudgetCommand) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectService) AcceptShare(_ context.Context, _ uuid.UUID, _ core.PersonID) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.project, nil
-}
-func (m *mockProjectService) GetTotals(_ context.Context, _ core.ProjectID) (project.ProjectTotals, error) {
-	if m.err != nil {
-		return project.ProjectTotals{}, m.err
-	}
-	return m.totals, nil
-}
-
-type mockAssetService struct {
-	asset *asset.Asset
+type stubProjectOwnerReader struct {
+	owner *project.Owner
 	err   error
 }
 
-func (m *mockAssetService) Find(_ context.Context, _ asset.CollectionFilter) (*asset.Collection, error) {
-	if m.err != nil {
-		return nil, m.err
+func (s stubProjectOwnerReader) FindOwner(_ context.Context, personID core.PersonID) (*project.Owner, error) {
+	if s.err != nil {
+		return nil, s.err
 	}
-	return asset.NewCollection(1), nil
-}
-func (m *mockAssetService) FindOne(_ context.Context, _ asset.Filter) (*asset.Asset, error) {
-	if m.err != nil {
-		return nil, m.err
+	if s.owner != nil {
+		return s.owner, nil
 	}
-	return m.asset, nil
+	return &project.Owner{PersonID: personID, DisplayName: "Test Owner", CanHaveProjects: true}, nil
 }
-func (m *mockAssetService) Create(_ context.Context, _ asset.CreateAssetCommand) (*asset.Asset, error) {
-	if m.err != nil {
-		return nil, m.err
+
+type stubTotalsReadModel struct {
+	totals project.ProjectTotals
+	err    error
+}
+
+func (s stubTotalsReadModel) CalculateTotals(_ context.Context, _ core.ProjectID, _ core.PersonID, homeCurrency string) (project.ProjectTotals, error) {
+	if s.err != nil {
+		return project.ProjectTotals{}, s.err
 	}
-	return m.asset, nil
-}
-func (m *mockAssetService) CreateFromPayments(_ context.Context, _ asset.CreateAssetFromPaymentsCommand) (*asset.Asset, error) {
-	if m.err != nil {
-		return nil, m.err
+	res := s.totals
+	if res.Currency == "" {
+		res.Currency = homeCurrency
 	}
-	return m.asset, nil
+	return res, nil
 }
-func (m *mockAssetService) CreateFromInvestments(_ context.Context, _ asset.CreateAssetFromInvestmentsCommand) (*asset.Asset, error) {
-	if m.err != nil {
-		return nil, m.err
+
+type failingProjectRepo struct {
+	project.MemoryProjectRepository
+	err error
+}
+
+func (f *failingProjectRepo) Find(_ context.Context, _ project.ProjectCollectionFilter) ([]*project.Project, error) {
+	return nil, f.err
+}
+func (f *failingProjectRepo) FindOne(_ context.Context, _ project.ProjectFilter) (*project.Project, error) {
+	return nil, f.err
+}
+func (f *failingProjectRepo) GetProject(_ context.Context, _ core.ProjectID, _ core.PersonID) (*project.Project, error) {
+	return nil, f.err
+}
+func (f *failingProjectRepo) FindByShareToken(_ context.Context, _ uuid.UUID) (*project.Project, error) {
+	return nil, f.err
+}
+func (f *failingProjectRepo) Create(_ context.Context, _ *project.Project) error { return f.err }
+func (f *failingProjectRepo) Update(_ context.Context, _ *project.Project) error { return f.err }
+func (f *failingProjectRepo) UpdateProject(_ context.Context, _ core.ProjectID, _ core.PersonID, _ func(context.Context, *project.Project) (*project.Project, error)) error {
+	return f.err
+}
+func (f *failingProjectRepo) Remove(_ context.Context, _ *project.Project) error { return f.err }
+func (f *failingProjectRepo) CreateShareRecord(_ context.Context, _ core.ProjectID, _ core.PersonID) error {
+	return f.err
+}
+
+func newTestProjectApp(seed *project.Project, totals project.ProjectTotals, err error) *projectapp.Application {
+	if err != nil {
+		return projectapp.NewApplication(&failingProjectRepo{err: err}, stubProjectOwnerReader{err: err}, stubTotalsReadModel{err: err}, nil, nil)
 	}
-	return m.asset, nil
+	repo := project.NewMemoryProjectRepository()
+	var owner *project.Owner
+	if seed != nil {
+		_ = repo.Create(context.Background(), seed)
+		owner = seed.Owner()
+		if owner != nil {
+			owner.CanHaveProjects = true
+		}
+	}
+	return projectapp.NewApplication(repo, stubProjectOwnerReader{owner: owner}, stubTotalsReadModel{totals: totals}, nil, nil)
 }
-func (m *mockAssetService) Remove(_ context.Context, _ asset.RemoveAssetCommand) error {
-	return m.err
+
+type noopTxDBForWebTest struct{}
+
+func (noopTxDBForWebTest) Tx(ctx context.Context, fn func(context.Context) (any, error)) (any, error) {
+	return fn(ctx)
 }
-func (m *mockAssetService) Update(_ context.Context, _ asset.UpdateAssetCommand) error {
-	return m.err
+func (noopTxDBForWebTest) Close()                         {}
+func (noopTxDBForWebTest) Ping(_ context.Context) error   { return nil }
+
+type stubAssetOwnerReader struct{}
+
+func (stubAssetOwnerReader) FindOwner(_ context.Context, personID core.PersonID) (asset.OwnerRef, error) {
+	return asset.OwnerRef{PersonID: personID, DisplayName: "Test Owner"}, nil
 }
-func (m *mockAssetService) LinkChild(_ context.Context, _ asset.LinkChildCommand) error {
-	return m.err
+
+type stubAssetProjectReader struct{}
+
+func (stubAssetProjectReader) FindProject(_ context.Context, projectID core.ProjectID, _ core.PersonID) (asset.ProjectDescriptor, error) {
+	now := time.Now().UTC()
+	return asset.ProjectDescriptor{ID: projectID, MainCurrency: "USD", StartDate: now, EndDate: now.AddDate(1, 0, 0)}, nil
 }
-func (m *mockAssetService) UnlinkChild(_ context.Context, _ asset.UnlinkChildCommand) error {
-	return m.err
+func (stubAssetProjectReader) FindMonthlyCashCeilings(_ context.Context, _ core.ProjectID, _ core.PersonID, _ []string, _ string) (map[string]int64, error) {
+	return map[string]int64{}, nil
 }
-func (m *mockAssetService) AssignInvestments(_ context.Context, _ asset.AssignInvestmentsCommand) error {
-	return m.err
+
+type stubAssetInvestmentSource struct{}
+
+func (stubAssetInvestmentSource) FindInvestments(_ context.Context, _ core.ProjectID, _ core.PersonID, ids []core.InvestmentID) ([]asset.InvestmentItem, error) {
+	items := make([]asset.InvestmentItem, 0, len(ids))
+	for _, id := range ids {
+		items = append(items, asset.InvestmentItem{
+			ID:     id,
+			Amount: money.New(1000, "USD"),
+		})
+	}
+	return items, nil
 }
-func (m *mockAssetService) Group(_ context.Context, _ asset.GroupAssetsCommand) (*asset.Asset, error) {
-	return m.asset, m.err
+func (stubAssetInvestmentSource) ListProjectInvestments(_ context.Context, _ core.ProjectID, _ core.PersonID) ([]asset.InvestmentRecordSummary, error) {
+	return nil, nil
 }
-func (m *mockAssetService) LinkChildren(_ context.Context, _ asset.LinkChildrenCommand) error {
-	return m.err
+func (stubAssetInvestmentSource) AssignToAsset(_ context.Context, _ core.AssetID, _ core.PersonID, _ []core.InvestmentID) error {
+	return nil
 }
-func (m *mockAssetService) UpdateSchedule(_ context.Context, _ asset.RescheduleAssetCommand) (*asset.Asset, []string, error) {
-	return m.asset, nil, m.err
+func (stubAssetInvestmentSource) CreateInitialInvestment(_ context.Context, _ asset.InitialInvestment) error {
+	return nil
 }
-func (m *mockAssetService) GetCashFlowForecast(_ context.Context, _ asset.GetCashFlowForecastQuery) (*asset.CashFlowForecast, error) {
-	return &asset.CashFlowForecast{}, m.err
+
+type failingAssetRepo struct {
+	asset.MemoryAssetRepository
+	err error
+}
+
+func (f *failingAssetRepo) Save(_ context.Context, _ *asset.Asset) error   { return f.err }
+func (f *failingAssetRepo) Remove(_ context.Context, _ *asset.Asset) error { return f.err }
+func (f *failingAssetRepo) FindOne(_ context.Context, _ asset.Filter) (*asset.Asset, error) {
+	return nil, f.err
+}
+func (f *failingAssetRepo) Find(_ context.Context, _ asset.CollectionFilter) (*asset.Collection, error) {
+	return nil, f.err
+}
+func (f *failingAssetRepo) UpdateAsset(_ context.Context, _ core.AssetID, _ core.ProjectID, _ core.PersonID, _ func(context.Context, *asset.Asset) (*asset.Asset, error)) error {
+	return f.err
+}
+func (f *failingAssetRepo) AddChild(_ context.Context, _, _ core.AssetID, _ float64) error {
+	return f.err
+}
+func (f *failingAssetRepo) RemoveChild(_ context.Context, _, _ core.AssetID) error {
+	return f.err
+}
+func (f *failingAssetRepo) FindChildren(_ context.Context, _ core.AssetID) ([]asset.ChildAssetLink, error) {
+	return nil, f.err
+}
+func (f *failingAssetRepo) FindParents(_ context.Context, _ core.AssetID) ([]asset.ParentAssetLink, error) {
+	return nil, f.err
+}
+func (f *failingAssetRepo) FindAncestors(_ context.Context, _ core.AssetID) ([]core.AssetID, error) {
+	return nil, f.err
+}
+
+func newTestAssetApp(seed *asset.Asset, err error) *assetapp.Application {
+	if err != nil {
+		return assetapp.NewApplication(noopTxDBForWebTest{}, &failingAssetRepo{err: err}, stubAssetOwnerReader{}, stubAssetProjectReader{}, stubAssetInvestmentSource{}, nil, nil)
+	}
+	repo := asset.NewMemoryAssetRepository()
+	if seed != nil {
+		_ = repo.Save(context.Background(), seed)
+	}
+	return assetapp.NewApplication(noopTxDBForWebTest{}, repo, stubAssetOwnerReader{}, stubAssetProjectReader{}, stubAssetInvestmentSource{}, nil, nil)
+}
+
+func newTestAssetAppWithAssets(seeds ...*asset.Asset) *assetapp.Application {
+	repo := asset.NewMemoryAssetRepository()
+	for _, s := range seeds {
+		if s != nil {
+			_ = repo.Save(context.Background(), s)
+		}
+	}
+	return assetapp.NewApplication(noopTxDBForWebTest{}, repo, stubAssetOwnerReader{}, stubAssetProjectReader{}, stubAssetInvestmentSource{}, nil, nil)
 }
 
 func TestWebHandlersAndEndpoints(t *testing.T) {
@@ -258,9 +318,9 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 	peopleSvc := &mockPeopleService{user: person}
 	authSvc := &mockAuthService{authResp: &core.AuthResponse{AccessToken: "token_123", RefreshToken: "ref_123"}}
 	tokenProv := &mockTokenProvider{claims: &core.AuthTokenClaims{ID: uuid.New().String(), AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String(), Roles: []string{"User"}}}}
-	projSvc := &mockProjectService{project: proj}
+	projSvc := newTestProjectApp(proj, project.ProjectTotals{}, nil)
 	stmtSvc := &mockStatementService{}
-	astSvc := &mockAssetService{asset: ast}
+	astSvc := newTestAssetApp(ast, nil)
 
 	handler, err := MakeHTTPHandler(peopleSvc, tokenProv, authSvc, &mockInvitationService{}, projSvc, stmtSvc, astSvc)
 	if err != nil || handler == nil {
@@ -377,25 +437,20 @@ func TestWebHandlersAndEndpoints(t *testing.T) {
 			t.Errorf("expected 200 for PATCH /projects/{id}, got %v", respPatch.StatusCode)
 		}
 
+		// GET /projects/{id}/totals before removing project
+		reqTotals, _ := http.NewRequest("GET", server.URL+"/projects/"+proj.ID().String()+"/totals", nil)
+		reqTotals.Header.Set("Authorization", "Bearer token")
+		respTotals, err := client.Do(reqTotals)
+		if err != nil || respTotals.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for GET totals, got %v", respTotals.StatusCode)
+		}
+
 		// DELETE /projects/{id}
 		reqDelete, _ := http.NewRequest("DELETE", server.URL+"/projects/"+proj.ID().String(), nil)
 		reqDelete.Header.Set("Authorization", "Bearer token")
 		respDelete, err := client.Do(reqDelete)
 		if err != nil || respDelete.StatusCode != http.StatusNoContent {
 			t.Errorf("expected 204 for DELETE /projects/{id}, got %v", respDelete.StatusCode)
-		}
-	})
-
-	t.Run("Totals endpoint", func(t *testing.T) {
-		client := &http.Client{}
-		pID := proj.ID().String()
-
-		// GET /projects/{id}/totals
-		reqTotals, _ := http.NewRequest("GET", server.URL+"/projects/"+pID+"/totals", nil)
-		reqTotals.Header.Set("Authorization", "Bearer token")
-		respTotals, err := client.Do(reqTotals)
-		if err != nil || respTotals.StatusCode != http.StatusOK {
-			t.Errorf("expected 200 for GET totals, got %v", respTotals.StatusCode)
 		}
 	})
 
@@ -489,7 +544,7 @@ func TestRoleBasedAccessControl(t *testing.T) {
 
 	peopleSvc := &mockPeopleService{user: person}
 	authSvc := &mockAuthService{}
-	projSvc := &mockProjectService{project: proj}
+	projSvc := newTestProjectApp(proj, project.ProjectTotals{}, nil)
 
 	// Dynamic token provider that changes roles based on test
 	var currentRoles []string

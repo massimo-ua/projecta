@@ -22,6 +22,20 @@ func NewParticipant(displayName string) (Participant, error) {
 	return Participant{displayName: trimmed}, nil
 }
 
+// MustNewParticipant constructs a Participant or panics; for test fixtures only.
+func MustNewParticipant(displayName string) Participant {
+	p, err := NewParticipant(displayName)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
+// ReconstituteParticipant hydrates a Participant from trusted persistence storage.
+func ReconstituteParticipant(displayName string) Participant {
+	return Participant{displayName: displayName}
+}
+
 func (p Participant) DisplayName() string {
 	return p.displayName
 }

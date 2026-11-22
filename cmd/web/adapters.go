@@ -5,11 +5,14 @@ import (
 
 	"github.com/Rhymond/go-money"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
+	investmentapp "gitlab.com/massimo-ua/projecta/internal/investment/app"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 )
@@ -65,15 +68,11 @@ type assetProjectReaderAdapter struct {
 	rateProvider currency.CurrencyRateProvider
 }
 
-func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (asset.ProjectDescriptor, error) {
-	personID, err := core.AuthGuard(ctx)
-	if err != nil {
-		return asset.ProjectDescriptor{}, exceptions.NewUnauthorizedException("failed to identify requester", err)
+func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) (asset.ProjectDescriptor, error) {
+	if requesterID.IsNil() {
+		return asset.ProjectDescriptor{}, exceptions.NewUnauthorizedException("failed to identify requester", nil)
 	}
-	proj, err := a.projects.FindOne(ctx, project.ProjectFilter{
-		ProjectID:   projectID,
-		RequesterID: personID,
-	})
+	proj, err := a.projects.GetProject(ctx, projectID, requesterID)
 	if err != nil {
 		return asset.ProjectDescriptor{}, err
 	}
@@ -85,15 +84,11 @@ func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID c
 	}, nil
 }
 
-func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string, tag string) (map[string]int64, error) {
-	personID, err := core.AuthGuard(ctx)
-	if err != nil {
-		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID, months []string, tag string) (map[string]int64, error) {
+	if requesterID.IsNil() {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
 	}
-	proj, err := a.projects.FindOne(ctx, project.ProjectFilter{
-		ProjectID:   projectID,
-		RequesterID: personID,
-	})
+	proj, err := a.projects.GetProject(ctx, projectID, requesterID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +103,7 @@ func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context,
 }
 
 type assetOwnerReaderAdapter struct {
-	people project.PeopleService
+	people projectapp.OwnerReader
 }
 
 func (a *assetOwnerReaderAdapter) FindOwner(ctx context.Context, personID core.PersonID) (asset.OwnerRef, error) {
@@ -126,12 +121,12 @@ type investmentAssetReaderAdapter struct {
 	assets asset.Repository
 }
 
-func (a *investmentAssetReaderAdapter) FindAsset(ctx context.Context, projectID core.ProjectID, assetID core.AssetID) (investment.AssetDescriptor, error) {
+func (a *investmentAssetReaderAdapter) FindAsset(ctx context.Context, projectID core.ProjectID, assetID core.AssetID) (investmentapp.AssetDescriptor, error) {
 	ast, err := a.assets.FindOne(ctx, asset.Filter{ID: assetID, ProjectID: projectID})
 	if err != nil {
-		return investment.AssetDescriptor{}, err
+		return investmentapp.AssetDescriptor{}, err
 	}
-	return investment.AssetDescriptor{
+	return investmentapp.AssetDescriptor{
 		ID:        ast.ID(),
 		ProjectID: ast.ProjectID(),
 		Name:      ast.Name(),
@@ -142,26 +137,22 @@ type investmentProjectReaderAdapter struct {
 	projects project.ProjectRepository
 }
 
-func (a *investmentProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID) (investment.ProjectDescriptor, error) {
-	personID, err := core.AuthGuard(ctx)
-	if err != nil {
-		return investment.ProjectDescriptor{}, exceptions.NewUnauthorizedException("failed to identify requester", err)
+func (a *investmentProjectReaderAdapter) FindProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) (investmentapp.ProjectDescriptor, error) {
+	if requesterID.IsNil() {
+		return investmentapp.ProjectDescriptor{}, exceptions.NewUnauthorizedException("failed to identify requester", nil)
 	}
-	proj, err := a.projects.FindOne(ctx, project.ProjectFilter{
-		ProjectID:   projectID,
-		RequesterID: personID,
-	})
+	proj, err := a.projects.GetProject(ctx, projectID, requesterID)
 	if err != nil {
-		return investment.ProjectDescriptor{}, err
+		return investmentapp.ProjectDescriptor{}, err
 	}
-	return investment.ProjectDescriptor{
+	return investmentapp.ProjectDescriptor{
 		ID:           proj.ID(),
 		MainCurrency: proj.MainCurrency(),
 	}, nil
 }
 
 type investmentContributorReaderAdapter struct {
-	people project.PeopleService
+	people projectapp.OwnerReader
 }
 
 func (a *investmentContributorReaderAdapter) FindContributor(ctx context.Context, personID core.PersonID) (investment.ContributorRef, error) {
@@ -176,26 +167,36 @@ func (a *investmentContributorReaderAdapter) FindContributor(ctx context.Context
 }
 
 type projectValidator struct {
-	svc project.ProjectService
+	app *projectapp.Application
 }
 
-func (v *projectValidator) ValidateProject(ctx context.Context, projectID core.ProjectID) error {
-	_, err := v.svc.FindOne(ctx, project.ProjectFilter{ProjectID: projectID})
+func (v *projectValidator) ValidateProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) error {
+	if requesterID.IsNil() {
+		return exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	}
+	_, err := v.app.Queries.GetProject.Handle(ctx, projectapp.GetProject{
+		ProjectID:   projectID,
+		RequesterID: requesterID,
+	})
 	return err
 }
 
 type investmentTransactionFinder struct {
-	svc investment.Service
+	app *investmentapp.Application
 }
 
-func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID core.ProjectID) ([]statement.ExistingTransaction, error) {
+func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) ([]statement.ExistingTransaction, error) {
+	if requesterID.IsNil() {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	}
 	pageSize := 500
 	offset := 0
 	var res []statement.ExistingTransaction
 
 	for {
-		col, err := f.svc.Find(ctx, investment.CollectionFilter{
-			ProjectID: projectID,
+		col, err := f.app.Queries.ListInvestments.Handle(ctx, investmentapp.ListInvestments{
+			RequesterID: requesterID,
+			ProjectID:   projectID,
 			Pagination: core.Pagination{
 				Limit:  pageSize,
 				Offset: offset,
@@ -223,17 +224,18 @@ func (f *investmentTransactionFinder) FindExisting(ctx context.Context, projectI
 }
 
 type investmentSourceAdapter struct {
-	svc investment.Service
+	app *investmentapp.Application
 }
 
-func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID core.ProjectID, ids []core.InvestmentID) ([]asset.InvestmentItem, error) {
+func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID, ids []core.InvestmentID) ([]asset.InvestmentItem, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	col, err := a.svc.Find(ctx, investment.CollectionFilter{
-		ProjectID:  projectID,
-		IDs:        ids,
-		Pagination: core.Pagination{Limit: len(ids)},
+	col, err := a.app.Queries.ListInvestments.Handle(ctx, investmentapp.ListInvestments{
+		RequesterID: requesterID,
+		ProjectID:   projectID,
+		IDs:         ids,
+		Pagination:  core.Pagination{Limit: len(ids)},
 	})
 	if err != nil {
 		return nil, err
@@ -250,14 +252,15 @@ func (a *investmentSourceAdapter) FindInvestments(ctx context.Context, projectID
 	return items, nil
 }
 
-func (a *investmentSourceAdapter) ListProjectInvestments(ctx context.Context, projectID core.ProjectID) ([]asset.InvestmentRecordSummary, error) {
+func (a *investmentSourceAdapter) ListProjectInvestments(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) ([]asset.InvestmentRecordSummary, error) {
 	const pageSize = 500
 	offset := 0
 	var out []asset.InvestmentRecordSummary
 
 	for {
-		col, err := a.svc.Find(ctx, investment.CollectionFilter{
-			ProjectID: projectID,
+		col, err := a.app.Queries.ListInvestments.Handle(ctx, investmentapp.ListInvestments{
+			RequesterID: requesterID,
+			ProjectID:   projectID,
 			Pagination: core.Pagination{
 				Limit:  pageSize,
 				Offset: offset,
@@ -309,12 +312,18 @@ func (a *investmentSourceAdapter) ListProjectInvestments(ctx context.Context, pr
 	return out, nil
 }
 
-func (a *investmentSourceAdapter) AssignToAsset(ctx context.Context, assetID core.AssetID, investmentIDs []core.InvestmentID) error {
-	return a.svc.AssignToAsset(ctx, assetID, investmentIDs)
+func (a *investmentSourceAdapter) AssignToAsset(ctx context.Context, assetID core.AssetID, requesterID core.PersonID, investmentIDs []core.InvestmentID) error {
+	return a.app.Commands.AssignInvestmentsToAsset.Handle(ctx, investmentapp.AssignInvestmentsToAsset{
+		RequesterID:   requesterID,
+		AssetID:       assetID,
+		InvestmentIDs: investmentIDs,
+	})
 }
 
 func (a *investmentSourceAdapter) CreateInitialInvestment(ctx context.Context, item asset.InitialInvestment) error {
-	_, err := a.svc.Create(ctx, investment.CreateInvestmentCommand{
+	return a.app.Commands.CreateInvestment.Handle(ctx, investmentapp.CreateInvestment{
+		ID:           item.ID,
+		RequesterID:  item.ContributorID,
 		ProjectID:    item.ProjectID,
 		AssetID:      item.AssetID,
 		ResourceType: investment.ResourceTypeMoney,
@@ -323,16 +332,15 @@ func (a *investmentSourceAdapter) CreateInitialInvestment(ctx context.Context, i
 		Date:         item.Date,
 		Tags:         item.Tags,
 	})
-	return err
 }
 
 type projectTotalsCalculatorAdapter struct {
-	assets       asset.Service
-	investments  investment.Service
+	assets       *assetapp.Application
+	investments  *investmentapp.Application
 	rateProvider currency.CurrencyRateProvider
 }
 
-func (a *projectTotalsCalculatorAdapter) CalculateTotals(ctx context.Context, projectID core.ProjectID, homeCurrency string) (project.ProjectTotals, error) {
+func (a *projectTotalsCalculatorAdapter) CalculateTotals(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID, homeCurrency string) (project.ProjectTotals, error) {
 	var invAmounts []*money.Money
 	var rootAssets []*asset.Asset
 	hasInvestments := false
@@ -342,8 +350,9 @@ func (a *projectTotalsCalculatorAdapter) CalculateTotals(ctx context.Context, pr
 
 	if a.investments != nil {
 		for offset := 0; ; offset += pageLimit {
-			page, err := a.investments.Find(ctx, investment.CollectionFilter{
-				ProjectID: projectID,
+			page, err := a.investments.Queries.ListInvestments.Handle(ctx, investmentapp.ListInvestments{
+				RequesterID: requesterID,
+				ProjectID:   projectID,
 				Pagination: core.Pagination{
 					Limit:  pageLimit,
 					Offset: offset,
@@ -367,8 +376,9 @@ func (a *projectTotalsCalculatorAdapter) CalculateTotals(ctx context.Context, pr
 
 	if a.assets != nil {
 		for offset := 0; ; offset += pageLimit {
-			page, err := a.assets.Find(ctx, asset.CollectionFilter{
-				ProjectID: projectID,
+			page, err := a.assets.Queries.ListAssets.Handle(ctx, assetapp.ListAssets{
+				RequesterID: requesterID,
+				ProjectID:   projectID,
 				Pagination: core.Pagination{
 					Limit:  pageLimit,
 					Offset: offset,

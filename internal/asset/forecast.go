@@ -614,11 +614,42 @@ func CalculateProjectCashFlowForecast(
 	}
 }
 
+func ValidateForecastTag(tag string) error {
+	return validateForecastTag(tag)
+}
+
 func validateForecastTag(tag string) error {
 	if utf8.RuneCountInString(normalizeTag(tag)) > maxForecastTagRunes {
 		return exceptions.NewValidationException("tag filter must be at most 100 characters", nil)
 	}
 	return nil
+}
+
+// ComputeScheduleWarnings evaluates non-blocking DAG schedule warnings where a child's
+// target completion date exceeds its parent's target completion date.
+func ComputeScheduleWarnings(target *Asset, children, parents []*Asset) []string {
+	warnings := make([]string, 0)
+	if target == nil || target.TargetCompletionDate() == nil {
+		return warnings
+	}
+	targetDay := utcCalendarDay(*target.TargetCompletionDate())
+	for _, ch := range children {
+		if ch == nil || ch.TargetCompletionDate() == nil {
+			continue
+		}
+		if utcCalendarDay(*ch.TargetCompletionDate()).After(targetDay) {
+			warnings = append(warnings, "child_target_exceeds_parent:"+ch.ID().String())
+		}
+	}
+	for _, p := range parents {
+		if p == nil || p.TargetCompletionDate() == nil {
+			continue
+		}
+		if targetDay.After(utcCalendarDay(*p.TargetCompletionDate())) {
+			warnings = append(warnings, "child_target_exceeds_parent:"+p.ID().String())
+		}
+	}
+	return warnings
 }
 
 func normalizeTag(tag string) string {
