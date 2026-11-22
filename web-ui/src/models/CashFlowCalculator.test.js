@@ -50,14 +50,86 @@ describe('CashFlowCalculator Domain Model', () => {
       ],
     };
 
-    const committedOnly = buildChartSeries(forecast, { includeOngoingInCommitted: false });
+    const committedOnly = buildChartSeries(forecast, {
+      includeOngoingInCommitted: false,
+      asOfDate: '2026-05-10',
+    });
     assert.equal(committedOnly[0].alertStatus, 'HEALTHY');
     assert.equal(committedOnly[0].committedCashCents, 7000);
     assert.equal(committedOnly[0].actualCash, 30);
 
-    const stacked = buildChartSeries(forecast, { includeOngoingInCommitted: true });
+    const stacked = buildChartSeries(forecast, {
+      includeOngoingInCommitted: true,
+      asOfDate: '2026-05-10',
+    });
     assert.equal(stacked[0].alertStatus, 'AT_RISK');
     assert.equal(stacked[0].committedCashCents, 9000);
+  });
+
+  it('limits chart series to current month plus next 5 months across year boundary', () => {
+    const monthKeys = [
+      '2025-12',
+      '2026-10',
+      '2026-11',
+      '2026-12',
+      '2027-01',
+      '2027-02',
+      '2027-03',
+      '2027-04',
+      '2027-05',
+      '2028-01',
+    ];
+    const forecast = {
+      months: monthKeys.map((month) => ({
+        month,
+        tagBudgetCeilingCents: 10000,
+        actual: { cashCents: 1000, timeHours: 0, goodsCents: 0 },
+        scheduledDemandCents: 2000,
+        estimatedOngoingCashCents: 500,
+        assetDemands: [],
+      })),
+    };
+
+    const series = buildChartSeries(forecast, { asOfDate: '2026-11-22' });
+    assert.deepEqual(
+      series.map((row) => row.month),
+      ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04'],
+    );
+  });
+
+  it('handles end-of-month anchor dates and ignores malformed month keys safely', () => {
+    const forecast = {
+      months: [
+        { month: '2025-12' },
+        { month: '2026-01' },
+        { month: '2026-02' },
+        { month: '2026-03' },
+        { month: '2026-04' },
+        { month: '2026-05' },
+        { month: '2026-06' },
+        { month: '2026-07' },
+        { month: 'not-a-month' },
+        { month: '2026-13' },
+        { month: null },
+      ],
+    };
+
+    const series = buildChartSeries(forecast, { asOfDate: '2026-01-31T23:59:59Z' });
+    assert.deepEqual(
+      series.map((row) => row.month),
+      ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'],
+    );
+  });
+
+  it('falls back to current UTC month when asOfDate is invalid and handles empty forecast', () => {
+    assert.deepEqual(buildChartSeries(null, { asOfDate: '2026-11-22' }), []);
+
+    const currentMonthKey = formatUtcMonthKey(new Date());
+    const series = buildChartSeries(
+      { months: [{ month: '1999-01' }, { month: currentMonthKey }, { month: '2099-12' }] },
+      { asOfDate: 'invalid-date' },
+    );
+    assert.deepEqual(series.map((row) => row.month), [currentMonthKey]);
   });
 
   it('recomputes schedule preview optimistically when shifting target date', () => {
