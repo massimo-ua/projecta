@@ -190,7 +190,7 @@ func TestCalculateProjectCashFlowForecast(t *testing.T) {
 		"2026-07": 0,     // NO_CEILING
 	}
 
-	months, _, _, err := asset.ResolveForecastMonths(proj, []*asset.Asset{scheduledAsset, overdueAsset, ongoingAsset}, query)
+	months, _, _, err := asset.ResolveForecastMonths(proj, []*asset.Asset{scheduledAsset, overdueAsset, ongoingAsset}, investments, query)
 	if err != nil {
 		t.Fatalf("ResolveForecastMonths: %v", err)
 	}
@@ -274,14 +274,162 @@ func TestCalculateProjectCashFlowForecast(t *testing.T) {
 
 func TestResolveForecastMonthsErrors(t *testing.T) {
 	proj := asset.ProjectDescriptor{ID: core.NewProjectID(), MainCurrency: "UAH"}
-	if _, _, _, err := asset.ResolveForecastMonths(proj, nil, asset.GetCashFlowForecastQuery{FromMonth: "bad"}); err == nil {
+	if _, _, _, err := asset.ResolveForecastMonths(proj, nil, nil, asset.GetCashFlowForecastQuery{FromMonth: "bad"}); err == nil {
 		t.Errorf("expected error for invalid from_month")
 	}
-	if _, _, _, err := asset.ResolveForecastMonths(proj, nil, asset.GetCashFlowForecastQuery{ToMonth: "2026/05"}); err == nil {
+	if _, _, _, err := asset.ResolveForecastMonths(proj, nil, nil, asset.GetCashFlowForecastQuery{ToMonth: "2026/05"}); err == nil {
 		t.Errorf("expected error for invalid to_month")
 	}
-	if _, _, _, err := asset.ResolveForecastMonths(proj, nil, asset.GetCashFlowForecastQuery{FromMonth: "2026-06", ToMonth: "2026-05"}); err == nil {
+	if _, _, _, err := asset.ResolveForecastMonths(proj, nil, nil, asset.GetCashFlowForecastQuery{FromMonth: "2026-06", ToMonth: "2026-05"}); err == nil {
 		t.Errorf("expected error for to_month < from_month")
+	}
+}
+
+func TestResolveForecastMonthsIncludesPreStartAndMultiYearInvestments(t *testing.T) {
+	pID := core.NewProjectID()
+	proj := asset.ProjectDescriptor{
+		ID:           pID,
+		MainCurrency: "UAH",
+		StartDate:    mustUTCDate(2024, time.December, 27),
+		EndDate:      mustUTCDate(2029, time.March, 1),
+	}
+	invs := []asset.InvestmentRecordSummary{
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(5000, "UAH"),
+			Date:         mustUTCDate(2024, time.October, 15), // Before project.StartDate
+		},
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(12000, "UAH"),
+			Date:         mustUTCDate(2027, time.January, 10), // Past 24 months from start
+		},
+	}
+
+	months, _, _, err := asset.ResolveForecastMonths(proj, nil, invs, asset.GetCashFlowForecastQuery{
+		ProjectID: pID,
+		AsOfDate:  mustUTCDate(2026, time.November, 22),
+	})
+	if err != nil {
+		t.Fatalf("ResolveForecastMonths failed: %v", err)
+	}
+	if len(months) == 0 {
+		t.Fatalf("expected non-empty months")
+	}
+	if months[0] != "2024-10" {
+		t.Errorf("expected from_month 2024-10 to include pre-start investment, got %s", months[0])
+	}
+	if months[len(months)-1] != "2029-03" {
+		t.Errorf("expected to_month 2029-03 to cover multi-year project, got %s", months[len(months)-1])
+	}
+
+	// Safety upper bound still caps absurdly long spans at 120 months
+	veryLongProj := asset.ProjectDescriptor{
+		ID:           pID,
+		MainCurrency: "UAH",
+		StartDate:    mustUTCDate(2020, time.January, 1),
+		EndDate:      mustUTCDate(2050, time.January, 1),
+	}
+	capped, _, _, err := asset.ResolveForecastMonths(veryLongProj, nil, nil, asset.GetCashFlowForecastQuery{
+		ProjectID: pID,
+		AsOfDate:  mustUTCDate(2026, time.November, 22),
+	})
+	if err != nil {
+		t.Fatalf("ResolveForecastMonths failed: %v", err)
+	}
+	if len(capped) != 120 {
+		t.Errorf("expected safety cap of 120 months, got %d", len(capped))
+	}
+
+	// Ancient outlier investment must not push current/upcoming months out of the 120-month cap
+	outlierInvs := []asset.InvestmentRecordSummary{
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(100, "UAH"),
+			Date:         mustUTCDate(2014, time.January, 10),
+		},
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(5000, "UAH"),
+			Date:         mustUTCDate(2026, time.October, 10),
+		},
+	}
+	anchored, _, _, err := asset.ResolveForecastMonths(proj, nil, outlierInvs, asset.GetCashFlowForecastQuery{
+		ProjectID: pID,
+		AsOfDate:  mustUTCDate(2026, time.November, 22),
+	})
+	if err != nil {
+		t.Fatalf("ResolveForecastMonths with outlier failed: %v", err)
+	}
+	if len(anchored) != 120 {
+		t.Fatalf("expected 120 capped months for outlier query, got %d", len(anchored))
+	}
+	if anchored[len(anchored)-1] != "2027-04" {
+		t.Errorf("expected outlier-anchored window to preserve currentMonth+5 (2027-04), got %s", anchored[len(anchored)-1])
+	}
+}
+
+func TestCalculateProjectCashFlowForecast_TagFilterMatchesInvestmentTags(t *testing.T) {
+	pID := core.NewProjectID()
+	owner := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "Max"}
+	asOf := mustUTCDate(2026, time.May, 10)
+
+	untaggedAsset, _ := asset.CreateAsset(
+		core.NewAssetID(), "General", "", pID,
+		nil, mustUTCDate(2026, time.January, 1),
+		owner, asset.AssetStatusActive, nil, []string{"other"},
+	)
+
+	invs := []asset.InvestmentRecordSummary{
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(10000, "UAH"),
+			Date:         mustUTCDate(2026, time.April, 10),
+			Tags:         []string{"освіта"},
+			AssetAllocations: []asset.InvestmentAllocation{
+				{AssetID: untaggedAsset.ID(), SharePercentage: 100},
+			},
+		},
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(5000, "UAH"),
+			Date:         mustUTCDate(2026, time.April, 15),
+			Tags:         []string{"освіта"},
+		},
+		{
+			ID:           core.NewInvestmentID(),
+			ResourceType: "MONEY",
+			Amount:       money.New(9999, "UAH"),
+			Date:         mustUTCDate(2026, time.April, 20),
+			Tags:         []string{"unrelated"},
+			AssetAllocations: []asset.InvestmentAllocation{
+				{AssetID: untaggedAsset.ID(), SharePercentage: 100},
+			},
+		},
+	}
+
+	proj := asset.ProjectDescriptor{ID: pID, MainCurrency: "UAH", StartDate: mustUTCDate(2026, time.April, 1)}
+	fc := asset.CalculateProjectCashFlowForecast(
+		proj,
+		[]*asset.Asset{untaggedAsset},
+		invs,
+		map[string]int64{"2026-04": 20000},
+		[]string{"2026-04"},
+		asset.GetCashFlowForecastQuery{ProjectID: pID, AsOfDate: asOf, Tag: "#освіта"},
+		nil,
+	)
+
+	if fc.Months[0].Actual.CashCents != 15000 {
+		t.Errorf("expected tag-filtered actual cash 15000 (allocated + unallocated investment tags), got %d", fc.Months[0].Actual.CashCents)
+	}
+	if fc.Summary.TotalActualCashCents != 15000 {
+		t.Errorf("expected summary actual cash 15000, got %d", fc.Summary.TotalActualCashCents)
 	}
 }
 
@@ -388,6 +536,12 @@ func TestServiceMultiCurrencyScheduleAndForecast(t *testing.T) {
 	if _, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{}); err == nil {
 		t.Errorf("expected validation error for missing project id")
 	}
+	if _, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{
+		ProjectID: pID,
+		Tag:       strings.Repeat("a", 101),
+	}); err == nil {
+		t.Errorf("expected validation error for oversized tag filter")
+	}
 	invSrc.listErr = errors.New("inv boom")
 	if _, err := svc.GetCashFlowForecast(authedCtx, asset.GetCashFlowForecastQuery{ProjectID: pID}); err == nil {
 		t.Errorf("expected investment source error propagation")
@@ -398,10 +552,14 @@ func TestServiceMultiCurrencyScheduleAndForecast(t *testing.T) {
 		ProjectID: pID,
 		FromMonth: "2026-05",
 		ToMonth:   "2026-08",
+		Tag:       "edu",
 		AsOfDate:  mustUTCDate(2026, time.May, 10),
 	})
 	if err != nil || fc == nil || len(fc.Months) != 4 {
 		t.Fatalf("expected 4-month forecast, got fc=%v err=%v", fc, err)
+	}
+	if projRepo.lastCeilingTag != "edu" {
+		t.Errorf("expected FindMonthlyCashCeilings to receive tag 'edu', got %q", projRepo.lastCeilingTag)
 	}
 
 	// Cover additional edge cases cleanly
@@ -447,9 +605,9 @@ func TestServiceMultiCurrencyScheduleAndForecast(t *testing.T) {
 	_ = farAsset.UpdateSchedule(nil, &farTarget, false)
 
 	defProj := asset.ProjectDescriptor{ID: pID, MainCurrency: "UAH", StartDate: mustUTCDate(2026, time.May, 1)}
-	defMonths, _, _, err := asset.ResolveForecastMonths(defProj, []*asset.Asset{completedAsset, budgetedOngoing, farAsset}, asset.GetCashFlowForecastQuery{AsOfDate: mustUTCDate(2026, time.May, 10)})
-	if err != nil || len(defMonths) != 24 {
-		t.Fatalf("expected capped 24 default months, got %d (err=%v)", len(defMonths), err)
+	defMonths, _, _, err := asset.ResolveForecastMonths(defProj, []*asset.Asset{completedAsset, budgetedOngoing, farAsset}, nil, asset.GetCashFlowForecastQuery{AsOfDate: mustUTCDate(2026, time.May, 10)})
+	if err != nil || len(defMonths) != 33 {
+		t.Fatalf("expected 33 default months (2026-05..2029-01), got %d (err=%v)", len(defMonths), err)
 	}
 	edgeFC := asset.CalculateProjectCashFlowForecast(
 		defProj,

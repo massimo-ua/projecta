@@ -612,6 +612,9 @@ func (s *ServiceImpl) GetCashFlowForecast(ctx context.Context, query GetCashFlow
 	if query.ProjectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
+	if err := validateForecastTag(query.Tag); err != nil {
+		return nil, err
+	}
 
 	proj, err := s.projects.FindProject(ctx, query.ProjectID)
 	if err != nil {
@@ -638,12 +641,12 @@ func (s *ServiceImpl) GetCashFlowForecast(ctx context.Context, query GetCashFlow
 		}
 	}
 
-	months, _, _, err := ResolveForecastMonths(proj, assets, query)
+	months, _, _, err := ResolveForecastMonths(proj, assets, investments, query)
 	if err != nil {
 		return nil, err
 	}
 
-	ceilings, err := s.projects.FindMonthlyCashCeilings(ctx, query.ProjectID, months)
+	ceilings, err := s.projects.FindMonthlyCashCeilings(ctx, query.ProjectID, months, query.Tag)
 	if err != nil {
 		return nil, preserveOrWrapError(err, "failed to calculate cash flow forecast")
 	}

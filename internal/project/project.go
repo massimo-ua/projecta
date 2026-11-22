@@ -295,3 +295,66 @@ func (p *Project) AnnualPlannedBudget() int64 {
 	}
 	return total
 }
+
+// MonthlyCashCeilings projects monthly MONEY TagBudget ceilings (in home currency minor units)
+// across the requested YYYY-MM months, optionally filtered to a single normalized tag.
+func (p *Project) MonthlyCashCeilings(months []string, tag string) map[string]int64 {
+	ceilings := make(map[string]int64, len(months))
+	if p == nil {
+		return ceilings
+	}
+
+	normTag := sanitizeTagName(tag)
+	hasStart := !p.startDate.IsZero()
+	hasEnd := !p.endDate.IsZero()
+	var startMonth, startDay, endDay time.Time
+	if hasStart {
+		su := p.startDate.UTC()
+		startMonth = time.Date(su.Year(), su.Month(), 1, 0, 0, 0, 0, time.UTC)
+		startDay = time.Date(su.Year(), su.Month(), su.Day(), 0, 0, 0, 0, time.UTC)
+	}
+	if hasEnd {
+		eu := p.endDate.UTC()
+		endDay = time.Date(eu.Year(), eu.Month(), eu.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	for _, mStr := range months {
+		parsed, err := time.Parse("2006-01", mStr)
+		if err != nil {
+			continue
+		}
+		mStart := time.Date(parsed.Year(), parsed.Month(), 1, 0, 0, 0, 0, time.UTC)
+		mEnd := mStart.AddDate(0, 1, -1)
+		if hasStart && mEnd.Before(startDay) {
+			continue
+		}
+		if hasEnd && mStart.After(endDay) {
+			continue
+		}
+
+		scheduleIdx := 1
+		if hasStart {
+			scheduleIdx = (mStart.Year()-startMonth.Year())*12 + int(mStart.Month()-startMonth.Month()) + 1
+		}
+
+		var total int64
+		for _, tb := range p.tagBudgets {
+			if tb.ResourceType() != BudgetResourceMoney {
+				continue
+			}
+			if normTag != "" && tb.Tag() != normTag {
+				continue
+			}
+			evalIdx := scheduleIdx
+			if evalIdx < 1 || evalIdx > 12 {
+				if tb.Frequency() == FrequencyOnce {
+					continue
+				}
+				evalIdx = 1
+			}
+			total += tb.ProjectedHomeAmountForMonth(evalIdx, mStart.Year(), mStart.Month())
+		}
+		ceilings[mStr] = total
+	}
+	return ceilings
+}

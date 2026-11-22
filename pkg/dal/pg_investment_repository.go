@@ -267,9 +267,10 @@ func (r *PgInvestmentRepository) Find(ctx context.Context, filter investment.Col
 		"description":   true,
 	}
 	if filter.OrderBy != "" && filter.Order != "" && validInvestmentOrderBy[filter.OrderBy] {
-		qb.OrderBy(fmt.Sprintf("projecta_investments.%s %s", filter.OrderBy, filter.Order.String()))
+		orderDir := core.ToOrder(filter.Order.String()).String()
+		qb.OrderBy(fmt.Sprintf("projecta_investments.%s %s, projecta_investments.id %s", filter.OrderBy, orderDir, orderDir))
 	} else {
-		qb.OrderBy("projecta_investments.date DESC")
+		qb.OrderBy("projecta_investments.date DESC, projecta_investments.id DESC")
 	}
 
 	sql, args := qb.Build()

@@ -155,12 +155,18 @@ func TestCrossContextAdapters(t *testing.T) {
 
 	_ = proj.SetTagBudgets([]project.TagBudgetInput{
 		{Tag: "home", Frequency: "MONTHLY", TargetMonth: 1, ResourceType: "MONEY", Amount: 5000, Currency: "USD", Description: "monthly"},
+		{Tag: "edu", Frequency: "MONTHLY", TargetMonth: 1, ResourceType: "MONEY", Amount: 3000, Currency: "USD", Description: "edu monthly"},
 	})
-	ceilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), []string{now.UTC().Format("2006-01")})
-	if err != nil || ceilings[now.UTC().Format("2006-01")] != 5000 {
-		t.Fatalf("unexpected FindMonthlyCashCeilings: %+v err=%v", ceilings, err)
+	curMonthKey := now.UTC().Format("2006-01")
+	ceilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), []string{curMonthKey}, "")
+	if err != nil || ceilings[curMonthKey] != 8000 {
+		t.Fatalf("unexpected FindMonthlyCashCeilings (all tags): %+v err=%v", ceilings, err)
 	}
-	if _, err := assetProjAdapter.FindMonthlyCashCeilings(context.Background(), proj.ID(), nil); err == nil {
+	homeCeilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), []string{curMonthKey}, "#HOME")
+	if err != nil || homeCeilings[curMonthKey] != 5000 {
+		t.Fatalf("unexpected FindMonthlyCashCeilings (tag=home): %+v err=%v", homeCeilings, err)
+	}
+	if _, err := assetProjAdapter.FindMonthlyCashCeilings(context.Background(), proj.ID(), nil, ""); err == nil {
 		t.Errorf("expected unauthorized error in FindMonthlyCashCeilings")
 	}
 

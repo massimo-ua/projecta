@@ -80,10 +80,11 @@ func (m *mockPeopleService) FindOwner(ctx context.Context, id core.PersonID) (as
 }
 
 type mockProjectRepo struct {
-	project     asset.ProjectDescriptor
-	ceilings    map[string]int64
-	ceilingsErr error
-	err         error
+	project      asset.ProjectDescriptor
+	ceilings     map[string]int64
+	ceilingsErr  error
+	lastCeilingTag string
+	err          error
 }
 
 func (m *mockProjectRepo) FindProject(ctx context.Context, projectID core.ProjectID) (asset.ProjectDescriptor, error) {
@@ -93,7 +94,8 @@ func (m *mockProjectRepo) FindProject(ctx context.Context, projectID core.Projec
 	return m.project, nil
 }
 
-func (m *mockProjectRepo) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error) {
+func (m *mockProjectRepo) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string, tag string) (map[string]int64, error) {
+	m.lastCeilingTag = tag
 	if m.ceilingsErr != nil {
 		return nil, m.ceilingsErr
 	}

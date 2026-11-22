@@ -67,6 +67,7 @@ type InvestmentRecordSummary struct {
 	TimeHours        float64
 	Date             time.Time
 	AssetAllocations []InvestmentAllocation
+	Tags             []string
 }
 
 type InvestmentSource interface {
@@ -87,7 +88,7 @@ type ProjectDescriptor struct {
 // ProjectReader is a consumer-owned interface providing read access to projects.
 type ProjectReader interface {
 	FindProject(ctx context.Context, projectID core.ProjectID) (ProjectDescriptor, error)
-	FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error)
+	FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string, tag string) (map[string]int64, error)
 }
 
 // OwnerReader is a consumer-owned interface providing read access to asset owners.

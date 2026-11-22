@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Rhymond/go-money"
 	"gitlab.com/massimo-ua/projecta/internal/core"
@@ -22,7 +23,8 @@ func errInvalidForecastRange() error {
 
 const (
 	defaultTrailingWindowMonths = 6
-	maxForecastWindowMonths     = 24
+	maxForecastWindowMonths     = 120
+	maxForecastTagRunes         = 100
 	atRiskThresholdRatio        = 0.85
 )
 
@@ -202,6 +204,7 @@ func monthsBetweenInclusive(startMonth, endMonth time.Time) int {
 func ResolveForecastMonths(
 	project ProjectDescriptor,
 	assets []*Asset,
+	investments []InvestmentRecordSummary,
 	query GetCashFlowForecastQuery,
 ) ([]string, time.Time, time.Time, error) {
 	asOf := query.AsOfDate
@@ -222,6 +225,15 @@ func ResolveForecastMonths(
 		} else {
 			fromTime = currentMonth
 		}
+		for _, inv := range investments {
+			if inv.Date.IsZero() {
+				continue
+			}
+			im := utcMonthStart(inv.Date)
+			if im.Before(fromTime) {
+				fromTime = im
+			}
+		}
 	}
 
 	toTime, hasTo := parseMonthStart(query.ToMonth)
@@ -230,8 +242,9 @@ func ResolveForecastMonths(
 	}
 	if !hasTo {
 		toTime = fromTime.AddDate(0, 11, 0)
-		if toTime.Before(currentMonth.AddDate(0, 5, 0)) {
-			toTime = currentMonth.AddDate(0, 5, 0)
+		minActiveTo := currentMonth.AddDate(0, 5, 0)
+		if toTime.Before(minActiveTo) {
+			toTime = minActiveTo
 		}
 		if !project.EndDate.IsZero() {
 			projEnd := utcMonthStart(project.EndDate)
@@ -248,9 +261,31 @@ func ResolveForecastMonths(
 				toTime = td
 			}
 		}
+		var latestInvMonth time.Time
+		for _, inv := range investments {
+			if inv.Date.IsZero() {
+				continue
+			}
+			im := utcMonthStart(inv.Date)
+			if im.After(latestInvMonth) {
+				latestInvMonth = im
+			}
+			if im.After(toTime) {
+				toTime = im
+			}
+		}
+		if !latestInvMonth.IsZero() && latestInvMonth.After(minActiveTo) {
+			minActiveTo = latestInvMonth
+		}
 		maxTo := fromTime.AddDate(0, maxForecastWindowMonths-1, 0)
 		if toTime.After(maxTo) {
-			toTime = maxTo
+			if !hasFrom && minActiveTo.After(maxTo) {
+				fromTime = minActiveTo.AddDate(0, -(maxForecastWindowMonths - 1), 0)
+				maxTo = fromTime.AddDate(0, maxForecastWindowMonths-1, 0)
+			}
+			if toTime.After(maxTo) {
+				toTime = maxTo
+			}
 		}
 	}
 
@@ -259,8 +294,8 @@ func ResolveForecastMonths(
 	}
 
 	count := monthsBetweenInclusive(fromTime, toTime)
-	if count > maxForecastWindowMonths*2 {
-		count = maxForecastWindowMonths * 2
+	if count > maxForecastWindowMonths {
+		count = maxForecastWindowMonths
 		toTime = fromTime.AddDate(0, count-1, 0)
 	}
 
@@ -327,14 +362,17 @@ func CalculateProjectCashFlowForecast(
 	assetTotals := make(map[core.AssetID]*ResourceBreakdown, len(assets))
 	assetTrailing := make(map[core.AssetID]*ResourceBreakdown, len(assets))
 
+	normTag := normalizeTag(query.Tag)
+
 	for _, inv := range investments {
 		mKey := formatMonthKey(inv.Date)
 		resType := normalizeResourceType(inv.ResourceType)
 		homeAmt := convertToHomeCents(inv.Amount, homeCurrency, converter)
 		inTrailing := !utcMonthStart(inv.Date).Before(trailingStartMonth) && !utcMonthStart(inv.Date).After(currentMonth)
+		invHasTag := hasMatchingTag(inv.Tags, normTag)
 
 		if len(inv.AssetAllocations) == 0 {
-			if query.Tag == "" {
+			if normTag == "" || invHasTag {
 				if ma, ok := monthActuals[mKey]; ok {
 					addResourceToBreakdown(ma, resType, homeAmt, inv.TimeHours)
 				}
@@ -346,7 +384,7 @@ func CalculateProjectCashFlowForecast(
 			if alloc.AssetID.IsNil() || alloc.SharePercentage <= 0 {
 				continue
 			}
-			if query.Tag != "" && !includedAssetIDs[alloc.AssetID] {
+			if normTag != "" && !includedAssetIDs[alloc.AssetID] && !invHasTag {
 				continue
 			}
 			factor := alloc.SharePercentage / 100.0
@@ -576,10 +614,33 @@ func CalculateProjectCashFlowForecast(
 	}
 }
 
+func validateForecastTag(tag string) error {
+	if utf8.RuneCountInString(normalizeTag(tag)) > maxForecastTagRunes {
+		return exceptions.NewValidationException("tag filter must be at most 100 characters", nil)
+	}
+	return nil
+}
+
+func normalizeTag(tag string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(tag), "#")))
+}
+
+func hasMatchingTag(tags []string, normTag string) bool {
+	if normTag == "" {
+		return false
+	}
+	for _, t := range tags {
+		if normalizeTag(t) == normTag {
+			return true
+		}
+	}
+	return false
+}
+
 func filterAssetsByTag(assets []*Asset, tag string) ([]*Asset, map[core.AssetID]bool) {
-	trimmed := strings.TrimSpace(tag)
+	normTag := normalizeTag(tag)
 	included := make(map[core.AssetID]bool, len(assets))
-	if trimmed == "" {
+	if normTag == "" {
 		out := make([]*Asset, 0, len(assets))
 		for _, a := range assets {
 			if a != nil {
@@ -594,12 +655,9 @@ func filterAssetsByTag(assets []*Asset, tag string) ([]*Asset, map[core.AssetID]
 		if a == nil {
 			continue
 		}
-		for _, t := range a.Tags() {
-			if strings.EqualFold(t, trimmed) {
-				out = append(out, a)
-				included[a.ID()] = true
-				break
-			}
+		if hasMatchingTag(a.Tags(), normTag) {
+			out = append(out, a)
+			included[a.ID()] = true
 		}
 	}
 	return out, included
