@@ -3,10 +3,12 @@ package dal
 import (
 	"context"
 	"errors"
+	"sync"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"sync"
 )
 
 // txKey is a context key for storing transaction reference
@@ -14,8 +16,7 @@ type txKey struct{}
 
 type PgDbConnection struct {
 	pool *pgxpool.Pool
-	// Remove tx field as we'll store it in context
-	mu sync.RWMutex
+	mu   sync.RWMutex
 }
 
 func NewPgDbConnection(connectionString string) (*PgDbConnection, error) {
@@ -42,7 +43,6 @@ func (p *PgDbConnection) GetConnection(ctx context.Context) (PgDb, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Check if there's a transaction or mock db in the context
 	if db, ok := ctx.Value(txKey{}).(PgDb); ok && db != nil {
 		return db, nil
 	}
@@ -52,13 +52,34 @@ func (p *PgDbConnection) GetConnection(ctx context.Context) (PgDb, error) {
 	return p.pool, nil
 }
 
-// Tx starts a transaction and executes the provided function
-func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+// finishTransaction commits tx when err is nil, or rolls back tx when err is non-nil.
+// Rollback errors are joined with the original error so neither is lost.
+func finishTransaction(ctx context.Context, tx pgx.Tx, err error) error {
+	if err != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return exceptions.NewInternalException(
+				"transaction rollback failed",
+				errors.Join(core.DbTransactionRollbackFailedError, err, rollbackErr),
+			)
+		}
+		return err
+	}
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		return exceptions.NewInternalException(
+			"failed to commit transaction",
+			errors.Join(core.DbTransactionCommitFailedError, commitErr),
+		)
+	}
+	return nil
+}
+
+// Tx starts a transaction and executes the provided function with defer-based commit/rollback safety.
+func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (any, error)) (res any, err error) {
 	if p == nil {
 		return nil, errors.New("connection pool is nil")
 	}
 
-	// Check if context already has a transaction or mock db in it
+	// Reuse active transaction or mock db present in context.
 	if db, ok := ctx.Value(txKey{}).(PgDb); ok && db != nil {
 		return fn(ctx)
 	}
@@ -74,30 +95,29 @@ func (p *PgDbConnection) Tx(ctx context.Context, fn func(ctx context.Context) (a
 		return nil, exceptions.NewInternalException("failed to begin transaction", errors.Join(core.DbTransactionStartFailedError, err))
 	}
 
-	// Create new context with transaction
 	txCtx := context.WithValue(ctx, txKey{}, tx)
 	p.mu.Unlock()
 
-	// Execute the function with transaction context
-	res, err := fn(txCtx)
-	if err != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return nil, exceptions.NewInternalException(
-				"transaction rollback failed",
-				errors.Join(core.DbTransactionRollbackFailedError, err, rollbackErr),
-			)
+	committed := false
+	defer func() {
+		if r := recover(); r != nil {
+			_ = tx.Rollback(ctx)
+			panic(r)
 		}
+		if !committed {
+			err = finishTransaction(ctx, tx, err)
+			if err != nil {
+				res = nil
+			}
+		}
+	}()
 
+	res, err = fn(txCtx)
+	err = finishTransaction(ctx, tx, err)
+	committed = true
+	if err != nil {
 		return nil, err
 	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return nil, exceptions.NewInternalException(
-			"failed to commit transaction",
-			errors.Join(core.DbTransactionCommitFailedError, err),
-		)
-	}
-
 	return res, nil
 }
 

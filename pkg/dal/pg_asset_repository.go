@@ -210,6 +210,124 @@ func (r *PgAssetRepository) FindAncestors(ctx context.Context, assetID core.Asse
 }
 
 func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*asset.Asset, error) {
+	return r.findOneInternal(ctx, filter, false)
+}
+
+func (r *PgAssetRepository) UpdateAsset(
+	ctx context.Context,
+	assetID core.AssetID,
+	projectID core.ProjectID,
+	ownerID core.PersonID,
+	updateFn func(ctx context.Context, a *asset.Asset) (*asset.Asset, error),
+) error {
+	execFn := func(txCtx context.Context) (any, error) {
+		existing, err := r.findOneInternal(txCtx, asset.Filter{
+			ID:        assetID,
+			ProjectID: projectID,
+			OwnerID:   ownerID,
+		}, true)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := updateFn(txCtx, existing)
+		if err != nil {
+			return nil, err
+		}
+		if updated == nil {
+			return nil, exceptions.NewValidationException("updated asset cannot be nil", nil)
+		}
+		if err := r.Save(txCtx, updated); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	if r.db != nil && r.db.db != nil {
+		_, err := r.db.db.Tx(ctx, execFn)
+		return err
+	}
+	_, err := execFn(ctx)
+	return err
+}
+
+type assetRecord struct {
+	assetID              string
+	name                 string
+	description          string
+	projectID            string
+	acquiredAt           time.Time
+	ownerID              string
+	ownerDisplayName     string
+	status               string
+	startDate            time.Time
+	completedDate        *time.Time
+	targetPrice          *int64
+	targetCurrency       *string
+	tags                 []string
+	targetCompletionDate *time.Time
+}
+
+func (r *assetRecord) scanFields() []any {
+	return []any{
+		&r.assetID,
+		&r.name,
+		&r.description,
+		&r.projectID,
+		&r.acquiredAt,
+		&r.ownerID,
+		&r.ownerDisplayName,
+		&r.status,
+		&r.startDate,
+		&r.completedDate,
+		&r.targetPrice,
+		&r.targetCurrency,
+		&r.tags,
+		&r.targetCompletionDate,
+	}
+}
+
+func (r *assetRecord) toAsset() (*asset.Asset, error) {
+	aID, err := core.ParseAssetID(r.assetID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid asset id: %w", err)
+	}
+	pID, err := core.ParseProjectID(r.projectID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project id: %w", err)
+	}
+	oID, err := core.ParsePersonID(r.ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid owner id: %w", err)
+	}
+
+	owner := asset.OwnerRef{
+		PersonID:    oID,
+		DisplayName: r.ownerDisplayName,
+	}
+
+	var targetPriceMoney *money.Money
+	if r.targetPrice != nil && r.targetCurrency != nil && *r.targetCurrency != "" {
+		targetPriceMoney = money.New(*r.targetPrice, *r.targetCurrency)
+	}
+
+	return asset.ReconstituteAsset(
+		aID,
+		r.name,
+		r.description,
+		pID,
+		targetPriceMoney,
+		r.acquiredAt,
+		owner,
+		asset.ToAssetStatus(r.status),
+		r.startDate,
+		r.completedDate,
+		r.targetCompletionDate,
+		targetPriceMoney,
+		r.tags,
+	), nil
+}
+
+func (r *PgAssetRepository) findOneInternal(ctx context.Context, filter asset.Filter, forUpdate bool) (*asset.Asset, error) {
 	qb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	qb.From("projecta_assets")
 
@@ -228,44 +346,12 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 	}
 
 	sql, args := qb.Build()
+	if forUpdate {
+		sql += " FOR UPDATE OF projecta_assets"
+	}
 
-	var (
-		assetID              string
-		name                 string
-		description          string
-		projectID            string
-		acquiredAt           time.Time
-		ownerID              string
-		ownerDisplayName     string
-		status               string
-		startDate            time.Time
-		completedDate        *time.Time
-		targetPrice          *int64
-		targetCurrency       *string
-		tags                 []string
-		targetCompletionDate *time.Time
-	)
-
-	if err := r.db.QueryRow(
-		ctx,
-		sql,
-		args...,
-	).Scan(
-		&assetID,
-		&name,
-		&description,
-		&projectID,
-		&acquiredAt,
-		&ownerID,
-		&ownerDisplayName,
-		&status,
-		&startDate,
-		&completedDate,
-		&targetPrice,
-		&targetCurrency,
-		&tags,
-		&targetCompletionDate,
-	); err != nil {
+	var rec assetRecord
+	if err := r.db.QueryRow(ctx, sql, args...).Scan(rec.scanFields()...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrAssetNotFound
 		}
@@ -273,23 +359,7 @@ func (r *PgAssetRepository) FindOne(ctx context.Context, filter asset.Filter) (*
 		return nil, err
 	}
 
-	a, err := toAssetFromPg(
-		assetID,
-		name,
-		description,
-		projectID,
-		acquiredAt,
-		ownerID,
-		ownerDisplayName,
-		status,
-		startDate,
-		completedDate,
-		targetCompletionDate,
-		targetPrice,
-		targetCurrency,
-		tags,
-	)
-
+	a, err := rec.toAsset()
 	if err != nil {
 		return nil, errors.Join(ErrAssetNotFound, err)
 	}
@@ -340,9 +410,10 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 		"target_price":   true,
 	}
 	if filter.OrderBy != "" && filter.Order != "" && validAssetOrderBy[filter.OrderBy] {
-		qb.OrderBy(fmt.Sprintf("projecta_assets.%s %s", filter.OrderBy, filter.Order.String()))
+		orderDir := core.ToOrder(filter.Order.String()).String()
+		qb.OrderBy(fmt.Sprintf("projecta_assets.%s %s, projecta_assets.asset_id %s", filter.OrderBy, orderDir, orderDir))
 	} else {
-		qb.OrderBy("projecta_assets.acquired_at DESC")
+		qb.OrderBy("projecta_assets.acquired_at DESC, projecta_assets.asset_id DESC")
 	}
 
 	sql, args = qb.Build()
@@ -357,65 +428,19 @@ func (r *PgAssetRepository) Find(ctx context.Context, filter asset.CollectionFil
 	collection := asset.NewCollection(total)
 
 	for rows.Next() {
-		var (
-			assetID              string
-			name                 string
-			description          string
-			projectID            string
-			acquiredAt           time.Time
-			ownerID              string
-			ownerDisplayName     string
-			status               string
-			startDate            time.Time
-			completedDate        *time.Time
-			targetPrice          *int64
-			targetCurrency       *string
-			tags                 []string
-			targetCompletionDate *time.Time
-		)
-
-		if err = rows.Scan(
-			&assetID,
-			&name,
-			&description,
-			&projectID,
-			&acquiredAt,
-			&ownerID,
-			&ownerDisplayName,
-			&status,
-			&startDate,
-			&completedDate,
-			&targetPrice,
-			&targetCurrency,
-			&tags,
-			&targetCompletionDate,
-		); err != nil {
+		var rec assetRecord
+		if err = rows.Scan(rec.scanFields()...); err != nil {
 			return nil, err
 		}
 
-		a, err := toAssetFromPg(
-			assetID,
-			name,
-			description,
-			projectID,
-			acquiredAt,
-			ownerID,
-			ownerDisplayName,
-			status,
-			startDate,
-			completedDate,
-			targetCompletionDate,
-			targetPrice,
-			targetCurrency,
-			tags,
-		)
-
+		a, err := rec.toAsset()
 		if err != nil {
 			return nil, err
 		}
 
 		collection.Add(a)
 	}
+	rows.Close()
 
 	r.loadCompositionsAndRollup(ctx, collection.Elements(), filter.ProjectID)
 
@@ -573,29 +598,21 @@ func toAssetFromPg(
 	targetCurrency *string,
 	tags []string,
 ) (*asset.Asset, error) {
-	owner := asset.OwnerRef{
-		PersonID:    core.MustParsePersonID(ownerID),
-		DisplayName: ownerDisplayName,
+	rec := assetRecord{
+		assetID:              assetID,
+		name:                 name,
+		description:          description,
+		projectID:            projectID,
+		acquiredAt:           acquiredAt,
+		ownerID:              ownerID,
+		ownerDisplayName:     ownerDisplayName,
+		status:               status,
+		startDate:            startDate,
+		completedDate:        completedDate,
+		targetCompletionDate: targetCompletionDate,
+		targetPrice:          targetPrice,
+		targetCurrency:       targetCurrency,
+		tags:                 tags,
 	}
-
-	var targetPriceMoney *money.Money
-	if targetPrice != nil && targetCurrency != nil && *targetCurrency != "" {
-		targetPriceMoney = money.New(*targetPrice, *targetCurrency)
-	}
-
-	return asset.ReconstituteAsset(
-		core.MustParseAssetID(assetID),
-		name,
-		description,
-		core.MustParseProjectID(projectID),
-		targetPriceMoney,
-		acquiredAt,
-		owner,
-		asset.ToAssetStatus(status),
-		startDate,
-		completedDate,
-		targetCompletionDate,
-		targetPriceMoney,
-		tags,
-	), nil
+	return rec.toAsset()
 }

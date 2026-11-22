@@ -10,7 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 )
 
 const (
@@ -111,34 +111,44 @@ func decodeAssignRolesRequest(_ context.Context, r *http.Request) (any, error) {
 	}, nil
 }
 
-func decodeListProjectsRequest(_ context.Context, r *http.Request) (any, error) {
+func decodeListProjectsRequest(ctx context.Context, r *http.Request) (any, error) {
 	pagination, err := parsePagination(r, core.DefaultLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	filter := project.ProjectCollectionFilter{
-		Pagination: pagination,
-		Name:       r.URL.Query().Get("name"),
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
 
-	return filter, nil
+	return projectapp.ListProjects{
+		Pagination:  pagination,
+		Name:        r.URL.Query().Get("name"),
+		RequesterID: personID,
+	}, nil
 }
 
-func decodeProjectTotalsRequest(_ context.Context, r *http.Request) (any, error) {
+func decodeProjectTotalsRequest(ctx context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 
 	projectID, ok := vars["project_id"]
-
 	if !ok {
 		return nil, exceptions.NewValidationException("missing project_id", nil)
 	}
 
 	projectUUID, err := core.ParseProjectID(projectID)
-
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project_id", err)
 	}
 
-	return projectUUID, nil
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return projectapp.GetProjectTotals{
+		ProjectID:   projectUUID,
+		RequesterID: personID,
+	}, nil
 }

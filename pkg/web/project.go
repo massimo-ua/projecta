@@ -13,6 +13,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 )
 
 type TagBudgetDTO struct {
@@ -218,8 +219,9 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 		endPtr = &endDate
 	}
 
-	return project.CreateProjectCommand{
-		PersonID:     personID,
+	return projectapp.CreateProject{
+		ProjectID:    core.NewProjectID(),
+		RequesterID:  personID,
 		Name:         req.Name,
 		Description:  req.Description,
 		MainCurrency: req.MainCurrency,
@@ -229,26 +231,40 @@ func DecodeCreateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}, nil
 }
 
-func makeCreateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeCreateProjectEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command := request.(project.CreateProjectCommand)
+		cmd := request.(projectapp.CreateProject)
 
-		project, err := svc.Create(ctx, command)
-		if err != nil {
+		if err := app.Commands.CreateProject.Handle(ctx, cmd); err != nil {
 			return nil, err
 		}
 
-		return toProjectDTO(project), nil
+		proj, err := app.Queries.GetProject.Handle(ctx, projectapp.GetProject{
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
+		if err != nil {
+			// Idempotent create by duplicate name: resolve existing owned project.
+			proj, err = app.Queries.GetProject.Handle(ctx, projectapp.GetProject{
+				Name:        strings.TrimSpace(cmd.Name),
+				RequesterID: cmd.RequesterID,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return toProjectDTO(proj), nil
 	}
 }
 
-func makeListProjectsEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeListProjectsEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(project.ProjectCollectionFilter)
+		query := request.(projectapp.ListProjects)
 
-		projects, err := svc.Find(ctx, filter)
+		projects, err := app.Queries.ListProjects.Handle(ctx, query)
 
-		var list []ProjectDTO = make([]ProjectDTO, 0)
+		list := make([]ProjectDTO, 0, len(projects))
 		for _, p := range projects {
 			list = append(list, toProjectDTO(p))
 		}
@@ -256,20 +272,18 @@ func makeListProjectsEndpoint(svc project.ProjectService) endpoint.Endpoint {
 		return ListProjectsResponse{
 			Projects: list,
 			PaginationDTO: PaginationDTO{
-				Limit:  filter.Limit,
-				Offset: filter.Offset,
+				Limit:  query.Pagination.Limit,
+				Offset: query.Pagination.Offset,
 			},
 		}, err
 	}
 }
 
-func makeShowProjectTotalsEndpoint(
-	projectSvc project.ProjectService,
-) endpoint.Endpoint {
+func makeShowProjectTotalsEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		projectID := request.(core.ProjectID)
+		query := request.(projectapp.GetProjectTotals)
 
-		calculatedTotals, err := projectSvc.GetTotals(ctx, projectID)
+		calculatedTotals, err := app.Queries.GetProjectTotals.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -296,11 +310,6 @@ func makeShowProjectTotalsEndpoint(
 	}
 }
 
-type AcceptShareCommand struct {
-	ShareToken uuid.UUID
-	PersonID   core.PersonID
-}
-
 func DecodeAcceptShareRequest(ctx context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 	tokenStr, ok := vars["share_token"]
@@ -318,13 +327,13 @@ func DecodeAcceptShareRequest(ctx context.Context, r *http.Request) (any, error)
 		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
 	}
 
-	return AcceptShareCommand{
-		ShareToken: shareToken,
-		PersonID:   personID,
+	return projectapp.AcceptProjectShare{
+		ShareToken:  shareToken,
+		RequesterID: personID,
 	}, nil
 }
 
-func DecodeGetProjectRequest(_ context.Context, r *http.Request) (any, error) {
+func DecodeGetProjectRequest(ctx context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -336,32 +345,45 @@ func DecodeGetProjectRequest(_ context.Context, r *http.Request) (any, error) {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	return project.ProjectFilter{
-		ProjectID: projectUUID,
+	personID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return projectapp.GetProject{
+		ProjectID:   projectUUID,
+		RequesterID: personID,
 	}, nil
 }
 
-func makeGetProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeGetProjectEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(project.ProjectFilter)
-		project, err := svc.FindOne(ctx, filter)
+		query := request.(projectapp.GetProject)
+		proj, err := app.Queries.GetProject.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}
 
-		return toProjectDTO(project), nil
+		return toProjectDTO(proj), nil
 	}
 }
 
-func makeAcceptShareEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeAcceptShareEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(AcceptShareCommand)
-		project, err := svc.AcceptShare(ctx, cmd.ShareToken, cmd.PersonID)
+		cmd := request.(projectapp.AcceptProjectShare)
+		if err := app.Commands.AcceptProjectShare.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+
+		proj, err := app.Queries.GetProject.Handle(ctx, projectapp.GetProject{
+			ShareToken:  cmd.ShareToken,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		return toProjectDTO(project), nil
+		return toProjectDTO(proj), nil
 	}
 }
 
@@ -411,9 +433,9 @@ func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 		tagBudgetsPtr = &tb
 	}
 
-	return project.UpdateProjectCommand{
+	return projectapp.UpdateProject{
 		ProjectID:    projectUUID,
-		PersonID:     personID,
+		RequesterID:  personID,
 		Name:         req.Name,
 		Description:  req.Description,
 		MainCurrency: req.MainCurrency,
@@ -423,16 +445,23 @@ func decodeUpdateProjectRequest(ctx context.Context, r *http.Request) (any, erro
 	}, nil
 }
 
-func makeUpdateProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeUpdateProjectEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command := request.(project.UpdateProjectCommand)
+		cmd := request.(projectapp.UpdateProject)
 
-		project, err := svc.Update(ctx, command)
+		if err := app.Commands.UpdateProject.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+
+		proj, err := app.Queries.GetProject.Handle(ctx, projectapp.GetProject{
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		return toProjectDTO(project), nil
+		return toProjectDTO(proj), nil
 	}
 }
 
@@ -458,25 +487,33 @@ func decodeUpdateProjectBudgetRequest(ctx context.Context, r *http.Request) (any
 		return nil, exceptions.NewValidationException("invalid json", err)
 	}
 
-	return project.UpdateProjectBudgetCommand{
-		ProjectID:  projectUUID,
-		PersonID:   personID,
-		TagBudgets: toTagBudgetInputs(req.TagBudgets),
+	return projectapp.UpdateProjectBudget{
+		ProjectID:   projectUUID,
+		RequesterID: personID,
+		TagBudgets:  toTagBudgetInputs(req.TagBudgets),
 	}, nil
 }
 
-func makeUpdateProjectBudgetEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeUpdateProjectBudgetEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		command := request.(project.UpdateProjectBudgetCommand)
+		cmd := request.(projectapp.UpdateProjectBudget)
 
-		project, err := svc.UpdateBudget(ctx, command)
+		if err := app.Commands.UpdateProjectBudget.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+
+		proj, err := app.Queries.GetProject.Handle(ctx, projectapp.GetProject{
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		return toProjectDTO(project), nil
+		return toProjectDTO(proj), nil
 	}
 }
+
 func decodeRemoveProjectRequest(ctx context.Context, r *http.Request) (any, error) {
 	personID, err := core.AuthGuard(ctx)
 	if err != nil {
@@ -494,34 +531,34 @@ func decodeRemoveProjectRequest(ctx context.Context, r *http.Request) (any, erro
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
 
-	return project.RemoveProjectCommand{
-		ProjectID: projectUUID,
-		PersonID:  personID,
+	return projectapp.RemoveProject{
+		ProjectID:   projectUUID,
+		RequesterID: personID,
 	}, nil
 }
 
-func makeRemoveProjectEndpoint(svc project.ProjectService) endpoint.Endpoint {
+func makeRemoveProjectEndpoint(app *projectapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd, ok := request.(project.RemoveProjectCommand)
+		cmd, ok := request.(projectapp.RemoveProject)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
-		err := svc.Remove(ctx, cmd)
-		return nil, err
+		return nil, app.Commands.RemoveProject.Handle(ctx, cmd)
 	}
 }
 
-func MakeProjectEndpoints(
-	projectService project.ProjectService,
-) (ProjectEndpoints, error) {
+func MakeProjectEndpoints(projectApp *projectapp.Application) (ProjectEndpoints, error) {
+	if projectApp == nil {
+		return ProjectEndpoints{}, nil
+	}
 	return ProjectEndpoints{
-		CreateProject:       makeCreateProjectEndpoint(projectService),
-		GetProject:          makeGetProjectEndpoint(projectService),
-		AcceptShare:         makeAcceptShareEndpoint(projectService),
-		ListProjects:        makeListProjectsEndpoint(projectService),
-		ShowProjectTotals:   makeShowProjectTotalsEndpoint(projectService),
-		UpdateProject:       makeUpdateProjectEndpoint(projectService),
-		UpdateProjectBudget: makeUpdateProjectBudgetEndpoint(projectService),
-		RemoveProject:       makeRemoveProjectEndpoint(projectService),
+		CreateProject:       makeCreateProjectEndpoint(projectApp),
+		GetProject:          makeGetProjectEndpoint(projectApp),
+		AcceptShare:         makeAcceptShareEndpoint(projectApp),
+		ListProjects:        makeListProjectsEndpoint(projectApp),
+		ShowProjectTotals:   makeShowProjectTotalsEndpoint(projectApp),
+		UpdateProject:       makeUpdateProjectEndpoint(projectApp),
+		UpdateProjectBudget: makeUpdateProjectBudgetEndpoint(projectApp),
+		RemoveProject:       makeRemoveProjectEndpoint(projectApp),
 	}, nil
 }

@@ -1,0 +1,18 @@
+name: projecta-test
+
+services:
+  test-db:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-projecta_test}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-projecta_test}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-projecta_test}
+    ports:
+      - "${TEST_POSTGRES_PORT:-5434}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_POSTGRES_USER:-projecta_test} -d ${TEST_POSTGRES_DB:-projecta_test}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

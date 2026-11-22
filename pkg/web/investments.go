@@ -11,6 +11,7 @@ import (
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
+	investmentapp "gitlab.com/massimo-ua/projecta/internal/investment/app"
 )
 
 type InvestmentEndpoints struct {
@@ -23,18 +24,18 @@ type InvestmentEndpoints struct {
 	ListTags               endpoint.Endpoint
 }
 
-func MakeInvestmentEndpoints(invSvc investment.Service) InvestmentEndpoints {
-	if invSvc == nil {
+func MakeInvestmentEndpoints(invApp *investmentapp.Application) InvestmentEndpoints {
+	if invApp == nil {
 		return InvestmentEndpoints{}
 	}
 	return InvestmentEndpoints{
-		CreateInvestment:       makeCreateInvestmentEndpoint(invSvc),
-		ListInvestments:        makeListInvestmentsEndpoint(invSvc),
-		GetInvestment:          makeGetInvestmentEndpoint(invSvc),
-		UpdateInvestment:       makeUpdateInvestmentEndpoint(invSvc),
-		RemoveInvestment:       makeRemoveInvestmentEndpoint(invSvc),
-		CreateBatchInvestments: makeCreateBatchInvestmentsEndpoint(invSvc),
-		ListTags:               makeListTagsEndpoint(invSvc),
+		CreateInvestment:       makeCreateInvestmentEndpoint(invApp),
+		ListInvestments:        makeListInvestmentsEndpoint(invApp),
+		GetInvestment:          makeGetInvestmentEndpoint(invApp),
+		UpdateInvestment:       makeUpdateInvestmentEndpoint(invApp),
+		RemoveInvestment:       makeRemoveInvestmentEndpoint(invApp),
+		CreateBatchInvestments: makeCreateBatchInvestmentsEndpoint(invApp),
+		ListTags:               makeListTagsEndpoint(invApp),
 	}
 }
 
@@ -202,7 +203,7 @@ type ListInvestmentsResponse struct {
 	PaginationDTO
 }
 
-func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeCreateInvestmentRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -229,13 +230,13 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		return nil, exceptions.NewValidationException("asset_id or asset_allocations required", nil)
 	}
 
-	var assetAllocations []investment.InvestmentAssetInput
+	var assetAllocations []investmentapp.AssetAllocationInput
 	for _, a := range req.AssetAllocations {
 		aID, err := core.ParseAssetID(a.AssetID)
 		if err != nil {
 			return nil, exceptions.NewValidationException("invalid allocation asset id", err)
 		}
-		assetAllocations = append(assetAllocations, investment.InvestmentAssetInput{
+		assetAllocations = append(assetAllocations, investmentapp.AssetAllocationInput{
 			AssetID:         aID,
 			SharePercentage: a.SharePercentage,
 		})
@@ -264,7 +265,14 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		hourlyRate = money.New(*req.TimeHourlyRate, req.Currency)
 	}
 
-	return investment.CreateInvestmentCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return investmentapp.CreateInvestment{
+		ID:               core.NewInvestmentID(),
+		RequesterID:      requesterID,
 		ProjectID:        projectID,
 		AssetID:          assetID,
 		AssetAllocations: assetAllocations,
@@ -281,7 +289,7 @@ func decodeCreateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	}, nil
 }
 
-func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeUpdateInvestmentRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -314,13 +322,13 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		}
 	}
 
-	var assetAllocations []investment.InvestmentAssetInput
+	var assetAllocations []investmentapp.AssetAllocationInput
 	for _, a := range req.AssetAllocations {
 		aID, err := core.ParseAssetID(a.AssetID)
 		if err != nil {
 			return nil, exceptions.NewValidationException("invalid allocation asset id", err)
 		}
-		assetAllocations = append(assetAllocations, investment.InvestmentAssetInput{
+		assetAllocations = append(assetAllocations, investmentapp.AssetAllocationInput{
 			AssetID:         aID,
 			SharePercentage: a.SharePercentage,
 		})
@@ -352,8 +360,14 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 		hourlyRate = money.New(*req.TimeHourlyRate, req.Currency)
 	}
 
-	return investment.UpdateInvestmentCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return investmentapp.UpdateInvestment{
 		ID:               invID,
+		RequesterID:      requesterID,
 		ProjectID:        projectID,
 		AssetID:          assetID,
 		AssetAllocations: assetAllocations,
@@ -370,7 +384,7 @@ func decodeUpdateInvestmentRequest(_ context.Context, r *http.Request) (interfac
 	}, nil
 }
 
-func decodeListInvestmentsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeListInvestmentsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -404,8 +418,14 @@ func decodeListInvestmentsRequest(_ context.Context, r *http.Request) (interface
 
 	tag := r.URL.Query().Get("tag")
 
-	return investment.CollectionFilter{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return investmentapp.ListInvestments{
 		Pagination:   pagination,
+		RequesterID:  requesterID,
 		ProjectID:    projectID,
 		AssetID:      assetID,
 		ResourceType: resType,
@@ -413,7 +433,7 @@ func decodeListInvestmentsRequest(_ context.Context, r *http.Request) (interface
 	}, nil
 }
 
-func decodeGetInvestmentRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeGetInvestmentRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -433,13 +453,19 @@ func decodeGetInvestmentRequest(_ context.Context, r *http.Request) (interface{}
 		return nil, exceptions.NewValidationException("invalid investment id", err)
 	}
 
-	return investment.Filter{
-		ID:        invID,
-		ProjectID: projectID,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return investmentapp.GetInvestment{
+		ID:          invID,
+		ProjectID:   projectID,
+		RequesterID: requesterID,
 	}, nil
 }
 
-func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeCreateBatchInvestmentsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -463,7 +489,7 @@ func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (in
 		}
 	}
 
-	var items []investment.BatchCreateInvestmentItem
+	var items []investmentapp.BatchCreateInvestmentItem
 	for _, it := range req.Items {
 		var aID core.AssetID
 		if it.AssetID != "" {
@@ -497,7 +523,8 @@ func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (in
 			hourlyRate = money.New(*it.TimeHourlyRate, it.Currency)
 		}
 
-		items = append(items, investment.BatchCreateInvestmentItem{
+		items = append(items, investmentapp.BatchCreateInvestmentItem{
+			ID:             core.NewInvestmentID(),
 			AssetID:        aID,
 			ResourceType:   resType,
 			Amount:         amount,
@@ -512,14 +539,20 @@ func decodeCreateBatchInvestmentsRequest(_ context.Context, r *http.Request) (in
 		})
 	}
 
-	return investment.CreateBatchInvestmentsCommand{
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
+	return investmentapp.CreateBatchInvestments{
+		RequesterID:  requesterID,
 		ProjectID:    projectID,
 		DefaultAsset: defaultAsset,
 		Items:        items,
 	}, nil
 }
 
-func decodeListTagsRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func decodeListTagsRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok {
@@ -529,13 +562,30 @@ func decodeListTagsRequest(_ context.Context, r *http.Request) (interface{}, err
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid project id", err)
 	}
-	return projectID, nil
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+	return investmentapp.ListProjectTags{
+		ProjectID:   projectID,
+		RequesterID: requesterID,
+	}, nil
 }
 
-func makeCreateInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeCreateInvestmentEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(investment.CreateInvestmentCommand)
-		inv, err := svc.Create(ctx, cmd)
+		cmd := request.(investmentapp.CreateInvestment)
+		if cmd.ID.IsNil() {
+			cmd.ID = core.NewInvestmentID()
+		}
+		if err := app.Commands.CreateInvestment.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+		inv, err := app.Queries.GetInvestment.Handle(ctx, investmentapp.GetInvestment{
+			ID:          cmd.ID,
+			ProjectID:   cmd.ProjectID,
+			RequesterID: cmd.RequesterID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -543,14 +593,14 @@ func makeCreateInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	}
 }
 
-func makeUpdateInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeUpdateInvestmentEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(investment.UpdateInvestmentCommand)
-		return nil, svc.Update(ctx, cmd)
+		cmd := request.(investmentapp.UpdateInvestment)
+		return nil, app.Commands.UpdateInvestment.Handle(ctx, cmd)
 	}
 }
 
-func decodeRemoveInvestmentRequest(_ context.Context, r *http.Request) (any, error) {
+func decodeRemoveInvestmentRequest(ctx context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -568,26 +618,31 @@ func decodeRemoveInvestmentRequest(_ context.Context, r *http.Request) (any, err
 	if err != nil {
 		return nil, exceptions.NewValidationException("invalid investment_id", err)
 	}
-	return investment.RemoveInvestmentCommand{
-		ProjectID: projectUUID,
-		ID:        invUUID,
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+	return investmentapp.RemoveInvestment{
+		ProjectID:   projectUUID,
+		ID:          invUUID,
+		RequesterID: requesterID,
 	}, nil
 }
 
-func makeRemoveInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeRemoveInvestmentEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd, ok := request.(investment.RemoveInvestmentCommand)
+		cmd, ok := request.(investmentapp.RemoveInvestment)
 		if !ok {
 			return nil, exceptions.NewValidationException("invalid request", nil)
 		}
-		return nil, svc.Remove(ctx, cmd)
+		return nil, app.Commands.RemoveInvestment.Handle(ctx, cmd)
 	}
 }
 
-func makeGetInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeGetInvestmentEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(investment.Filter)
-		inv, err := svc.FindOne(ctx, filter)
+		query := request.(investmentapp.GetInvestment)
+		inv, err := app.Queries.GetInvestment.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -595,10 +650,10 @@ func makeGetInvestmentEndpoint(svc investment.Service) endpoint.Endpoint {
 	}
 }
 
-func makeListInvestmentsEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeListInvestmentsEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		filter := request.(investment.CollectionFilter)
-		col, err := svc.Find(ctx, filter)
+		query := request.(investmentapp.ListInvestments)
+		col, err := app.Queries.ListInvestments.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -611,33 +666,58 @@ func makeListInvestmentsEndpoint(svc investment.Service) endpoint.Endpoint {
 		return ListInvestmentsResponse{
 			Investments: dtos,
 			PaginationDTO: PaginationDTO{
-				Limit:  filter.Limit,
-				Offset: filter.Offset,
+				Limit:  query.Limit,
+				Offset: query.Offset,
 				Total:  col.Total(),
 			},
 		}, nil
 	}
 }
 
-func makeCreateBatchInvestmentsEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeCreateBatchInvestmentsEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		cmd := request.(investment.CreateBatchInvestmentsCommand)
-		created, err := svc.CreateBatch(ctx, cmd)
+		cmd := request.(investmentapp.CreateBatchInvestments)
+		ids := make([]core.InvestmentID, len(cmd.Items))
+		for i := range cmd.Items {
+			if cmd.Items[i].ID.IsNil() {
+				cmd.Items[i].ID = core.NewInvestmentID()
+			}
+			ids[i] = cmd.Items[i].ID
+		}
+
+		if err := app.Commands.CreateBatchInvestments.Handle(ctx, cmd); err != nil {
+			return nil, err
+		}
+
+		col, err := app.Queries.ListInvestments.Handle(ctx, investmentapp.ListInvestments{
+			RequesterID: cmd.RequesterID,
+			ProjectID:   cmd.ProjectID,
+			IDs:         ids,
+			Pagination:  core.Pagination{Limit: len(ids)},
+		})
 		if err != nil {
 			return nil, err
 		}
-		dtos := make([]InvestmentDTO, 0)
-		for _, inv := range created {
-			dtos = append(dtos, toInvestmentDTO(inv))
+
+		byID := make(map[core.InvestmentID]*investment.Investment, len(col.Elements()))
+		for _, inv := range col.Elements() {
+			byID[inv.ID()] = inv
+		}
+
+		dtos := make([]InvestmentDTO, 0, len(ids))
+		for _, id := range ids {
+			if inv, ok := byID[id]; ok {
+				dtos = append(dtos, toInvestmentDTO(inv))
+			}
 		}
 		return dtos, nil
 	}
 }
 
-func makeListTagsEndpoint(svc investment.Service) endpoint.Endpoint {
+func makeListTagsEndpoint(app *investmentapp.Application) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		projectID := request.(core.ProjectID)
-		tags, err := svc.FindTags(ctx, projectID)
+		query := request.(investmentapp.ListProjectTags)
+		tags, err := app.Queries.ListProjectTags.Handle(ctx, query)
 		if err != nil {
 			return nil, err
 		}

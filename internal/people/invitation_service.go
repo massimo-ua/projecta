@@ -25,6 +25,15 @@ func NewInvitationService(
 	invitationRepo InvitationRepository,
 	peopleRepo PersonRegistrar,
 ) InvitationService {
+	if db == nil {
+		panic("missing db connection")
+	}
+	if invitationRepo == nil {
+		panic("missing invitation repository")
+	}
+	if peopleRepo == nil {
+		panic("missing people repository")
+	}
 	return &InvitationServiceImpl{
 		db:             db,
 		invitationRepo: invitationRepo,

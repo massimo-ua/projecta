@@ -66,11 +66,12 @@ func MakeStatementEndpoints(svc statement.Service) StatementEndpoints {
 }
 
 type ParseStatementRequest struct {
-	ProjectID core.ProjectID
-	FileData  []byte
+	ProjectID   core.ProjectID
+	RequesterID core.PersonID
+	FileData    []byte
 }
 
-func decodeParseStatementRequest(_ context.Context, r *http.Request) (any, error) {
+func decodeParseStatementRequest(ctx context.Context, r *http.Request) (any, error) {
 	vars := mux.Vars(r)
 	projectID, ok := vars["project_id"]
 	if !ok {
@@ -98,16 +99,22 @@ func decodeParseStatementRequest(_ context.Context, r *http.Request) (any, error
 		return nil, exceptions.NewValidationException("failed to read uploaded file", err)
 	}
 
+	requesterID, err := core.AuthGuard(ctx)
+	if err != nil {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
+	}
+
 	return ParseStatementRequest{
-		ProjectID: projectUUID,
-		FileData:  fileBytes,
+		ProjectID:   projectUUID,
+		RequesterID: requesterID,
+		FileData:    fileBytes,
 	}, nil
 }
 
 func makeParseStatementEndpoint(svc statement.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req := request.(ParseStatementRequest)
-		res, err := svc.ParseStatement(ctx, req.ProjectID, req.FileData)
+		res, err := svc.ParseStatement(ctx, req.ProjectID, req.RequesterID, req.FileData)
 		if err != nil {
 			return nil, err
 		}

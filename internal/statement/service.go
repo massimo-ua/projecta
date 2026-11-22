@@ -20,11 +20,11 @@ func (t ExistingTransaction) Fingerprint() string {
 }
 
 type ExistingTransactionFinder interface {
-	FindExisting(ctx context.Context, projectID core.ProjectID) ([]ExistingTransaction, error)
+	FindExisting(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) ([]ExistingTransaction, error)
 }
 
 type ProjectValidator interface {
-	ValidateProject(ctx context.Context, projectID core.ProjectID) error
+	ValidateProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) error
 }
 
 type StatementParseItem struct {
@@ -44,7 +44,7 @@ type StatementParseResult struct {
 }
 
 type Service interface {
-	ParseStatement(ctx context.Context, projectID core.ProjectID, fileData []byte) (*StatementParseResult, error)
+	ParseStatement(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID, fileData []byte) (*StatementParseResult, error)
 }
 
 type ServiceImpl struct {
@@ -54,6 +54,9 @@ type ServiceImpl struct {
 }
 
 func NewService(projects ProjectValidator, finder ExistingTransactionFinder, parser ...StatementParser) *ServiceImpl {
+	if projects == nil {
+		panic("missing project validator")
+	}
 	var p StatementParser = NewKredobankParser()
 	if len(parser) > 0 && parser[0] != nil {
 		p = parser[0]
@@ -65,22 +68,23 @@ func NewService(projects ProjectValidator, finder ExistingTransactionFinder, par
 	}
 }
 
-func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.ProjectID, fileData []byte) (*StatementParseResult, error) {
+func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID, fileData []byte) (*StatementParseResult, error) {
+	if requesterID.IsNil() {
+		return nil, exceptions.NewUnauthorizedException("failed to identify requester", nil)
+	}
 	if projectID.IsNil() {
 		return nil, exceptions.NewValidationException("project id is required", nil)
 	}
 
-	if s.projects != nil {
-		if err := s.projects.ValidateProject(ctx, projectID); err != nil {
-			var exc exceptions.Exception
-			if errors.As(err, &exc) {
-				return nil, err
-			}
-			if errors.Is(err, exceptions.NotFoundError) {
-				return nil, exceptions.NewNotFoundException("project not found", err)
-			}
-			return nil, exceptions.NewInternalException("failed to validate project", err)
+	if err := s.projects.ValidateProject(ctx, projectID, requesterID); err != nil {
+		var exc exceptions.Exception
+		if errors.As(err, &exc) {
+			return nil, err
 		}
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("project not found", err)
+		}
+		return nil, exceptions.NewInternalException("failed to validate project", err)
 	}
 
 	statement, err := s.parser.Parse(fileData)
@@ -90,7 +94,7 @@ func (s *ServiceImpl) ParseStatement(ctx context.Context, projectID core.Project
 
 	existingMap := make(map[string]bool)
 	if s.finder != nil {
-		existing, err := s.finder.FindExisting(ctx, projectID)
+		existing, err := s.finder.FindExisting(ctx, projectID, requesterID)
 		if err != nil {
 			return nil, exceptions.NewInternalException("failed to load existing transactions", err)
 		}

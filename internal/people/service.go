@@ -25,6 +25,15 @@ func NewUserService(
 	db core.DbConnection,
 	repo Repository,
 	hasher core.Hasher) UserService {
+	if db == nil {
+		panic("missing db connection")
+	}
+	if repo == nil {
+		panic("missing people repository")
+	}
+	if hasher == nil {
+		panic("missing password hasher")
+	}
 	return &ServiceImpl{
 		db:               db,
 		peopleRepository: repo,

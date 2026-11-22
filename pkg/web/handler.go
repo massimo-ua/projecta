@@ -10,12 +10,12 @@ import (
 
 	ht "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
-	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/investment"
+	investmentapp "gitlab.com/massimo-ua/projecta/internal/investment/app"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 )
 
@@ -91,29 +91,29 @@ func MakeHTTPHandler(
 	authTokenProvider core.AuthTokenProvider,
 	authService people.AuthService,
 	invitationService people.InvitationService,
-	projectService project.ProjectService,
+	projectApp *projectapp.Application,
 	statementService statement.Service,
-	assetService asset.Service,
-	investmentService ...investment.Service,
+	assetApp *assetapp.Application,
+	investmentApp ...*investmentapp.Application,
 ) (http.Handler, error) {
 	r := mux.NewRouter()
 	createSwaggerHandler(r)
 	peopleEndpoints, err := MakeUserEndpoints(peopleService, authService)
 	invitationEndpoints := MakeInvitationEndpoints(invitationService)
-	projectEndpoints, err := MakeProjectEndpoints(projectService)
+	projectEndpoints, err := MakeProjectEndpoints(projectApp)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create purchase endpoints: %s", err.Error())
 	}
 
-	assetEndpoints := MakeAssetEndpoints(assetService)
+	assetEndpoints := MakeAssetEndpoints(assetApp)
 	statementEndpoints := MakeStatementEndpoints(statementService)
 
-	var invSvc investment.Service
-	if len(investmentService) > 0 {
-		invSvc = investmentService[0]
+	var invApp *investmentapp.Application
+	if len(investmentApp) > 0 {
+		invApp = investmentApp[0]
 	}
-	investmentEndpoints := MakeInvestmentEndpoints(invSvc)
+	investmentEndpoints := MakeInvestmentEndpoints(invApp)
 
 	options := []ht.ServerOption{
 		// TODO: add logging

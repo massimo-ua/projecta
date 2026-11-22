@@ -9,10 +9,13 @@ import (
 	"github.com/Rhymond/go-money"
 	"github.com/google/uuid"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/investment"
+	investmentapp "gitlab.com/massimo-ua/projecta/internal/investment/app"
 	"gitlab.com/massimo-ua/projecta/internal/people"
 	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
 	"gitlab.com/massimo-ua/projecta/pkg/dal"
 )
@@ -65,11 +68,24 @@ func (m *mockAdapterProjectRepo) FindOne(ctx context.Context, filter project.Pro
 	}
 	return m.proj, nil
 }
+func (m *mockAdapterProjectRepo) GetProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID) (*project.Project, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.proj, nil
+}
 func (m *mockAdapterProjectRepo) FindByShareToken(ctx context.Context, token uuid.UUID) (*project.Project, error) {
 	return m.proj, m.err
 }
 func (m *mockAdapterProjectRepo) Create(ctx context.Context, p *project.Project) error { return nil }
 func (m *mockAdapterProjectRepo) Update(ctx context.Context, p *project.Project) error { return nil }
+func (m *mockAdapterProjectRepo) UpdateProject(ctx context.Context, projectID core.ProjectID, requesterID core.PersonID, updateFn func(context.Context, *project.Project) (*project.Project, error)) error {
+	if m.err != nil {
+		return m.err
+	}
+	_, err := updateFn(ctx, m.proj)
+	return err
+}
 func (m *mockAdapterProjectRepo) Remove(ctx context.Context, p *project.Project) error { return nil }
 func (m *mockAdapterProjectRepo) CreateShareRecord(ctx context.Context, projectID core.ProjectID, personID core.PersonID) error {
 	return nil
@@ -105,6 +121,13 @@ func (m *mockAdapterAssetRepo) FindParents(ctx context.Context, childID core.Ass
 }
 func (m *mockAdapterAssetRepo) FindAncestors(ctx context.Context, assetID core.AssetID) ([]core.AssetID, error) {
 	return nil, nil
+}
+func (m *mockAdapterAssetRepo) UpdateAsset(ctx context.Context, assetID core.AssetID, projectID core.ProjectID, requesterID core.PersonID, updateFn func(context.Context, *asset.Asset) (*asset.Asset, error)) error {
+	if m.err != nil {
+		return m.err
+	}
+	_, err := updateFn(ctx, m.ast)
+	return err
 }
 
 func TestCrossContextAdapters(t *testing.T) {
@@ -148,7 +171,7 @@ func TestCrossContextAdapters(t *testing.T) {
 	projRepo := &mockAdapterProjectRepo{proj: proj}
 
 	assetProjAdapter := &assetProjectReaderAdapter{projects: projRepo}
-	assetProjDesc, err := assetProjAdapter.FindProject(ctx, proj.ID())
+	assetProjDesc, err := assetProjAdapter.FindProject(ctx, proj.ID(), pID)
 	if err != nil || assetProjDesc.ID != proj.ID() || assetProjDesc.MainCurrency != "USD" {
 		t.Fatalf("unexpected assetProjectReaderAdapter result: %+v, err: %v", assetProjDesc, err)
 	}
@@ -158,29 +181,29 @@ func TestCrossContextAdapters(t *testing.T) {
 		{Tag: "edu", Frequency: "MONTHLY", TargetMonth: 1, ResourceType: "MONEY", Amount: 3000, Currency: "USD", Description: "edu monthly"},
 	})
 	curMonthKey := now.UTC().Format("2006-01")
-	ceilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), []string{curMonthKey}, "")
+	ceilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), pID, []string{curMonthKey}, "")
 	if err != nil || ceilings[curMonthKey] != 8000 {
 		t.Fatalf("unexpected FindMonthlyCashCeilings (all tags): %+v err=%v", ceilings, err)
 	}
-	homeCeilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), []string{curMonthKey}, "#HOME")
+	homeCeilings, err := assetProjAdapter.FindMonthlyCashCeilings(ctx, proj.ID(), pID, []string{curMonthKey}, "#HOME")
 	if err != nil || homeCeilings[curMonthKey] != 5000 {
 		t.Fatalf("unexpected FindMonthlyCashCeilings (tag=home): %+v err=%v", homeCeilings, err)
 	}
-	if _, err := assetProjAdapter.FindMonthlyCashCeilings(context.Background(), proj.ID(), nil, ""); err == nil {
+	if _, err := assetProjAdapter.FindMonthlyCashCeilings(context.Background(), proj.ID(), core.NilPersonID, nil, ""); err == nil {
 		t.Errorf("expected unauthorized error in FindMonthlyCashCeilings")
 	}
 
 	invProjAdapter := &investmentProjectReaderAdapter{projects: projRepo}
-	invProjDesc, err := invProjAdapter.FindProject(ctx, proj.ID())
+	invProjDesc, err := invProjAdapter.FindProject(ctx, proj.ID(), pID)
 	if err != nil || invProjDesc.ID != proj.ID() || invProjDesc.MainCurrency != "USD" {
 		t.Fatalf("unexpected investmentProjectReaderAdapter result: %+v, err: %v", invProjDesc, err)
 	}
 
-	if _, err := assetProjAdapter.FindProject(context.Background(), proj.ID()); err == nil {
-		t.Errorf("expected unauthorized error for unauthenticated context in assetProjectReaderAdapter")
+	if _, err := assetProjAdapter.FindProject(context.Background(), proj.ID(), core.NilPersonID); err == nil {
+		t.Errorf("expected unauthorized error for nil requesterID in assetProjectReaderAdapter")
 	}
-	if _, err := invProjAdapter.FindProject(context.Background(), proj.ID()); err == nil {
-		t.Errorf("expected unauthorized error for unauthenticated context in investmentProjectReaderAdapter")
+	if _, err := invProjAdapter.FindProject(context.Background(), proj.ID(), core.NilPersonID); err == nil {
+		t.Errorf("expected unauthorized error for nil requesterID in investmentProjectReaderAdapter")
 	}
 
 	ast, _ := asset.CreateAsset(core.NewAssetID(), "Truck", "Desc", proj.ID(), money.New(1000, "USD"), now, ownerRef, asset.AssetStatusActive, nil, nil)
@@ -231,29 +254,22 @@ func (m *mockRateProvider) Convert(a currency.Currency, b currency.Currency) (cu
 	return currency.Currency{Amount: a.Amount * 40, Code: b.Code}, nil
 }
 
-type mockInvestmentService struct {
+type noopTxDbForMainTest struct{}
+
+func (noopTxDbForMainTest) Tx(ctx context.Context, fn func(context.Context) (any, error)) (any, error) {
+	return fn(ctx)
+}
+func (noopTxDbForMainTest) Close() {}
+func (noopTxDbForMainTest) Ping(_ context.Context) error { return nil }
+
+type mockInvestmentRepoForMainTest struct {
+	*investment.MemoryInvestmentRepository
 	findFn func(ctx context.Context, filter investment.CollectionFilter) (*investment.Collection, error)
 	col    *investment.Collection
-	inv    *investment.Investment
 	err    error
 }
 
-func (m *mockInvestmentService) Create(context.Context, investment.CreateInvestmentCommand) (*investment.Investment, error) {
-	return m.inv, m.err
-}
-func (m *mockInvestmentService) CreateBatch(context.Context, investment.CreateBatchInvestmentsCommand) ([]*investment.Investment, error) {
-	return nil, m.err
-}
-func (m *mockInvestmentService) Update(context.Context, investment.UpdateInvestmentCommand) error {
-	return m.err
-}
-func (m *mockInvestmentService) Remove(context.Context, investment.RemoveInvestmentCommand) error {
-	return m.err
-}
-func (m *mockInvestmentService) FindOne(context.Context, investment.Filter) (*investment.Investment, error) {
-	return m.inv, m.err
-}
-func (m *mockInvestmentService) Find(ctx context.Context, filter investment.CollectionFilter) (*investment.Collection, error) {
+func (m *mockInvestmentRepoForMainTest) Find(ctx context.Context, filter investment.CollectionFilter) (*investment.Collection, error) {
 	if m.findFn != nil {
 		return m.findFn(ctx, filter)
 	}
@@ -263,41 +279,55 @@ func (m *mockInvestmentService) Find(ctx context.Context, filter investment.Coll
 	if m.col != nil {
 		return m.col, nil
 	}
-	return investment.NewCollection(0), nil
-}
-func (m *mockInvestmentService) FindTags(context.Context, core.ProjectID) ([]string, error) {
-	return nil, m.err
-}
-func (m *mockInvestmentService) AssignToAsset(context.Context, core.AssetID, []core.InvestmentID) error {
-	return m.err
+	return m.MemoryInvestmentRepository.Find(ctx, filter)
 }
 
-type mockAssetService struct {
+type stubInvProjectReaderForMainTest struct{ projID core.ProjectID }
+
+func (s stubInvProjectReaderForMainTest) FindProject(_ context.Context, projectID core.ProjectID, _ core.PersonID) (investmentapp.ProjectDescriptor, error) {
+	return investmentapp.ProjectDescriptor{ID: projectID, MainCurrency: "UAH"}, nil
+}
+
+type stubInvAssetReaderForMainTest struct{ projID core.ProjectID }
+
+func (s stubInvAssetReaderForMainTest) FindAsset(_ context.Context, projectID core.ProjectID, assetID core.AssetID) (investmentapp.AssetDescriptor, error) {
+	pID := projectID
+	if pID.IsNil() {
+		pID = s.projID
+	}
+	return investmentapp.AssetDescriptor{ID: assetID, ProjectID: pID, Name: "Asset"}, nil
+}
+
+type stubInvContributorReaderForMainTest struct{}
+
+func (stubInvContributorReaderForMainTest) FindContributor(_ context.Context, personID core.PersonID) (investment.ContributorRef, error) {
+	return investment.ContributorRef{PersonID: personID, DisplayName: "Contributor"}, nil
+}
+
+func newTestInvestmentAppForMainTest(projID core.ProjectID, repo *mockInvestmentRepoForMainTest) *investmentapp.Application {
+	if repo.MemoryInvestmentRepository == nil {
+		repo.MemoryInvestmentRepository = investment.NewMemoryInvestmentRepository()
+	}
+	return investmentapp.NewApplication(
+		noopTxDbForMainTest{},
+		repo,
+		repo,
+		stubInvAssetReaderForMainTest{projID: projID},
+		stubInvProjectReaderForMainTest{projID: projID},
+		stubInvContributorReaderForMainTest{},
+		nil,
+		nil,
+	)
+}
+
+type mockAssetRepoForMainTest struct {
+	*asset.MemoryAssetRepository
 	findFn func(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error)
 	col    *asset.Collection
-	ast    *asset.Asset
 	err    error
 }
 
-func (m *mockAssetService) Create(context.Context, asset.CreateAssetCommand) (*asset.Asset, error) {
-	return m.ast, m.err
-}
-func (m *mockAssetService) CreateFromPayments(context.Context, asset.CreateAssetFromPaymentsCommand) (*asset.Asset, error) {
-	return m.ast, m.err
-}
-func (m *mockAssetService) CreateFromInvestments(context.Context, asset.CreateAssetFromInvestmentsCommand) (*asset.Asset, error) {
-	return m.ast, m.err
-}
-func (m *mockAssetService) Update(context.Context, asset.UpdateAssetCommand) error {
-	return m.err
-}
-func (m *mockAssetService) Remove(context.Context, asset.RemoveAssetCommand) error {
-	return m.err
-}
-func (m *mockAssetService) FindOne(context.Context, asset.Filter) (*asset.Asset, error) {
-	return m.ast, m.err
-}
-func (m *mockAssetService) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
+func (m *mockAssetRepoForMainTest) Find(ctx context.Context, filter asset.CollectionFilter) (*asset.Collection, error) {
 	if m.findFn != nil {
 		return m.findFn(ctx, filter)
 	}
@@ -307,65 +337,47 @@ func (m *mockAssetService) Find(ctx context.Context, filter asset.CollectionFilt
 	if m.col != nil {
 		return m.col, nil
 	}
-	return asset.NewCollection(0), nil
-}
-func (m *mockAssetService) LinkChild(context.Context, asset.LinkChildCommand) error {
-	return m.err
-}
-func (m *mockAssetService) UnlinkChild(context.Context, asset.UnlinkChildCommand) error {
-	return m.err
-}
-func (m *mockAssetService) AssignInvestments(context.Context, asset.AssignInvestmentsCommand) error {
-	return m.err
-}
-func (m *mockAssetService) Group(context.Context, asset.GroupAssetsCommand) (*asset.Asset, error) {
-	return m.ast, m.err
-}
-func (m *mockAssetService) LinkChildren(context.Context, asset.LinkChildrenCommand) error {
-	return m.err
-}
-func (m *mockAssetService) UpdateSchedule(context.Context, asset.RescheduleAssetCommand) (*asset.Asset, []string, error) {
-	return m.ast, nil, m.err
-}
-func (m *mockAssetService) GetCashFlowForecast(context.Context, asset.GetCashFlowForecastQuery) (*asset.CashFlowForecast, error) {
-	return nil, m.err
+	return m.MemoryAssetRepository.Find(ctx, filter)
 }
 
-type mockProjectServiceForAdapter struct {
-	proj *project.Project
-	err  error
+type stubAssetOwnerReaderForMainTest struct{}
+
+func (stubAssetOwnerReaderForMainTest) FindOwner(_ context.Context, personID core.PersonID) (asset.OwnerRef, error) {
+	return asset.OwnerRef{PersonID: personID, DisplayName: "Owner"}, nil
 }
 
-func (m *mockProjectServiceForAdapter) Find(context.Context, project.ProjectCollectionFilter) ([]*project.Project, error) {
-	return nil, nil
+type stubAssetProjectReaderForMainTest struct{}
+
+func (stubAssetProjectReaderForMainTest) FindProject(_ context.Context, projectID core.ProjectID, _ core.PersonID) (asset.ProjectDescriptor, error) {
+	return asset.ProjectDescriptor{ID: projectID, MainCurrency: "UAH"}, nil
 }
-func (m *mockProjectServiceForAdapter) FindOne(context.Context, project.ProjectFilter) (*project.Project, error) {
-	if m.err != nil {
-		return nil, m.err
+func (stubAssetProjectReaderForMainTest) FindMonthlyCashCeilings(_ context.Context, _ core.ProjectID, _ core.PersonID, _ []string, _ string) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+
+func newTestAssetAppForMainTest(repo *mockAssetRepoForMainTest) *assetapp.Application {
+	if repo.MemoryAssetRepository == nil {
+		repo.MemoryAssetRepository = asset.NewMemoryAssetRepository()
 	}
-	return m.proj, nil
+	return assetapp.NewApplication(
+		noopTxDbForMainTest{},
+		repo,
+		stubAssetOwnerReaderForMainTest{},
+		stubAssetProjectReaderForMainTest{},
+		nil,
+		nil,
+		nil,
+	)
 }
-func (m *mockProjectServiceForAdapter) Create(context.Context, project.CreateProjectCommand) (*project.Project, error) {
-	return m.proj, m.err
-}
-func (m *mockProjectServiceForAdapter) Remove(context.Context, project.RemoveProjectCommand) error {
-	return m.err
-}
-func (m *mockProjectServiceForAdapter) Update(context.Context, project.UpdateProjectCommand) (*project.Project, error) {
-	return m.proj, m.err
-}
-func (m *mockProjectServiceForAdapter) UpdateBudget(context.Context, project.UpdateProjectBudgetCommand) (*project.Project, error) {
-	return m.proj, m.err
-}
-func (m *mockProjectServiceForAdapter) AcceptShare(context.Context, uuid.UUID, core.PersonID) (*project.Project, error) {
-	return m.proj, m.err
-}
-func (m *mockProjectServiceForAdapter) GetTotals(context.Context, core.ProjectID) (project.ProjectTotals, error) {
-	return project.ProjectTotals{}, m.err
+
+type stubOwnerReaderForMainTest struct{}
+
+func (stubOwnerReaderForMainTest) FindOwner(_ context.Context, personID core.PersonID) (*project.Owner, error) {
+	return &project.Owner{PersonID: personID, DisplayName: "Owner", CanHaveProjects: true}, nil
 }
 
 func TestAdapters_Step7(t *testing.T) {
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), core.RequesterIDContextKey, core.NewPersonID())
 	projID := core.NewProjectID()
 	contribRef := investment.ContributorRef{PersonID: core.NewPersonID(), DisplayName: "Contributor"}
 
@@ -376,7 +388,7 @@ func TestAdapters_Step7(t *testing.T) {
 			nil, nil, nil, "", "", "desc", time.Now(), nil,
 		)
 
-		invSvc := &mockInvestmentService{
+		invApp := newTestInvestmentAppForMainTest(projID, &mockInvestmentRepoForMainTest{
 			findFn: func(ctx context.Context, filter investment.CollectionFilter) (*investment.Collection, error) {
 				if filter.Offset == 0 {
 					col := investment.NewCollection(600)
@@ -391,10 +403,10 @@ func TestAdapters_Step7(t *testing.T) {
 				}
 				return col, nil
 			},
-		}
+		})
 
-		finder := &investmentTransactionFinder{svc: invSvc}
-		txs, err := finder.FindExisting(ctx, projID)
+		finder := &investmentTransactionFinder{app: invApp}
+		txs, err := finder.FindExisting(ctx, projID, core.NewPersonID())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -420,15 +432,20 @@ func TestAdapters_Step7(t *testing.T) {
 		col.Add(inv1, inv2)
 
 		var capturedFilter investment.CollectionFilter
-		invSvc := &mockInvestmentService{
+		memRepo := investment.NewMemoryInvestmentRepository()
+		_ = memRepo.Save(ctx, inv1)
+		_ = memRepo.Save(ctx, inv2)
+		invApp := newTestInvestmentAppForMainTest(projID, &mockInvestmentRepoForMainTest{
+			MemoryInvestmentRepository: memRepo,
 			findFn: func(ctx context.Context, filter investment.CollectionFilter) (*investment.Collection, error) {
 				capturedFilter = filter
 				return col, nil
 			},
-		}
+		})
 
-		adapter := &investmentSourceAdapter{svc: invSvc}
-		items, err := adapter.FindInvestments(ctx, projID, []core.InvestmentID{id1, id2})
+		requesterID := core.NewPersonID()
+		adapter := &investmentSourceAdapter{app: invApp}
+		items, err := adapter.FindInvestments(ctx, projID, requesterID, []core.InvestmentID{id1, id2})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -440,27 +457,29 @@ func TestAdapters_Step7(t *testing.T) {
 		}
 
 		// Empty IDs
-		emptyItems, err := adapter.FindInvestments(ctx, projID, nil)
+		emptyItems, err := adapter.FindInvestments(ctx, projID, requesterID, nil)
 		if err != nil || emptyItems != nil {
 			t.Fatalf("expected nil for empty ids, got: %v, %v", emptyItems, err)
 		}
 
 		// AssignToAsset
-		if err := adapter.AssignToAsset(ctx, core.NewAssetID(), []core.InvestmentID{id1}); err != nil {
+		if err := adapter.AssignToAsset(ctx, core.NewAssetID(), requesterID, []core.InvestmentID{id1}); err != nil {
 			t.Errorf("unexpected error in AssignToAsset: %v", err)
 		}
 
 		// CreateInitialInvestment
 		if err := adapter.CreateInitialInvestment(ctx, asset.InitialInvestment{
-			ProjectID: projID,
-			AssetID:   core.NewAssetID(),
-			Amount:    money.New(500, "UAH"),
+			ProjectID:     projID,
+			AssetID:       core.NewAssetID(),
+			ContributorID: requesterID,
+			Amount:        money.New(500, "UAH"),
+			Description:   "Initial investment",
 		}); err != nil {
 			t.Errorf("unexpected error in CreateInitialInvestment: %v", err)
 		}
 
 		// ListProjectInvestments
-		summaries, err := adapter.ListProjectInvestments(ctx, projID)
+		summaries, err := adapter.ListProjectInvestments(ctx, projID, requesterID)
 		if err != nil || len(summaries) != 2 {
 			t.Errorf("unexpected ListProjectInvestments result: len=%d err=%v", len(summaries), err)
 		}
@@ -474,7 +493,7 @@ func TestAdapters_Step7(t *testing.T) {
 		)
 		invCol := investment.NewCollection(1)
 		invCol.Add(inv)
-		invSvc := &mockInvestmentService{col: invCol}
+		invApp := newTestInvestmentAppForMainTest(projID, &mockInvestmentRepoForMainTest{col: invCol})
 
 		ownerRef := asset.OwnerRef{PersonID: core.NewPersonID(), DisplayName: "Owner"}
 		ast, _ := asset.CreateAsset(
@@ -483,15 +502,15 @@ func TestAdapters_Step7(t *testing.T) {
 		)
 		astCol := asset.NewCollection(1)
 		astCol.Add(ast)
-		astSvc := &mockAssetService{col: astCol}
+		astApp := newTestAssetAppForMainTest(&mockAssetRepoForMainTest{col: astCol})
 
 		calc := &projectTotalsCalculatorAdapter{
-			assets:       astSvc,
-			investments:  invSvc,
+			assets:       astApp,
+			investments:  invApp,
 			rateProvider: &mockRateProvider{},
 		}
 
-		totals, err := calc.CalculateTotals(ctx, projID, "UAH")
+		totals, err := calc.CalculateTotals(ctx, projID, core.NewPersonID(), "UAH")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -507,31 +526,38 @@ func TestAdapters_Step7(t *testing.T) {
 
 		// Error in investments
 		calcErr := &projectTotalsCalculatorAdapter{
-			assets:      astSvc,
-			investments: &mockInvestmentService{err: errors.New("inv error")},
+			assets:      astApp,
+			investments: newTestInvestmentAppForMainTest(projID, &mockInvestmentRepoForMainTest{err: errors.New("inv error")}),
 		}
-		if _, err := calcErr.CalculateTotals(ctx, projID, "UAH"); err == nil {
+		if _, err := calcErr.CalculateTotals(ctx, projID, core.NewPersonID(), "UAH"); err == nil {
 			t.Error("expected investment error")
 		}
 
 		// Error in assets
 		calcAstErr := &projectTotalsCalculatorAdapter{
-			assets:      &mockAssetService{err: errors.New("ast error")},
-			investments: invSvc,
+			assets:      newTestAssetAppForMainTest(&mockAssetRepoForMainTest{err: errors.New("ast error")}),
+			investments: invApp,
 		}
-		if _, err := calcAstErr.CalculateTotals(ctx, projID, "UAH"); err == nil {
+		if _, err := calcAstErr.CalculateTotals(ctx, projID, core.NewPersonID(), "UAH"); err == nil {
 			t.Error("expected asset error")
 		}
 	})
 
 	t.Run("projectValidator", func(t *testing.T) {
-		pvSuccess := &projectValidator{svc: &mockProjectServiceForAdapter{}}
-		if err := pvSuccess.ValidateProject(ctx, projID); err != nil {
+		ownerID := core.NewPersonID()
+		seedProj, _ := project.NewProject(projID, "Valid Proj", "Desc", &project.Owner{PersonID: ownerID, DisplayName: "Owner"}, time.Now(), time.Now())
+		memRepo := project.NewMemoryProjectRepository()
+		_ = memRepo.Create(ctx, seedProj)
+		projApp := projectapp.NewApplication(memRepo, stubOwnerReaderForMainTest{}, nil, nil, nil)
+
+		pvSuccess := &projectValidator{app: projApp}
+		if err := pvSuccess.ValidateProject(ctx, projID, ownerID); err != nil {
 			t.Errorf("expected nil error, got: %v", err)
 		}
 
-		pvErr := &projectValidator{svc: &mockProjectServiceForAdapter{err: errors.New("not found")}}
-		if err := pvErr.ValidateProject(ctx, projID); err == nil {
+		errApp := projectapp.NewApplication(&mockAdapterProjectRepo{err: errors.New("not found")}, stubOwnerReaderForMainTest{}, nil, nil, nil)
+		pvErr := &projectValidator{app: errApp}
+		if err := pvErr.ValidateProject(ctx, projID, ownerID); err == nil {
 			t.Error("expected error from projectValidator")
 		}
 	})

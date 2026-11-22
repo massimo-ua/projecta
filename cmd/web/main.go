@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"errors"
-	"gitlab.com/massimo-ua/projecta/internal/asset"
+	assetapp "gitlab.com/massimo-ua/projecta/internal/asset/app"
 	"gitlab.com/massimo-ua/projecta/internal/core"
 	"gitlab.com/massimo-ua/projecta/internal/exceptions"
-	"gitlab.com/massimo-ua/projecta/internal/investment"
+	investmentapp "gitlab.com/massimo-ua/projecta/internal/investment/app"
 	"gitlab.com/massimo-ua/projecta/internal/people"
-	"gitlab.com/massimo-ua/projecta/internal/project"
+	projectapp "gitlab.com/massimo-ua/projecta/internal/project/app"
 	"gitlab.com/massimo-ua/projecta/internal/statement"
 	"gitlab.com/massimo-ua/projecta/pkg/crypto"
 	"gitlab.com/massimo-ua/projecta/pkg/currency"
@@ -31,17 +31,41 @@ func createErrorHandler(logger core.Logger) func(err error) {
 	}
 }
 
-func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handler, error) {
+type appHandlerDeps struct {
+	rateProvider currency.CurrencyRateProvider
+	googleAuth   core.ThirdPartyAuth
+	logger       core.Logger
+}
+
+func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection, log ...core.Logger) (http.Handler, error) {
+	var l core.Logger
+	if len(log) > 0 {
+		l = log[0]
+	}
+	return setupAppHandlerWithDeps(config, db, appHandlerDeps{logger: l})
+}
+
+func setupAppHandlerWithDeps(config *core.AppConfig, db *dal.PgDbConnection, deps appHandlerDeps) (http.Handler, error) {
+	if config == nil {
+		return nil, exceptions.NewInternalException("missing app config", nil)
+	}
+	if db == nil {
+		return nil, exceptions.NewInternalException("missing db connection", nil)
+	}
+
 	peopleRepository := dal.NewPgPeopleRepository(db)
 	hasher := crypto.NewBcryptHasher(0)
-	googleAuth, err := crypto.NewGoogleAuthProvider(crypto.GoogleAuthConfig{
-		ClientID:      config.GoogleClientID,
-		ClientSecret:  config.GoogleClientSecret,
-		CertsCacheTTL: config.GoogleCertTTL,
-	})
-
-	if err != nil {
-		return nil, err
+	googleAuth := deps.googleAuth
+	if googleAuth == nil {
+		var err error
+		googleAuth, err = crypto.NewGoogleAuthProvider(crypto.GoogleAuthConfig{
+			ClientID:      config.GoogleClientID,
+			ClientSecret:  config.GoogleClientSecret,
+			CertsCacheTTL: config.GoogleCertTTL,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tokenProvider := crypto.NewJwtTokenProvider(
@@ -64,42 +88,49 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 	projectRepository := dal.NewPgProjectRepository(db)
 	assetRepository := dal.NewPgAssetRepository(db)
 	peopleService := &projectPeopleAdapter{repo: peopleRepository}
-	rateProvider := currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
-		SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
-		CacheTTL:            30 * time.Minute,
-	})
+
+	rateProvider := deps.rateProvider
+	if rateProvider == nil {
+		rateProvider = currency.NewNBUCurrencyRateProvider(currency.NBUCurrencyRateProviderOptions{
+			SupportedCurrencies: []string{"UAH", "USD", "EUR", "PLN"},
+			CacheTTL:            30 * time.Minute,
+		})
+	}
 
 	moneyConverter := &currencyConverterAdapter{provider: rateProvider}
 
 	investmentRepository := dal.NewPgInvestmentRepository(db)
-	investmentService := investment.NewService(
+	investmentApp := investmentapp.NewApplication(
 		db,
+		investmentRepository,
 		investmentRepository,
 		&investmentAssetReaderAdapter{assets: assetRepository},
 		&investmentProjectReaderAdapter{projects: projectRepository},
 		&investmentContributorReaderAdapter{people: peopleService},
 		moneyConverter,
+		deps.logger,
 	)
 
-	assetService := asset.NewService(
+	assetApp := assetapp.NewApplication(
 		db,
 		assetRepository,
 		&assetOwnerReaderAdapter{people: peopleService},
 		&assetProjectReaderAdapter{projects: projectRepository, rateProvider: rateProvider},
-		&investmentSourceAdapter{svc: investmentService},
+		&investmentSourceAdapter{app: investmentApp},
 		moneyConverter,
+		deps.logger,
 	)
 
 	totalsCalculator := &projectTotalsCalculatorAdapter{
-		assets:       assetService,
-		investments:  investmentService,
+		assets:       assetApp,
+		investments:  investmentApp,
 		rateProvider: rateProvider,
 	}
-	projectService := project.NewProjectService(projectRepository, peopleService, totalsCalculator).WithConverter(moneyConverter)
+	projectApp := projectapp.NewApplication(projectRepository, peopleService, totalsCalculator, moneyConverter, deps.logger)
 
 	statementService := statement.NewService(
-		&projectValidator{svc: projectService},
-		&investmentTransactionFinder{svc: investmentService},
+		&projectValidator{app: projectApp},
+		&investmentTransactionFinder{app: investmentApp},
 	)
 
 	return web.MakeHTTPHandler(
@@ -107,10 +138,10 @@ func setupAppHandler(config *core.AppConfig, db *dal.PgDbConnection) (http.Handl
 		tokenProvider,
 		authService,
 		invitationService,
-		projectService,
+		projectApp,
 		statementService,
-		assetService,
-		investmentService,
+		assetApp,
+		investmentApp,
 	)
 }
 
@@ -147,7 +178,7 @@ func main() {
 
 	log.Info("Database Connection Established", map[string]any{"connection_time": time.Since(startTime)})
 
-	webAPI, err := setupAppHandler(config, db)
+	webAPI, err := setupAppHandler(config, db, log)
 
 	if err != nil {
 		handleError(err)

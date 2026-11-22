@@ -19,7 +19,7 @@ type mockStatementService struct {
 	err error
 }
 
-func (m *mockStatementService) ParseStatement(_ context.Context, _ core.ProjectID, _ []byte) (*statement.StatementParseResult, error) {
+func (m *mockStatementService) ParseStatement(_ context.Context, _ core.ProjectID, _ core.PersonID, _ []byte) (*statement.StatementParseResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -36,6 +36,7 @@ func (m *mockStatementService) ParseStatement(_ context.Context, _ core.ProjectI
 
 func TestDecodeParseStatementRequest(t *testing.T) {
 	projID := core.NewProjectID()
+	authedCtx := context.WithValue(context.Background(), core.RequesterIDContextKey, core.NewPersonID())
 
 	t.Run("success", func(t *testing.T) {
 		body := &bytes.Buffer{}
@@ -51,7 +52,7 @@ func TestDecodeParseStatementRequest(t *testing.T) {
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		req = mux.SetURLVars(req, map[string]string{"project_id": projID.String()})
 
-		result, err := decodeParseStatementRequest(context.Background(), req)
+		result, err := decodeParseStatementRequest(authedCtx, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -62,6 +63,9 @@ func TestDecodeParseStatementRequest(t *testing.T) {
 		}
 		if parseReq.ProjectID != projID {
 			t.Errorf("expected project ID %v, got %v", projID, parseReq.ProjectID)
+		}
+		if parseReq.RequesterID.IsNil() {
+			t.Errorf("expected requester ID to be populated")
 		}
 		if string(parseReq.FileData) != "dummy pdf content" {
 			t.Errorf("unexpected file content: %s", string(parseReq.FileData))

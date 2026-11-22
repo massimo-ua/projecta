@@ -29,6 +29,12 @@ func NewAuthService(
 	invitationRepo InvitationRepository,
 	strategies ...IdentityProviderStrategy,
 ) AuthService {
+	if peopleRepository == nil {
+		panic("missing people repository")
+	}
+	if tokenProvider == nil {
+		panic("missing token provider")
+	}
 	strategyMap := make(map[IdentityProvider]IdentityProviderStrategy)
 	if len(strategies) > 0 {
 		for _, strat := range strategies {
