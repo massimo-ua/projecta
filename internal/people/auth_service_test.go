@@ -19,6 +19,8 @@ type spyTokenProvider struct {
 	validateRefresh bool
 	genErr          error
 	generated       []core.AuthTokenPayload
+	validatedID     uuid.UUID
+	validatedToken  string
 }
 
 func (s *spyTokenProvider) GenerateTokenRing(data core.AuthTokenPayload) (*core.AuthResponse, error) {
@@ -44,6 +46,8 @@ func (s *spyTokenProvider) DecodeToken(token string) (*core.AuthTokenClaims, err
 }
 
 func (s *spyTokenProvider) ValidateRefreshToken(tokenID uuid.UUID, refreshToken string) bool {
+	s.validatedID = tokenID
+	s.validatedToken = refreshToken
 	return s.validateRefresh
 }
 
@@ -235,10 +239,11 @@ func TestAuthService_Refresh_Hardening(t *testing.T) {
 	})
 
 	t.Run("Refresh propagates Sub, DisplayName, and Roles to token provider", func(t *testing.T) {
+		jti := uuid.New()
 		tp := &spyTokenProvider{
 			claims: &core.AuthTokenClaims{
-				ID:               uuid.New().String(),
-				IssuedAt:         time.Now().Unix(),
+				ID:               jti.String(),
+				IssuedAt:         time.Now().Add(-6 * 24 * time.Hour).Unix(),
 				AuthTokenPayload: core.AuthTokenPayload{Sub: personID.String()},
 			},
 			validateRefresh: true,
@@ -252,11 +257,308 @@ func TestAuthService_Refresh_Hardening(t *testing.T) {
 		if resp.AccessToken != "access_"+personID.String() {
 			t.Errorf("unexpected access token: %q", resp.AccessToken)
 		}
+		if tp.validatedID != jti || tp.validatedToken != "refresh" {
+			t.Errorf("expected ValidateRefreshToken(%s, refresh), got (%s, %q)", jti, tp.validatedID, tp.validatedToken)
+		}
 		if len(tp.generated) != 1 {
 			t.Fatalf("expected 1 GenerateTokenRing call, got %d", len(tp.generated))
 		}
 		got := tp.generated[0]
 		if got.Sub != personID.String() || got.DisplayName != "Ally" || !reflect.DeepEqual(got.Roles, []string{"User", "Administrator"}) {
+			t.Errorf("unexpected token payload: %+v", got)
+		}
+	})
+}
+
+type spyDb struct {
+	txCalls  int
+	txErr    error
+	skipFunc bool
+}
+
+func (d *spyDb) Tx(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+	d.txCalls++
+	if d.txErr != nil {
+		return nil, d.txErr
+	}
+	if d.skipFunc {
+		return nil, nil
+	}
+	return fn(ctx)
+}
+func (d *spyDb) Close()                        {}
+func (d *spyDb) Ping(ctx context.Context) error { return nil }
+
+type spyStrategy struct {
+	provider     people.IdentityProvider
+	personID     core.PersonID
+	authErr      error
+	claims       *core.AuthTokenClaims
+	resolveErr   error
+	resolveCalls int
+}
+
+func (s *spyStrategy) Provider() people.IdentityProvider { return s.provider }
+func (s *spyStrategy) Authenticate(ctx context.Context, creds people.Credentials) (core.PersonID, error) {
+	if s.authErr != nil {
+		return core.NilPersonID, s.authErr
+	}
+	return s.personID, nil
+}
+func (s *spyStrategy) ResolveInvitationClaims(ctx context.Context, token string) (*core.AuthTokenClaims, error) {
+	s.resolveCalls++
+	if s.resolveErr != nil {
+		return nil, s.resolveErr
+	}
+	return s.claims, nil
+}
+
+type spyInvitationRepo struct {
+	inv       *people.Invitation
+	findErr   error
+	saveErr   error
+	savedInv  *people.Invitation
+}
+
+func (r *spyInvitationRepo) Save(ctx context.Context, inv *people.Invitation) error {
+	r.savedInv = inv
+	return r.saveErr
+}
+func (r *spyInvitationRepo) FindByID(ctx context.Context, id core.InvitationID) (*people.Invitation, error) {
+	return r.inv, r.findErr
+}
+func (r *spyInvitationRepo) FindByCodeHash(ctx context.Context, codeHash string) (*people.Invitation, error) {
+	if r.findErr != nil {
+		return nil, r.findErr
+	}
+	return r.inv, nil
+}
+func (r *spyInvitationRepo) FindByCreator(ctx context.Context, creatorID core.PersonID) ([]*people.Invitation, error) {
+	return nil, nil
+}
+func (r *spyInvitationRepo) Delete(ctx context.Context, id core.InvitationID) error { return nil }
+func (r *spyInvitationRepo) EmailExists(ctx context.Context, email string) (bool, error) {
+	return false, nil
+}
+
+func TestAuthService_NewAndLogin_Hardening(t *testing.T) {
+	personID := core.NewPersonID()
+	cred, _ := people.NewCredentials(people.FACEBOOK, "fb_id", "fb_token")
+	person, _ := people.NewPerson(personID, "Bob", "Jones", "Bobby", []people.Credentials{cred}, people.RoleUser)
+
+	t.Run("NewAuthService without google auth does not register GOOGLE provider", func(t *testing.T) {
+		svc := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: person}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{})
+		googleCred, _ := people.NewCredentials(people.GOOGLE, "g_id", "g_tok")
+
+		_, err := svc.Login(context.Background(), googleCred)
+		assertExceptionCode(t, err, exceptions.ValidationFailed)
+
+		_, err = svc.LoginWithInvitation(context.Background(), "g_tok", people.GOOGLE, "some_invite_code")
+		assertExceptionCode(t, err, exceptions.ValidationFailed)
+	})
+
+	t.Run("NewAuthService skips nil strategies without panicking", func(t *testing.T) {
+		strat := &spyStrategy{provider: people.FACEBOOK, personID: personID}
+		tp := &spyTokenProvider{}
+		svc := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: person}, tp, &mockHasher{}, nil, nil, nil, strat)
+
+		resp, err := svc.Login(context.Background(), cred)
+		if err != nil || resp == nil {
+			t.Fatalf("expected successful login, got resp=%v err=%v", resp, err)
+		}
+		if len(tp.generated) != 1 || tp.generated[0].DisplayName != "Bobby" || tp.generated[0].Sub != personID.String() {
+			t.Errorf("unexpected token payload: %+v", tp.generated)
+		}
+	})
+
+	t.Run("Login rejects NilPersonID returned by strategy", func(t *testing.T) {
+		strat := &spyStrategy{provider: people.FACEBOOK, personID: core.NilPersonID}
+		repo := &spyPeopleRepo{person: person}
+		svc := people.NewAuthService(&spyDb{}, repo, &spyTokenProvider{}, &mockHasher{}, nil, nil, strat)
+
+		_, err := svc.Login(context.Background(), cred)
+		assertExceptionCode(t, err, exceptions.Unauthorized)
+		if repo.findIDCalls != 0 {
+			t.Errorf("expected no FindByID call for NilPersonID, got %d", repo.findIDCalls)
+		}
+	})
+
+	t.Run("Login distinguishes NotFound and nil person from DB errors", func(t *testing.T) {
+		strat := &spyStrategy{provider: people.FACEBOOK, personID: personID}
+
+		svcNotFound := people.NewAuthService(&spyDb{}, &spyPeopleRepo{
+			findIDErr: exceptions.NewNotFoundException("person not found", nil),
+		}, &spyTokenProvider{}, &mockHasher{}, nil, nil, strat)
+		_, err := svcNotFound.Login(context.Background(), cred)
+		assertExceptionCode(t, err, exceptions.Unauthorized)
+
+		svcNil := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: nil}, &spyTokenProvider{}, &mockHasher{}, nil, nil, strat)
+		_, err = svcNil.Login(context.Background(), cred)
+		assertExceptionCode(t, err, exceptions.Unauthorized)
+
+		svcDBErr := people.NewAuthService(&spyDb{}, &spyPeopleRepo{
+			findIDErr: errors.New("db timeout"),
+		}, &spyTokenProvider{}, &mockHasher{}, nil, nil, strat)
+		_, err = svcDBErr.Login(context.Background(), cred)
+		assertExceptionCode(t, err, exceptions.Internal)
+	})
+}
+
+func TestAuthService_LoginWithInvitation_Hardening(t *testing.T) {
+	adminID := core.NewPersonID()
+	personID := core.NewPersonID()
+	email := "invited@example.com"
+	rawCode := "invitation_secret_code_42"
+	codeHash := people.HashInvitationCode(rawCode)
+
+	newFixture := func() (*people.Person, *people.Invitation, *core.AuthTokenClaims) {
+		p, _ := people.NewPerson(personID, "Invited", "User", email, nil, people.RoleUser)
+		inv, _ := people.NewInvitation(
+			core.NewInvitationID(),
+			email,
+			codeHash,
+			time.Now().Add(24*time.Hour),
+			adminID,
+			&personID,
+			people.InvitationStatusPending,
+			time.Now(),
+			nil,
+		)
+		claims := &core.AuthTokenClaims{
+			AuthTokenPayload: core.AuthTokenPayload{
+				Sub:         "google_sub_42",
+				Email:       email,
+				FirstName:   "Jane",
+				LastName:    "Doe",
+				DisplayName: "Jane D.",
+			},
+		}
+		return p, inv, claims
+	}
+
+	t.Run("fails fast before ResolveInvitationClaims when invitationRepo or db is nil", func(t *testing.T) {
+		_, _, claims := newFixture()
+
+		stratNoRepo := &spyStrategy{provider: people.GOOGLE, claims: claims}
+		svcNoRepo := people.NewAuthService(&spyDb{}, &spyPeopleRepo{}, &spyTokenProvider{}, &mockHasher{}, nil, nil, stratNoRepo)
+		_, err := svcNoRepo.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+		if stratNoRepo.resolveCalls != 0 {
+			t.Errorf("expected ResolveInvitationClaims not to be called when invitationRepo is nil, got %d calls", stratNoRepo.resolveCalls)
+		}
+
+		stratNoDB := &spyStrategy{provider: people.GOOGLE, claims: claims}
+		svcNoDB := people.NewAuthService(nil, &spyPeopleRepo{}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{}, stratNoDB)
+		_, err = svcNoDB.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+		if stratNoDB.resolveCalls != 0 {
+			t.Errorf("expected ResolveInvitationClaims not to be called when db is nil, got %d calls", stratNoDB.resolveCalls)
+		}
+	})
+
+	t.Run("nil claims returned by strategy returns Unauthorized without panicking", func(t *testing.T) {
+		_, inv, _ := newFixture()
+		strat := &spyStrategy{provider: people.GOOGLE, claims: nil}
+		svc := people.NewAuthService(&spyDb{}, &spyPeopleRepo{}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv}, strat)
+
+		_, err := svc.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Unauthorized)
+	})
+
+	t.Run("FindByCodeHash NotFound and nil return NotFound while DB error returns Internal", func(t *testing.T) {
+		p, _, claims := newFixture()
+		strat := &spyStrategy{provider: people.GOOGLE, claims: claims}
+
+		svcNotFound := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: p}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{
+			findErr: exceptions.NewNotFoundException("invitation not found", nil),
+		}, strat)
+		_, err := svcNotFound.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.NotFound)
+
+		svcNilInv := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: p}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{
+			inv: nil,
+		}, strat)
+		_, err = svcNilInv.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.NotFound)
+
+		svcDBErr := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: p}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{
+			findErr: errors.New("deadlock detected"),
+		}, strat)
+		_, err = svcDBErr.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+	})
+
+	t.Run("FindByID error, nil person, AcceptInvitation error, and Save errors return expected exceptions", func(t *testing.T) {
+		p, inv, claims := newFixture()
+		strat := &spyStrategy{provider: people.GOOGLE, claims: claims}
+
+		svcFindPersonErr := people.NewAuthService(&spyDb{}, &spyPeopleRepo{findIDErr: errors.New("db err")}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv}, strat)
+		_, err := svcFindPersonErr.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+
+		svcNilPerson := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: nil}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv}, strat)
+		_, err = svcNilPerson.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+
+		badClaims := &core.AuthTokenClaims{
+			AuthTokenPayload: core.AuthTokenPayload{
+				Sub:         "google_sub_42",
+				Email:       email,
+				DisplayName: string(make([]byte, 300)),
+			},
+		}
+		_, inv2, _ := newFixture()
+		svcBadProfile := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: p}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv2}, &spyStrategy{provider: people.GOOGLE, claims: badClaims})
+		_, err = svcBadProfile.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.ValidationFailed)
+
+		p3, inv3, _ := newFixture()
+		svcSavePersonErr := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: p3, saveErr: errors.New("save person failed")}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv3}, strat)
+		_, err = svcSavePersonErr.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+
+		p4, inv4, _ := newFixture()
+		svcSaveInvErr := people.NewAuthService(&spyDb{}, &spyPeopleRepo{person: p4}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv4, saveErr: errors.New("save inv failed")}, strat)
+		_, err = svcSaveInvErr.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+
+		p5, inv5, _ := newFixture()
+		svcSkippedTx := people.NewAuthService(&spyDb{skipFunc: true}, &spyPeopleRepo{person: p5}, &spyTokenProvider{}, &mockHasher{}, nil, &spyInvitationRepo{inv: inv5}, strat)
+		_, err = svcSkippedTx.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		assertExceptionCode(t, err, exceptions.Internal)
+	})
+
+	t.Run("success uses transaction, avoids redundant FindByID, and issues tokens with updated profile", func(t *testing.T) {
+		p, inv, claims := newFixture()
+		db := &spyDb{}
+		peopleRepo := &spyPeopleRepo{person: p}
+		invRepo := &spyInvitationRepo{inv: inv}
+		tp := &spyTokenProvider{}
+		strat := &spyStrategy{provider: people.GOOGLE, claims: claims}
+
+		svc := people.NewAuthService(db, peopleRepo, tp, &mockHasher{}, nil, invRepo, strat)
+
+		resp, err := svc.LoginWithInvitation(context.Background(), "tok", people.GOOGLE, rawCode)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resp == nil || resp.AccessToken != "access_"+personID.String() {
+			t.Fatalf("unexpected auth response: %+v", resp)
+		}
+		if db.txCalls != 1 {
+			t.Errorf("expected 1 transaction call, got %d", db.txCalls)
+		}
+		if peopleRepo.findIDCalls != 1 {
+			t.Errorf("expected exactly 1 FindByID call (no redundant post-tx query), got %d", peopleRepo.findIDCalls)
+		}
+		if peopleRepo.saved == nil || invRepo.savedInv == nil || !invRepo.savedInv.IsCompleted() {
+			t.Errorf("expected saved person and completed invitation")
+		}
+		if len(tp.generated) != 1 {
+			t.Fatalf("expected 1 GenerateTokenRing call, got %d", len(tp.generated))
+		}
+		got := tp.generated[0]
+		if got.Sub != personID.String() || got.DisplayName != "Jane D." || !reflect.DeepEqual(got.Roles, []string{"User"}) {
 			t.Errorf("unexpected token payload: %+v", got)
 		}
 	})

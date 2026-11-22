@@ -16,7 +16,6 @@ type AuthServiceImpl struct {
 	db               core.DbConnection
 	peopleRepository Repository
 	tokenProvider    core.AuthTokenProvider
-	hasher           core.Hasher
 	invitationRepo   InvitationRepository
 	strategies       map[IdentityProvider]IdentityProviderStrategy
 }
@@ -33,7 +32,9 @@ func NewAuthService(
 	strategyMap := make(map[IdentityProvider]IdentityProviderStrategy)
 	if len(strategies) > 0 {
 		for _, strat := range strategies {
-			strategyMap[strat.Provider()] = strat
+			if strat != nil {
+				strategyMap[strat.Provider()] = strat
+			}
 		}
 	} else {
 		strategyMap[LOCAL] = NewLocalAuthStrategy(peopleRepository, hasher)
@@ -46,7 +47,6 @@ func NewAuthService(
 		db:               db,
 		peopleRepository: peopleRepository,
 		tokenProvider:    tokenProvider,
-		hasher:           hasher,
 		invitationRepo:   invitationRepo,
 		strategies:       strategyMap,
 	}
@@ -62,8 +62,103 @@ func (s *AuthServiceImpl) Login(ctx context.Context, credentials Credentials) (*
 	if err != nil {
 		return nil, err
 	}
+	if personID.IsNil() {
+		return nil, exceptions.NewUnauthorizedException("login failed", loginFailedError)
+	}
 
 	return s.authorizePerson(ctx, personID, "login failed", loginFailedError)
+}
+
+func (s *AuthServiceImpl) prepareInvitationRedemption(
+	provider IdentityProvider,
+	invitationCode string,
+) (InvitationCode, IdentityProviderStrategy, error) {
+	invCode, err := NewInvitationCode(invitationCode)
+	if err != nil {
+		return InvitationCode{}, nil, err
+	}
+
+	strategy, ok := s.strategies[provider]
+	if !ok {
+		return InvitationCode{}, nil, exceptions.NewValidationException("unsupported identity provider for invitation", nil)
+	}
+
+	if s.invitationRepo == nil {
+		return InvitationCode{}, nil, exceptions.NewInternalException("invitation repository not configured", nil)
+	}
+
+	if s.db == nil {
+		return InvitationCode{}, nil, exceptions.NewInternalException("database connection not configured", nil)
+	}
+
+	return invCode, strategy, nil
+}
+
+func (s *AuthServiceImpl) findInvitationByCode(ctx context.Context, invCode InvitationCode) (*Invitation, error) {
+	invitation, err := s.invitationRepo.FindByCodeHash(ctx, invCode.Hash())
+	if err != nil {
+		if errors.Is(err, exceptions.NotFoundError) {
+			return nil, exceptions.NewNotFoundException("invitation not found", err)
+		}
+		return nil, exceptions.NewInternalException("failed to find invitation", err)
+	}
+	if invitation == nil {
+		return nil, exceptions.NewNotFoundException("invitation not found", nil)
+	}
+
+	return invitation, nil
+}
+
+func (s *AuthServiceImpl) persistInvitationRedemption(
+	ctx context.Context,
+	person *Person,
+	invitation *Invitation,
+) error {
+	if err := s.peopleRepository.Save(ctx, person); err != nil {
+		return exceptions.NewInternalException("failed to update invited user", err)
+	}
+
+	if err := s.invitationRepo.Save(ctx, invitation); err != nil {
+		return exceptions.NewInternalException("failed to update invitation", err)
+	}
+
+	return nil
+}
+
+func (s *AuthServiceImpl) redeemInvitation(
+	txCtx context.Context,
+	invCode InvitationCode,
+	claims *core.AuthTokenClaims,
+	provider IdentityProvider,
+) (*Person, error) {
+	invitation, err := s.findInvitationByCode(txCtx, invCode)
+	if err != nil {
+		return nil, err
+	}
+
+	personID, err := invitation.ValidateForRedemption(claims.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	person, err := s.peopleRepository.FindByID(txCtx, personID)
+	if err != nil || person == nil {
+		return nil, exceptions.NewInternalException("failed to find invited user", err)
+	}
+
+	if err := person.AcceptInvitation(claims, provider); err != nil {
+		return nil, err
+	}
+
+	if err := invitation.Complete(); err != nil {
+		return nil, err
+	}
+
+	if err := s.persistInvitationRedemption(txCtx, person, invitation); err != nil {
+		return nil, err
+	}
+
+	return person, nil
 }
 
 func (s *AuthServiceImpl) LoginWithInvitation(
@@ -72,76 +167,33 @@ func (s *AuthServiceImpl) LoginWithInvitation(
 	provider IdentityProvider,
 	invitationCode string,
 ) (*core.AuthResponse, error) {
-	invCode, err := NewInvitationCode(invitationCode)
+	invCode, strategy, err := s.prepareInvitationRedemption(provider, invitationCode)
 	if err != nil {
 		return nil, err
-	}
-
-	strategy, ok := s.strategies[provider]
-	if !ok {
-		return nil, exceptions.NewValidationException("unsupported identity provider for invitation", nil)
 	}
 
 	claims, err := strategy.ResolveInvitationClaims(ctx, token)
 	if err != nil {
 		return nil, err
 	}
-
-	if s.invitationRepo == nil {
-		return nil, exceptions.NewInternalException("invitation repository not configured", nil)
+	if claims == nil {
+		return nil, exceptions.NewUnauthorizedException("login failed", loginFailedError)
 	}
 
-	redeemFn := func(txCtx context.Context) (any, error) {
-		invitation, err := s.invitationRepo.FindByCodeHash(txCtx, invCode.Hash())
-		if err != nil {
-			return nil, exceptions.NewNotFoundException("invitation not found", err)
-		}
-
-		personID, err := invitation.ValidateForRedemption(claims.Email)
-		if err != nil {
-			return nil, err
-		}
-
-		person, err := s.peopleRepository.FindByID(txCtx, personID)
-		if err != nil {
-			return nil, exceptions.NewInternalException("failed to find invited user", err)
-		}
-
-		if err := person.AcceptInvitation(claims, provider); err != nil {
-			return nil, err
-		}
-
-		if err := invitation.Complete(); err != nil {
-			return nil, exceptions.NewValidationException(err.Error(), err)
-		}
-
-		if err := s.peopleRepository.Save(txCtx, person); err != nil {
-			return nil, exceptions.NewInternalException("failed to update invited user", err)
-		}
-
-		if err := s.invitationRepo.Save(txCtx, invitation); err != nil {
-			return nil, exceptions.NewInternalException("failed to update invitation", err)
-		}
-
-		return person, nil
-	}
-
-	var result any
-	if s.db != nil {
-		result, err = s.db.Tx(ctx, redeemFn)
-	} else {
-		result, err = redeemFn(ctx)
-	}
+	var person *Person
+	_, err = s.db.Tx(ctx, func(txCtx context.Context) (any, error) {
+		var redeemErr error
+		person, redeemErr = s.redeemInvitation(txCtx, invCode, claims, provider)
+		return person, redeemErr
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	person, ok := result.(*Person)
-	if !ok || person == nil {
+	if person == nil {
 		return nil, exceptions.NewInternalException("failed to redeem invitation", nil)
 	}
 
-	return s.authorizePerson(ctx, person.ID(), "login failed", loginFailedError)
+	return s.issueTokens(person)
 }
 
 func (s *AuthServiceImpl) issueTokens(person *Person) (*core.AuthResponse, error) {
