@@ -1118,6 +1118,47 @@ func TestPgInvestmentRepository(t *testing.T) {
 		if err != nil || col == nil {
 			t.Errorf("Find investment collection error: %v", err)
 		}
+		var sawDefaultOrder bool
+		for _, q := range mockDb.queries {
+			if strings.Contains(q, "projecta_investments.id ") || strings.HasSuffix(q, "projecta_investments.id") {
+				t.Errorf("invalid column projecta_investments.id referenced in query: %s", q)
+			}
+			if strings.Contains(q, "ORDER BY projecta_investments.date DESC, projecta_investments.investment_id DESC") {
+				sawDefaultOrder = true
+			}
+		}
+		if !sawDefaultOrder {
+			t.Errorf("expected default ORDER BY with investment_id tie-breaker, got queries: %v", mockDb.queries)
+		}
+
+		// Custom OrderBy sanitizes invalid Order direction and uses investment_id tie-breaker
+		mockDbCustom := &mockPgDb{
+			rowVal: []any{1},
+			rowsData: [][]any{{
+				invID.String(), pID.String(), astID.String(), "Laptop",
+				ownerID.String(), "John", "MONEY", int64(500), "USD",
+				nil, nil, nil, nil, nil, "Fuel purchase", now, []string{"fuel"},
+			}},
+		}
+		_, err = repo.Find(withMockDb(authedCtx, mockDbCustom), investment.CollectionFilter{
+			ProjectID: pID,
+			Sorting:   core.Sorting{OrderBy: "amount", Order: core.Order("DESC; DROP TABLE projecta_investments")},
+		})
+		if err != nil {
+			t.Errorf("Find with custom order error: %v", err)
+		}
+		var sawSanitizedOrder bool
+		for _, q := range mockDbCustom.queries {
+			if strings.Contains(q, "DROP TABLE") {
+				t.Errorf("SQL injection leaked into ORDER BY: %s", q)
+			}
+			if strings.Contains(q, "ORDER BY projecta_investments.amount ASC, projecta_investments.investment_id ASC") {
+				sawSanitizedOrder = true
+			}
+		}
+		if !sawSanitizedOrder {
+			t.Errorf("expected sanitized custom ORDER BY with investment_id tie-breaker, got queries: %v", mockDbCustom.queries)
+		}
 
 		mockDbCountErr := &mockPgDb{countErr: errors.New("count error")}
 		ctxCountErr := withMockDb(authedCtx, mockDbCountErr)
