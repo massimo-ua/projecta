@@ -20,10 +20,14 @@ function formatMoneyMajor(majorVal, currency) {
   return `${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+const DEMAND_COLORS = {
+  OVER_CEILING: '#ef4444',
+  AT_RISK: '#f59e0b',
+  DEFAULT: '#3b82f6',
+};
+
 function getDemandBarColor(alertStatus) {
-  if (alertStatus === 'OVER_CEILING') return '#ef4444';
-  if (alertStatus === 'AT_RISK') return '#f59e0b';
-  return '#3b82f6';
+  return DEMAND_COLORS[alertStatus] || DEMAND_COLORS.DEFAULT;
 }
 
 function CashFlowTooltip({
@@ -169,6 +173,7 @@ export function MonthlyCashFlowChart({
                 dataKey="scheduledDemand"
                 name="Scheduled Demand"
                 stackId="cash"
+                fill={DEMAND_COLORS.DEFAULT}
                 radius={[4, 4, 0, 0]}
               >
                 {chartData.map((entry) => (
@@ -186,7 +191,7 @@ export function MonthlyCashFlowChart({
                 />
               )}
               <Line
-                type="stepAfter"
+                type="step"
                 dataKey="ceiling"
                 name="TagBudget Ceiling"
                 stroke="#f97316"

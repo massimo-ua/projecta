@@ -559,4 +559,43 @@ func TestProject_TagBudgets(t *testing.T) {
 			t.Errorf("expected annual planned budget %d, got %d", expectedAnnualPlanned, projUAH.AnnualPlannedBudget())
 		}
 	})
+
+	t.Run("MonthlyCashCeilings projects home-currency MONEY ceilings with optional tag filter", func(t *testing.T) {
+		p, err := project.NewProject(
+			core.NewProjectID(), "Ceilings Proj", "Desc", owner,
+			time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC),
+			"UAH",
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		hrs := 5.0
+		if err := p.SetTagBudgets([]project.TagBudgetInput{
+			{Tag: "житло", Frequency: "MONTHLY", TargetMonth: 1, ResourceType: "MONEY", Amount: 10000, Currency: "UAH"},
+			{Tag: "освіта", Frequency: "ANNUALLY", TargetMonth: 8, ResourceType: "MONEY", Amount: 50000, Currency: "UAH"},
+			{Tag: "time-tag", Frequency: "MONTHLY", TargetMonth: 1, ResourceType: "TIME", Amount: 99999, Currency: "UAH", TimeHours: &hrs},
+		}); err != nil {
+			t.Fatalf("SetTagBudgets failed: %v", err)
+		}
+
+		all := p.MonthlyCashCeilings([]string{"2024-12", "2025-07", "2025-08", "2027-01"}, "")
+		if _, ok := all["2024-12"]; ok {
+			t.Errorf("expected pre-start month 2024-12 to have no ceiling entry")
+		}
+		if _, ok := all["2027-01"]; ok {
+			t.Errorf("expected post-end month 2027-01 to have no ceiling entry")
+		}
+		if all["2025-07"] != 10000 {
+			t.Errorf("expected 2025-07 ceiling 10000, got %d", all["2025-07"])
+		}
+		if all["2025-08"] != 60000 {
+			t.Errorf("expected 2025-08 ceiling 60000, got %d", all["2025-08"])
+		}
+
+		eduOnly := p.MonthlyCashCeilings([]string{"2025-07", "2025-08"}, " #ОСВІТА ")
+		if eduOnly["2025-07"] != 0 || eduOnly["2025-08"] != 50000 {
+			t.Errorf("expected filtered edu ceilings 0/50000, got %+v", eduOnly)
+		}
+	})
 }

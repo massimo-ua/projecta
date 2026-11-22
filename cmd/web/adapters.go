@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"github.com/Rhymond/go-money"
 	"gitlab.com/massimo-ua/projecta/internal/asset"
@@ -86,7 +85,7 @@ func (a *assetProjectReaderAdapter) FindProject(ctx context.Context, projectID c
 	}, nil
 }
 
-func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string) (map[string]int64, error) {
+func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context, projectID core.ProjectID, months []string, tag string) (map[string]int64, error) {
 	personID, err := core.AuthGuard(ctx)
 	if err != nil {
 		return nil, exceptions.NewUnauthorizedException("failed to identify requester", err)
@@ -105,56 +104,7 @@ func (a *assetProjectReaderAdapter) FindMonthlyCashCeilings(ctx context.Context,
 		proj.EvaluateTagBudgets(nil)
 	}
 
-	ceilings := make(map[string]int64, len(months))
-	hasStart := !proj.StartDate().IsZero()
-	hasEnd := !proj.EndDate().IsZero()
-	var startMonth, startDay, endDay time.Time
-	if hasStart {
-		su := proj.StartDate().UTC()
-		startMonth = time.Date(su.Year(), su.Month(), 1, 0, 0, 0, 0, time.UTC)
-		startDay = time.Date(su.Year(), su.Month(), su.Day(), 0, 0, 0, 0, time.UTC)
-	}
-	if hasEnd {
-		eu := proj.EndDate().UTC()
-		endDay = time.Date(eu.Year(), eu.Month(), eu.Day(), 0, 0, 0, 0, time.UTC)
-	}
-
-	for _, mStr := range months {
-		parsed, err := time.Parse("2006-01", mStr)
-		if err != nil {
-			continue
-		}
-		mStart := time.Date(parsed.Year(), parsed.Month(), 1, 0, 0, 0, 0, time.UTC)
-		mEnd := mStart.AddDate(0, 1, -1)
-		if hasStart && mEnd.Before(startDay) {
-			continue
-		}
-		if hasEnd && mStart.After(endDay) {
-			continue
-		}
-
-		scheduleIdx := 1
-		if hasStart {
-			scheduleIdx = (mStart.Year()-startMonth.Year())*12 + int(mStart.Month()-startMonth.Month()) + 1
-		}
-
-		var total int64
-		for _, tb := range proj.TagBudgets() {
-			if tb.ResourceType() != project.BudgetResourceMoney {
-				continue
-			}
-			evalIdx := scheduleIdx
-			if evalIdx < 1 || evalIdx > 12 {
-				if tb.Frequency() == project.FrequencyOnce {
-					continue
-				}
-				evalIdx = 1
-			}
-			total += tb.ProjectedHomeAmountForMonth(evalIdx, mStart.Year(), mStart.Month())
-		}
-		ceilings[mStr] = total
-	}
-	return ceilings, nil
+	return proj.MonthlyCashCeilings(months, tag), nil
 }
 
 type assetOwnerReaderAdapter struct {
@@ -348,6 +298,7 @@ func (a *investmentSourceAdapter) ListProjectInvestments(ctx context.Context, pr
 				TimeHours:        hours,
 				Date:             inv.Date(),
 				AssetAllocations: allocs,
+				Tags:             inv.Tags(),
 			})
 		}
 		if len(col.Elements()) < pageSize || len(out) >= col.Total() {
