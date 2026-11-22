@@ -1,5 +1,6 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const AT_RISK_THRESHOLD_RATIO = 0.85;
+const PLANNING_CHART_HORIZON_MONTHS = 6;
 
 export function toUtcCalendarDay(dateInput) {
   if (!dateInput) return null;
@@ -104,9 +105,32 @@ export function evaluateCeilingAlert(committedCents, ceilingCents) {
   return { alertStatus: 'HEALTHY', utilizationPct };
 }
 
-export function buildChartSeries(forecast, { includeOngoingInCommitted = false } = {}) {
+function addUtcMonths(monthStart, offsetMonths) {
+  return new Date(Date.UTC(
+    monthStart.getUTCFullYear(),
+    monthStart.getUTCMonth() + offsetMonths,
+    1,
+  ));
+}
+
+function isWithinPlanningWindow(monthKey, windowStart, windowEnd) {
+  const parsed = parseMonthKey(monthKey);
+  return parsed !== null && parsed >= windowStart && parsed <= windowEnd;
+}
+
+export function buildChartSeries(
+  forecast,
+  { includeOngoingInCommitted = false, asOfDate = new Date() } = {},
+) {
   const months = forecast?.months || [];
-  return months.map((m) => {
+  const windowStart = utcMonthStart(asOfDate) || utcMonthStart(new Date());
+  const windowEnd = addUtcMonths(windowStart, PLANNING_CHART_HORIZON_MONTHS - 1);
+
+  const visibleMonths = months.filter(
+    (m) => isWithinPlanningWindow(m?.month, windowStart, windowEnd),
+  );
+
+  return visibleMonths.map((m) => {
     const actualCashCents = Number(m.actual?.cashCents || 0);
     const scheduledCents = Number(m.scheduledDemandCents || 0);
     const ongoingCents = Number(m.estimatedOngoingCashCents || 0);
