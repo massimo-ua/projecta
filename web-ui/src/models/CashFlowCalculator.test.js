@@ -66,8 +66,9 @@ describe('CashFlowCalculator Domain Model', () => {
     assert.equal(stacked[0].committedCashCents, 9000);
   });
 
-  it('limits chart series to current month plus next 5 months across year boundary', () => {
+  it('keeps all history plus current month and 5 months ahead across year boundary', () => {
     const monthKeys = [
+      '2024-10',
       '2025-12',
       '2026-10',
       '2026-11',
@@ -93,7 +94,17 @@ describe('CashFlowCalculator Domain Model', () => {
     const series = buildChartSeries(forecast, { asOfDate: '2026-11-22' });
     assert.deepEqual(
       series.map((row) => row.month),
-      ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04'],
+      [
+        '2024-10',
+        '2025-12',
+        '2026-10',
+        '2026-11',
+        '2026-12',
+        '2027-01',
+        '2027-02',
+        '2027-03',
+        '2027-04',
+      ],
     );
   });
 
@@ -117,7 +128,7 @@ describe('CashFlowCalculator Domain Model', () => {
     const series = buildChartSeries(forecast, { asOfDate: '2026-01-31T23:59:59Z' });
     assert.deepEqual(
       series.map((row) => row.month),
-      ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'],
+      ['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'],
     );
   });
 
@@ -129,7 +140,7 @@ describe('CashFlowCalculator Domain Model', () => {
       { months: [{ month: '1999-01' }, { month: currentMonthKey }, { month: '2099-12' }] },
       { asOfDate: 'invalid-date' },
     );
-    assert.deepEqual(series.map((row) => row.month), [currentMonthKey]);
+    assert.deepEqual(series.map((row) => row.month), ['1999-01', currentMonthKey]);
   });
 
   it('recomputes schedule preview optimistically when shifting target date', () => {

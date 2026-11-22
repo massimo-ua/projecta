@@ -1,6 +1,6 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const AT_RISK_THRESHOLD_RATIO = 0.85;
-const PLANNING_CHART_HORIZON_MONTHS = 6;
+const PLANNING_CHART_FUTURE_MONTHS = 5;
 
 export function toUtcCalendarDay(dateInput) {
   if (!dateInput) return null;
@@ -113,9 +113,9 @@ function addUtcMonths(monthStart, offsetMonths) {
   ));
 }
 
-function isWithinPlanningWindow(monthKey, windowStart, windowEnd) {
+function isWithinPlanningHorizon(monthKey, maxMonth) {
   const parsed = parseMonthKey(monthKey);
-  return parsed !== null && parsed >= windowStart && parsed <= windowEnd;
+  return parsed !== null && parsed <= maxMonth;
 }
 
 export function buildChartSeries(
@@ -123,11 +123,11 @@ export function buildChartSeries(
   { includeOngoingInCommitted = false, asOfDate = new Date() } = {},
 ) {
   const months = forecast?.months || [];
-  const windowStart = utcMonthStart(asOfDate) || utcMonthStart(new Date());
-  const windowEnd = addUtcMonths(windowStart, PLANNING_CHART_HORIZON_MONTHS - 1);
+  const currentMonth = utcMonthStart(asOfDate) || utcMonthStart(new Date());
+  const maxMonth = addUtcMonths(currentMonth, PLANNING_CHART_FUTURE_MONTHS);
 
   const visibleMonths = months.filter(
-    (m) => isWithinPlanningWindow(m?.month, windowStart, windowEnd),
+    (m) => isWithinPlanningHorizon(m?.month, maxMonth),
   );
 
   return visibleMonths.map((m) => {
